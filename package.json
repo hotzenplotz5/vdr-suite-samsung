@@ -1,0 +1,14 @@
+{
+  "name": "vdr-suite-samsung",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Samsung Tizen client for VDR-Suite",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check app/src/main.js && node --check app/src/navigation/remote.js && node --check app/src/navigation/focus.js && node --check app/src/platform/capabilities.js && node --check app/src/platform/keys.js && node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

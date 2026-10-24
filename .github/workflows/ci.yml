@@ -1,0 +1,22 @@
+name: Samsung client checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate JS and run offline tests
+        run: npm run check
+      - name: Parse Tizen manifest XML
+        run: python3 -c "import xml.etree.ElementTree as ET; ET.parse('app/config.xml')"

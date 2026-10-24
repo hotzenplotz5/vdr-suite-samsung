@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>VDR-Suite · Samsung</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand"><span class="brand-icon">TV</span><div><strong>VDR-Suite</strong><small>Samsung · Phase S1</small></div></div>
+      <span class="build-tag">Hardware-Prototyp · offline</span>
+    </header>
+    <div class="layout">
+      <nav class="menu" id="menu" aria-label="Hauptnavigation">
+        <button type="button" class="menu-item is-focused" data-index="0" data-view="home" tabindex="0">Startseite</button>
+        <button type="button" class="menu-item" data-index="1" data-view="live" tabindex="-1">Live-TV</button>
+        <button type="button" class="menu-item" data-index="2" data-view="recordings" tabindex="-1">Aufnahmen</button>
+        <button type="button" class="menu-item" data-index="3" data-view="settings" tabindex="-1">Einstellungen</button>
+      </nav>
+      <main class="content" aria-live="polite">
+        <p class="eyebrow">Samsung TV Client</p>
+        <h1 id="view-title">Willkommen bei VDR-Suite</h1>
+        <p id="view-description">Dieser erste Prototyp prüft Bildschirm, Fernbedienung und Samsung-Laufzeit. Noch keine Verbindung zum Server.</p>
+        <section class="diagnostics" aria-label="Laufzeitdiagnose">
+          <h2>Gerätefähigkeit (nur Erkennung)</h2>
+          <dl>
+            <div><dt>Tizen API</dt><dd id="tizen-status">wird geprüft</dd></div>
+            <div><dt>Samsung AVPlay</dt><dd id="avplay-status">wird geprüft</dd></div>
+            <div><dt>TV-Tasten API</dt><dd id="remote-status">wird geprüft</dd></div>
+            <div><dt>Letzte Taste</dt><dd id="key-status">keine</dd></div>
+          </dl>
+          <p id="message" class="message">Navigation: Pfeile · OK · Zurück</p>
+        </section>
+      </main>
+    </div>
+    <footer>VDR-Suite Samsung · unabhängiger Client · keine Wiedergabe in Phase S1</footer>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
