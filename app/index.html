@@ -7,46 +7,134 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Original VIDAA intro: a nonblocking visual cover over the normal offline S1 shell. -->
+  <!-- Original VIDAA intro. Keep this independent of the Samsung UI and network. -->
   <div class="startup-cover" id="startup-cover" aria-label="VDR-Suite Startanimation">
     <video id="startup-video" class="startup-video" playsinline preload="none" tabindex="-1" aria-hidden="true"></video>
   </div>
-  <!-- Failsafe first paint: never strand a TV on a black video overlay if app JS fails. -->
   <script>
     window.setTimeout(function () {
       var cover = document.getElementById("startup-cover");
       if (cover) cover.hidden = true;
     }, 16000);
   </script>
+
   <div class="app">
-    <header>
-      <div class="brand"><img class="brand-icon" src="assets/branding/vdr-suite-icon-v4.png" alt=""><div><strong>VDR-Suite</strong><small>Samsung · Phase S1</small></div></div>
-      <span class="build-tag">Hardware-Prototyp · offline</span>
-    </header>
-    <div class="layout">
-      <nav class="menu" id="menu" aria-label="Hauptnavigation">
-        <button type="button" class="menu-item is-focused" data-index="0" data-view="home" tabindex="0">Startseite</button>
-        <button type="button" class="menu-item" data-index="1" data-view="live" tabindex="-1">Live-TV</button>
-        <button type="button" class="menu-item" data-index="2" data-view="recordings" tabindex="-1">Aufnahmen</button>
-        <button type="button" class="menu-item" data-index="3" data-view="settings" tabindex="-1">Einstellungen</button>
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/branding/vdr-suite-icon-v4.png" class="brand-icon" alt="">
+        <strong>VDR-Suite</strong>
+      </div>
+      <nav class="menu" aria-label="Hauptnavigation">
+        <button type="button" class="menu-item tv-focusable is-focused" data-focus-id="nav-home" data-route="home">Home</button>
+        <button type="button" class="menu-item tv-focusable" data-focus-id="nav-live" data-route="live">Live-TV</button>
+        <button type="button" class="menu-item tv-focusable" data-focus-id="nav-recordings" data-route="recordings">Aufnahmen</button>
+        <button type="button" class="menu-item tv-focusable" data-focus-id="nav-search" data-route="search">Suche</button>
+        <button type="button" class="menu-item tv-focusable" data-focus-id="nav-timers" data-route="timers">Timer</button>
+        <button type="button" class="menu-item tv-focusable" data-focus-id="nav-settings" data-route="settings">Einstellungen</button>
       </nav>
-      <main class="content" aria-live="polite">
-        <p class="eyebrow">Samsung TV Client</p>
-        <h1 id="view-title">Willkommen bei VDR-Suite</h1>
-        <p id="view-description">Dieser erste Prototyp prüft Bildschirm, Fernbedienung und Samsung-Laufzeit. Noch keine Verbindung zum Server.</p>
-        <section class="diagnostics" aria-label="Laufzeitdiagnose">
-          <h2>Gerätefähigkeit (nur Erkennung)</h2>
+      <div class="topbar-status"><span class="status-dot"></span> Offline <span class="status-separator">|</span> Samsung TV</div>
+    </header>
+
+    <main class="main">
+      <section class="page home-page" data-panel="home" aria-label="Media Home">
+        <div class="section-lead"><span class="lead-icon">▣</span><strong>Live-TV</strong><span class="lead-divider"></span><span>Dein Media Home</span><span class="preview-tag">DESIGNVORSCHAU · KEINE LIVE-DATEN</span></div>
+        <div class="stage" aria-label="Media-Home-Karussell">
+          <button type="button" class="stage-card card-left tv-focusable" data-focus-id="stage-favorites" data-target-view="live">
+            <span class="stage-kicker">SENDER</span><span class="stage-ornament ornament-orbit"></span>
+            <strong>Favoriten</strong><small>Deine Sender auf einen Blick</small>
+          </button>
+          <button type="button" class="stage-card hero-card tv-focusable" data-focus-id="stage-hero" data-target-view="live">
+            <span class="hero-art" aria-hidden="true"><span class="hero-planet"></span><span class="hero-horizon"></span></span>
+            <span class="hero-copy">
+              <span class="hero-eyebrow">VDR-SUITE <span class="eyebrow-muted">/ SAMSUNG</span></span>
+              <span class="hero-caption">DEIN FERNSEHEN. DEIN ZUHAUSE.</span>
+              <strong>Fernsehen neu erleben.</strong>
+              <span class="hero-description">Live-TV, Aufnahmen und deine Mediathek. Eine Oberfläche, alles im Blick.</span>
+              <span class="hero-progress"><span></span></span>
+            </span>
+            <span class="hero-corner">S2</span>
+          </button>
+          <button type="button" class="stage-card card-right tv-focusable" data-focus-id="stage-recordings" data-target-view="recordings">
+            <span class="stage-kicker">MEDIATHEK</span><span class="stage-ornament ornament-rings"></span>
+            <strong>Aufnahmen</strong><small>Entdecken &amp; fortsetzen</small>
+          </button>
+        </div>
+        <div class="stage-pagination" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i><i></i></div>
+
+        <section class="actionbar" aria-label="Schnellzugriff">
+          <div class="action-summary">
+            <img src="assets/branding/vdr-suite-icon-v4.png" alt="" class="action-icon">
+            <div><strong>VDR-Suite</strong><span>Bereit für deinen Server</span></div>
+          </div>
+          <div class="action-detail"><span>Verbindungsstatus</span><strong>Noch nicht verbunden</strong></div>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="action-live" data-target-view="live">▸ &nbsp; Live-TV</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="action-recordings" data-target-view="recordings">▣ &nbsp; Aufnahmen</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="action-settings" data-target-view="settings">⚙ &nbsp; Einstellungen</button>
+        </section>
+
+        <section class="collection" aria-label="Deine Bereiche">
+          <div class="collection-heading"><strong>Deine Mediathek</strong><span>Entdecken, organisieren, weiterschauen</span></div>
+          <div class="rail">
+            <button type="button" class="rail-card rail-continue tv-focusable" data-focus-id="rail-recordings" data-target-view="recordings">
+              <span class="rail-art rail-art-recordings" aria-hidden="true"></span>
+              <span class="rail-copy"><strong>Weiterschauen</strong><small>Fortsetzen, wo du warst</small></span>
+            </button>
+            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-live" data-target-view="live">
+              <span class="rail-art rail-art-live" aria-hidden="true"></span>
+              <span class="rail-copy"><strong>Live-TV</strong><small>Kanäle &amp; Favoriten</small></span>
+            </button>
+            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-search" data-target-view="search">
+              <span class="rail-art rail-art-search" aria-hidden="true"></span>
+              <span class="rail-copy"><strong>Entdecken</strong><small>Filme &amp; Serien finden</small></span>
+            </button>
+            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-timers" data-target-view="timers">
+              <span class="rail-art rail-art-timers" aria-hidden="true"></span>
+              <span class="rail-copy"><strong>Aufnahmeplaner</strong><small>Timer im Überblick</small></span>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <section class="page detail-page" data-panel="live" hidden>
+        <span class="detail-eyebrow">LIVE-TV</span><h1>Deine Sender.</h1>
+        <p>Kanäle, Favoriten und EPG erscheinen hier, sobald dein Gerät mit VDR-Suite verbunden ist.</p>
+        <div class="detail-empty"><strong>Keine Serververbindung</strong><span>Diese Ansicht ist eine Offline-Designvorschau. Es werden keine Sender oder Programmdaten vorgetäuscht.</span></div>
+        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-home" data-target-view="home">Zurück zu Home</button>
+      </section>
+      <section class="page detail-page" data-panel="recordings" hidden>
+        <span class="detail-eyebrow">AUFNAHMEN</span><h1>Deine Mediathek.</h1>
+        <p>Ordner, Artwork und Fortsetzen erscheinen später über die autorisierte VDR-Suite Public API v1.</p>
+        <div class="detail-empty"><strong>Bibliothek noch nicht verbunden</strong><span>Keine echten Aufnahmen geladen – Offline-Designvorschau.</span></div>
+        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-recordings-home" data-target-view="home">Zurück zu Home</button>
+      </section>
+      <section class="page detail-page" data-panel="search" hidden>
+        <span class="detail-eyebrow">SUCHE</span><h1>Alles finden.</h1>
+        <p>Suche und Filter werden nach der API-Anbindung ergänzt.</p>
+        <div class="detail-empty"><strong>Suche noch nicht verfügbar</strong><span>In diesem S2-Prototyp werden keine Serveranfragen gesendet.</span></div>
+        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
+      </section>
+      <section class="page detail-page" data-panel="timers" hidden>
+        <span class="detail-eyebrow">TIMER</span><h1>Alles im Plan.</h1>
+        <p>Geplante Aufnahmen und Timer erscheinen nach Freigabe der öffentlichen API-Verträge.</p>
+        <div class="detail-empty"><strong>Timer noch nicht verbunden</strong><span>Keine echten Timer geladen oder verändert.</span></div>
+        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-home" data-target-view="home">Zurück zu Home</button>
+      </section>
+      <section class="page detail-page" data-panel="settings" hidden>
+        <span class="detail-eyebrow">EINSTELLUNGEN</span><h1>Dein Samsung-TV.</h1>
+        <p>Die Gerätefunktionen werden lokal erkannt. Kopplung und Benutzerrechte folgen erst in Phase S3.</p>
+        <div class="diagnostics">
+          <h2>Gerätefähigkeit · S1-Hardwarediagnose</h2>
           <dl>
             <div><dt>Tizen API</dt><dd id="tizen-status">wird geprüft</dd></div>
             <div><dt>Samsung AVPlay</dt><dd id="avplay-status">wird geprüft</dd></div>
             <div><dt>TV-Tasten API</dt><dd id="remote-status">wird geprüft</dd></div>
             <div><dt>Letzte Taste</dt><dd id="key-status">keine</dd></div>
           </dl>
-          <p id="message" class="message">Navigation: Pfeile · OK · Zurück</p>
-        </section>
-      </main>
-    </div>
-    <footer>VDR-Suite Samsung · unabhängiger Client · keine Wiedergabe in Phase S1</footer>
+        </div>
+        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-settings-home" data-target-view="home">Zurück zu Home</button>
+      </section>
+    </main>
+    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S2.1</span></footer>
   </div>
   <script src="tv-runtime.js"></script>
 </body>

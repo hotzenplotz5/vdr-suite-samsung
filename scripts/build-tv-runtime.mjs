@@ -8,6 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inputs = [
   "app/src/navigation/remote.js",
   "app/src/navigation/focus.js",
+  "app/src/navigation/premium-focus.js",
   "app/src/platform/capabilities.js",
   "app/src/platform/keys.js",
   "app/src/platform/startup-video.js",

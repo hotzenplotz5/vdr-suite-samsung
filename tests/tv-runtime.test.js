@@ -7,60 +7,103 @@ import { runInNewContext } from "node:vm";
 const html = readFileSync("app/index.html", "utf8");
 const runtime = readFileSync("app/tv-runtime.js", "utf8");
 
-test("Packaged entry uses a classic offline script instead of modules", () => {
+test("Samsung S2.1 loads a classic offline runtime and renders premium home", () => {
   assert.match(html, /<script src="tv-runtime\.js"><\/script>/);
-  assert.doesNotMatch(html, /<script[^>]+type="module"/);
+  assert.doesNotMatch(html, /type="module"/);
+  assert.match(html, /Fernsehen neu erleben/);
+  assert.match(html, /DESIGNVORSCHAU · KEINE LIVE-DATEN/);
+  for (const route of ["home","live","recordings","search","timers","settings"]) {
+    assert.match(html, new RegExp('data-panel="' + route + '"'));
+  }
   assert.doesNotMatch(runtime, /^\s*(?:import|export)\s/m);
   assert.match(runtime, /source: "\.\/assets\/branding\/startvideo\.mp4"/);
 });
 
-test("Classic TV runtime updates capabilities and starts original video", () => {
-  const probes = {
-    "tizen-status": { textContent: "wird geprüft" },
-    "avplay-status": { textContent: "wird geprüft" },
-    "remote-status": { textContent: "wird geprüft" },
-    "key-status": { textContent: "keine" },
-    "message": { textContent: "" },
-    "view-title": { textContent: "" },
-    "view-description": { textContent: "" }
-  };
-  const cover = { hidden: true };
+function simulate() {
+  const nodes = {};
+  const focusIds = [...html.matchAll(/<button[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
+  const buttons = focusIds.map(match => {
+    const attrs = { "data-focus-id": match[1] };
+    for (const key of ["data-target-view", "data-route"]) {
+      const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
+      if (parsed) attrs[key] = parsed[1];
+    }
+    const node = {
+      isFocused: false, tabIndex: -1,
+      classList: { toggle(name, enabled) {
+        if (name === "is-focused") node.isFocused = enabled;
+      }},
+      getAttribute(name) { return attrs[name] || null; },
+      setAttribute(name,value) { attrs[name] = value; },
+      removeAttribute(name) { delete attrs[name]; },
+      focus() {}, addEventListener(name, fn) { if (name === "click") node.click = fn; }
+    };
+    nodes[match[1]] = node;
+    return node;
+  });
+  const panels = [...html.matchAll(/data-panel="([^"]+)"/g)].map(match => ({
+    route: match[1], hidden: true, getAttribute() { return this.route; }
+  }));
+  const textNodes = Object.fromEntries([
+    "message", "key-status", "tizen-status", "avplay-status", "remote-status"
+  ].map(key => [key,{ textContent: "wird geprüft" }]));
+  const overlay = { hidden: true };
   const video = {
-    preload: null, playsInline: false, muted: null, defaultMuted: null, src: "",
-    addEventListener() {}, removeAttribute() {}, load() {}, pause() {},
+    addEventListener(name, fn) { if (name === "ended") this.finish = fn; },
+    pause() {}, load() {}, removeAttribute() {},
     play() { return Promise.resolve(); }
   };
-  probes["startup-cover"] = cover;
-  probes["startup-video"] = video;
-  const buttons = ["home", "live", "recordings", "settings"].map(view => ({
-    classList: { toggle() {} }, tabIndex: -1, focus() {}, addEventListener() {},
-    getAttribute(name) { return name === "data-view" ? view : ""; },
-    textContent: view
-  }));
+  const listeners = {};
   const document = {
     readyState: "complete",
-    getElementById(id) { assert.ok(probes[id], id); return probes[id]; },
-    querySelectorAll(selector) { assert.equal(selector, ".menu-item"); return buttons; },
-    addEventListener() {}
+    getElementById(id) {
+      if (id === "startup-cover") return overlay;
+      if (id === "startup-video") return video;
+      if (!textNodes[id]) throw Error("Missing test node " + id);
+      return textNodes[id];
+    },
+    querySelectorAll(selector) {
+      if (selector === ".tv-focusable") return buttons;
+      if (selector === ".menu-item") return buttons.filter(node => node.getAttribute("data-route"));
+      if (selector === "[data-panel]") return panels;
+      throw Error("Unexpected selector " + selector);
+    },
+    addEventListener(name, fn) { listeners[name] = fn; }
   };
   const window = {
     tizen: { tvinputdevice: { registerKey() {} } },
-    webapis: { avplay: {} },
-    setTimeout() { return 1; }, clearTimeout() {}
+    webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
   runInNewContext(runtime, { document, window });
-  assert.equal(probes["tizen-status"].textContent, "vorhanden");
-  assert.equal(probes["avplay-status"].textContent, "vorhanden");
-  assert.equal(probes["remote-status"].textContent, "vorhanden");
-  assert.equal(video.src, "./assets/branding/startvideo.mp4");
-  assert.equal(cover.hidden, false);
+  return { nodes, panels, textNodes, video, listeners, overlay };
+}
+
+test("S2.1 runtime boots original intro, capability probes and D-pad navigation", () => {
+  const sim = simulate();
+  assert.equal(sim.textNodes["tizen-status"].textContent, "vorhanden");
+  assert.equal(sim.textNodes["avplay-status"].textContent, "vorhanden");
+  assert.equal(sim.textNodes["remote-status"].textContent, "vorhanden");
+  assert.equal(sim.video.src, "./assets/branding/startvideo.mp4");
+  assert.equal(sim.overlay.hidden, false);
+  // Finish splash and exercise remote on HOME, other views and back.
+  sim.video.finish();
+  function key(keyCode) {
+    sim.listeners.keydown({ keyCode, preventDefault() {} });
+  }
+  key(40); // down: home nav -> stage
+  key(39); // right: hero
+  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+  key(13); // OK -> live view
+  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
+  assert.equal(sim.nodes["nav-live"].isFocused, true);
+  key(10009); // BACK -> home
+  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
+  assert.equal(sim.nodes["nav-home"].isFocused, true);
 });
 
-test("TV runtime header never accidentally closes its own block comment", () => {
-  // Previously app/src/**/*.js inside a block comment closed it at "**/".
-  const head = runtime.split("\n").slice(0, 4).join("\n");
-  assert.match(head, /^\/\* Generated by npm run build:tv from app\/src files/);
-  assert.match(head, /\*\/\n\(function/);
-  const syntax = spawnSync(process.execPath, ["--check", "app/tv-runtime.js"], { encoding: "utf8" });
-  assert.equal(syntax.status, 0, syntax.stderr);
+test("Generated TV runtime header is safe JavaScript", () => {
+  const header = runtime.split("\n").slice(0, 4).join("\n");
+  assert.match(header, /^\/\* Generated by npm run build:tv from app\/src files/);
+  const checked = spawnSync(process.execPath, ["--check", "app/tv-runtime.js"], { encoding: "utf8" });
+  assert.equal(checked.status, 0, checked.stderr);
 });
