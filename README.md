@@ -54,3 +54,7 @@ Der erste signierte `.wgt`-Build wurde am echten Samsung installiert und zeigte 
 Die paketierte App nutzt nun `app/tv-runtime.js` als klassisches Script ohne Modulimporte. Die Module unter `app/src/` bleiben die Entwicklungsquellen. Nach JS-Änderungen `npm run build:tv` ausführen und das generierte Script mitcommitten; `npm run check` verweigert veraltete Bundles. Das Tizen-VS-Code-Build-Tool führt npm nicht selbst aus.
 
 **Erneute Hardware-Abnahme offen:** Fähigkeitsanzeigen sollten auf „vorhanden“/„nicht erkannt“ wechseln; Fernbedienung, Startvideo-Bild/Ton und Videodecoder gesondert testen.
+
+## Git for Windows: `Stale app/tv-runtime.js`
+
+Die erste TV-Runtime-Generatorversion verglich die Zeilenenden bytegenau. Bei Git for Windows können ausgecheckte Textdateien `CRLF` enthalten, während der Generator `LF` erwartet. Der Generator normalisiert jetzt Eingabe und Vergleich auf `LF`. Ein isolierter Test simuliert `CRLF` für sämtliche Quell-/Build-Dateien und prüft zusätzlich, dass tatsächlich veraltete Bundles weiterhin abgewiesen werden. Kein globales Ändern von Git-/Windows-Einstellungen nötig.

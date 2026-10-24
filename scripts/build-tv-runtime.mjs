@@ -15,9 +15,13 @@ const inputs = [
 ];
 const output = join(root, "app/tv-runtime.js");
 
+// Git for Windows can check out text as CRLF; TV runtime generation uses LF.
+// Normalize BOTH the source files and the checked-out generated file.
+function normalizeNewlines(text) { return text.replace(/\r\n?/g, "\n"); }
+
 function makeRuntime() {
   const bodies = inputs.map(function (path) {
-    const code = readFileSync(join(root, path), "utf8")
+    const code = normalizeNewlines(readFileSync(join(root, path), "utf8"))
       .replace(/^import\s+\{[^}\n]+\}\s+from\s+["'][^"'\n]+["'];\r?\n/gm, "")
       .replace(/^export\s+(?=function\s)/gm, "");
     if (/^\s*(?:import|export)\s/m.test(code)) {
@@ -35,7 +39,7 @@ function makeRuntime() {
 const expected = makeRuntime();
 if (process.argv.includes("--check")) {
   let actual;
-  try { actual = readFileSync(output, "utf8"); }
+  try { actual = normalizeNewlines(readFileSync(output, "utf8")); }
   catch (_) { throw new Error("Missing app/tv-runtime.js: run npm run build:tv"); }
   if (actual !== expected) {
     throw new Error("Stale app/tv-runtime.js: run npm run build:tv and commit the result");
