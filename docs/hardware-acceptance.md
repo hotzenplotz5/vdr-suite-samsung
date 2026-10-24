@@ -1,6 +1,6 @@
 # Hardware-Abnahme – Samsung GU43TU6979U
 
-> **Stand 2026-10-24: Nicht getestet.** Quellcode, CI und Emulator sind kein Ersatz für echte Hardware.
+> **Stand 2026-10-25: Erster TV-Start bestätigt.** Statische Oberfläche sichtbar; JavaScript-Boot und Startvideo beim ersten Test nicht nachgewiesen. Hardware-Retest nach Fix offen.
 
 ## Geräteprofil
 
@@ -21,9 +21,9 @@
 | S1.1-a | Laptop-TV-LAN Verbindung bestätigt | BESTÄTIGT | lokaler Ping 4/4, danach Device Manager |
 | S1.1-b | Developer Mode ON, Device Manager/SDB sieht TV | BESTÄTIGT | TV-Anzeige DEVELOP MODE, Device Manager tv-5.5 |
 | S1.1-c | gültiges Samsung-Signierprofil lokal | BESTÄTIGT | Certificate Manager meldet Profil angelegt und aktiviert; Signierung noch nicht getestet |
-| S1.2-a | `app/config.xml` mit realem SDK validiert | OFFEN | |
-| S1.2-b | `.wgt` erfolgreich signiert und installiert | OFFEN | |
-| S1.2-c | Launcher/Startbildschirm ohne Browserchrome | OFFEN | |
+| S1.2-a | `app/config.xml` mit realem SDK validiert | BESTÄTIGT | Tizen Extension meldet 'Project built successfully' |
+| S1.2-b | `.wgt` erfolgreich signiert und installiert | BESTÄTIGT | `app/Debug/app.wgt`; Run Project zeigt App auf realem TV |
+| S1.2-c | Launcher/Startbildschirm ohne Browserchrome | TEILWEISE | Statische S1-Seite auf TV sichtbar; JS-Boot nicht nachgewiesen |
 | S1.3-a | D-Pad/OK, sichtbarer Fokus | OFFEN | |
 | S1.3-b | Back/Exit sauber | OFFEN | |
 | S1.3-c | Play/Pause/Stop/Farbtasten, soweit verfügbar | OFFEN | |
@@ -44,4 +44,4 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 
 - Originaldateien `app/assets/branding/vdr-suite-icon-v4.png` und `app/assets/branding/startvideo.mp4` nachgewiesen.
 - Startvideo-Overlay implementiert: Timeout, Decode-Fehler, Autoplay-Ablehnung und Fernbedienungs-Skip behandeln; Boot der App bleibt unabhängig.
-- **ECHTER TV-TEST OFFEN:** Logo-Auflösung, Startvideo-Bild/Ton und Start ohne Hängen, mit und ohne funktionierendes Autoplay.
+- **Erster TV-Test:** Logo und statische Oberfläche sichtbar; Video nicht gestartet, Capability-Texte blieben bei 'wird geprüft'. Klassischer gebündelter JS-Einstieg vorbereitet; Wirkung am TV, Video und Fernbedienung weiter OFFEN.

@@ -21,7 +21,7 @@ Stand: 2026-10-24. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 ## Phase S1 – echte Samsung-Runtime (nächster Arbeitsblock)
 
 - **S1.1 Toolchain und Verbindung:** Windows + Samsung TV Extension/Tizen-Tooling, lokales IP-Netz, TV Developer Mode, Zertifikatsprofil. Ergebnis: TV per Device Manager/SDB sichtbar.
-- **S1.2 App-Paket:** `config.xml`/Icon validieren, signiertes `.wgt` erzeugen und installieren. Original-VIDAA-Logo und lokales Startvideo sind quellsseitig eingebunden; Wiedergabe auf Tizen 5.5, Paketbau und Launcherstart bleiben Hardware-Gates.
+- **S1.2 App-Paket:** `config.xml`/Icon validieren, signiertes `.wgt` erzeugen und installieren. Original-VIDAA-Logo und lokales Startvideo sind quellsseitig eingebunden. Erster .wgt-Build und statischer App-Start am echten Tizen 5.5 bestätigt; JavaScript-Boot nicht sichtbar (Capabilities weiterhin 'wird geprüft'), Startvideo nicht gezeigt. Klassischer Offline-JS-Einstieg vorbereitet, Hardware-Retest OFFEN.
 - **S1.3 Eingabe und Fokus:** D-Pad, OK, Back, Play/Pause/Stop und Farbtasten soweit vom Gerät geliefert, jeweils per Bildschirmstatus prüfen. Ergebnis: kein Mauszeiger, kein Fokusverlust.
 - **S1.4 Fähigkeitstest und Restart:** Tizen-API und AVPlay-Verfügbarkeit erkennen, 1080p/4K-Darstellung prüfen, Start/Beenden/Neustart belegen. Ergebnis: [Hardware-Abnahme](docs/hardware-acceptance.md) ausgefüllt.
 

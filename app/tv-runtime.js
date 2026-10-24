@@ -1,0 +1,249 @@
+/* Generated with 'npm run build:tv' from app/src/**/*.js. DO NOT EDIT.
+ * A classic single-file script supports packaged Tizen 5.5 file URLs.
+ */
+(function () {
+  "use strict";
+
+  // BEGIN app/src/navigation/remote.js
+  // Samsung key events normalized once, before views consume them.
+  const KEY_CODES = Object.freeze({
+    37: "LEFT", 38: "UP", 39: "RIGHT", 40: "DOWN",
+    13: "OK", 8: "BACK", 27: "BACK", 10009: "BACK",
+    415: "PLAY", 19: "PAUSE", 413: "STOP",
+    403: "RED", 404: "GREEN", 405: "YELLOW", 406: "BLUE"
+  });
+  
+  const NAMED_KEYS = Object.freeze({
+    ArrowLeft: "LEFT", ArrowUp: "UP", ArrowRight: "RIGHT", ArrowDown: "DOWN",
+    Enter: "OK", Escape: "BACK", Backspace: "BACK", BrowserBack: "BACK",
+    MediaPlay: "PLAY", MediaPause: "PAUSE", MediaStop: "STOP",
+    ColorF0Red: "RED", ColorF1Green: "GREEN",
+    ColorF2Yellow: "YELLOW", ColorF3Blue: "BLUE"
+  });
+  
+  function normalizeRemoteKey(event) {
+    if (!event) return null;
+    if (typeof event.key === "string" && NAMED_KEYS[event.key]) {
+      return NAMED_KEYS[event.key];
+    }
+    return KEY_CODES[event.keyCode || event.which] || null;
+  }
+  // END app/src/navigation/remote.js
+
+  // BEGIN app/src/navigation/focus.js
+  // Phase S1: strictly bounded vertical menu focus. A spatial focus graph follows in S2.
+  function nextMenuIndex(current, direction, count) {
+    if (!Number.isInteger(current) || !Number.isInteger(count) || count <= 0) return 0;
+    const clamped = Math.max(0, Math.min(count - 1, current));
+    if (direction === "UP" || direction === "LEFT") return Math.max(0, clamped - 1);
+    if (direction === "DOWN" || direction === "RIGHT") return Math.min(count - 1, clamped + 1);
+    return clamped;
+  }
+  // END app/src/navigation/focus.js
+
+  // BEGIN app/src/platform/capabilities.js
+  // Capability presence is not proof of codec support or VDR-Suite authorization.
+  function getPlatformCapabilities(globals) {
+    const env = globals || {};
+    const tizen = env.tizen || null;
+    const webapis = env.webapis || null;
+    return {
+      tizen: Boolean(tizen),
+      avplay: Boolean(webapis && webapis.avplay),
+      tvInputDevice: Boolean(tizen && tizen.tvinputdevice)
+    };
+  }
+  // END app/src/platform/capabilities.js
+
+  // BEGIN app/src/platform/keys.js
+  const OPTIONAL_KEYS = [
+    "MediaPlay", "MediaPause", "MediaStop",
+    "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue"
+  ];
+  
+  // Directions, Enter and Back are normally delivered without explicit registration.
+  function registerOptionalKeys(globals) {
+    const api = globals && globals.tizen && globals.tizen.tvinputdevice;
+    if (!api) return { supported: false, registered: [] };
+    const registered = [];
+    if (typeof api.registerKey === "function") {
+      for (let i = 0; i < OPTIONAL_KEYS.length; i += 1) {
+        try {
+          api.registerKey(OPTIONAL_KEYS[i]);
+          registered.push(OPTIONAL_KEYS[i]);
+        } catch (_) {
+          // Some remote keys are not available on every Samsung TV.
+        }
+      }
+    }
+    return { supported: true, registered: registered };
+  }
+  // END app/src/platform/keys.js
+
+  // BEGIN app/src/platform/startup-video.js
+  // Offline startup branding: original VIDAA MP4, never a VDR MediaSession.
+  // The main app owns the single remote keydown listener; this controller owns only the cover.
+  function createStartupVideo({ overlay, video, environment, source }) {
+    const clock = environment || {};
+    let running = false;
+    let finished = false;
+    let timer = null;
+  
+    function finish() {
+      if (finished) return;
+      finished = true;
+      running = false;
+      if (timer !== null && typeof clock.clearTimeout === "function") {
+        clock.clearTimeout(timer);
+        timer = null;
+      }
+      if (video) {
+        try { video.pause(); } catch (_) { /* decoder may already be gone */ }
+        try { video.removeAttribute("src"); video.load(); } catch (_) { /* teardown best effort */ }
+      }
+      if (overlay) overlay.hidden = true;
+    }
+  
+    function start() {
+      if (running || finished) return false;
+      if (!overlay || !video || typeof source !== "string" ||
+          source !== "./assets/branding/startvideo.mp4" ||
+          typeof clock.setTimeout !== "function") {
+        finish();
+        return false;
+      }
+      running = true;
+      overlay.hidden = false;
+      video.preload = "auto";
+      video.playsInline = true;
+      video.muted = false;
+      video.defaultMuted = false;
+      video.addEventListener("ended", finish);
+      video.addEventListener("error", finish);
+      video.addEventListener("abort", finish);
+      timer = clock.setTimeout(finish, 14000);
+  
+      try {
+        video.src = source;
+        video.load();
+        const attempt = video.play();
+        if (attempt && typeof attempt.catch === "function") {
+          attempt.catch(function (error) {
+            if (finished) return;
+            if (!error || error.name !== "NotAllowedError") { finish(); return; }
+            try {
+              // Some runtimes reject unmuted autoplay: try silent intro once.
+              video.muted = true;
+              video.defaultMuted = true;
+              const retry = video.play();
+              if (retry && typeof retry.catch === "function") retry.catch(finish);
+            } catch (_) { finish(); }
+          });
+        }
+      } catch (_) { finish(); }
+      return running;
+    }
+  
+    return { start, skip: finish, active: () => running, completed: () => finished };
+  }
+  // END app/src/platform/startup-video.js
+
+  // BEGIN app/src/main.js
+  
+  const VIEWS = {
+    home: ["Willkommen bei VDR-Suite", "Dieser erste Prototyp prüft Bildschirm, Fernbedienung und Samsung-Laufzeit. Noch keine Verbindung zum Server."],
+    live: ["Live-TV", "Live-TV wird erst nach bestätigter API-Verbindung und AVPlay-Abnahme implementiert (S6)."],
+    recordings: ["Aufnahmen", "Ordner und Aufnahmen werden später ausschließlich über die autorisierte VDR-Suite Public API v1 geladen (S4)."],
+    settings: ["Einstellungen", "Die Geräteanzeige unten enthält nur harmlose Fähigkeiten; Pairing folgt erst in S3."]
+  };
+  
+  function boot() {
+    const buttons = Array.prototype.slice.call(document.querySelectorAll(".menu-item"));
+    let focused = 0;
+    let currentView = "home";
+    const message = document.getElementById("message");
+    const keyStatus = document.getElementById("key-status");
+  
+    function showMessage(text) { message.textContent = text; }
+    function setFocus(next) {
+      focused = next;
+      buttons.forEach(function (button, index) {
+        const active = index === focused;
+        button.classList.toggle("is-focused", active);
+        button.tabIndex = active ? 0 : -1;
+      });
+      buttons[focused].focus();
+    }
+    function showView(view) {
+      if (!VIEWS[view]) return;
+      currentView = view;
+      document.getElementById("view-title").textContent = VIEWS[view][0];
+      document.getElementById("view-description").textContent = VIEWS[view][1];
+      showMessage("Bereich: " + buttons[focused].textContent.trim() + " · keine Serververbindung");
+    }
+    function quitApp() {
+      try {
+        if (window.tizen && window.tizen.application) {
+          window.tizen.application.getCurrentApplication().exit();
+          return;
+        }
+      } catch (_) { /* runtime may deny app exit */ }
+      showMessage("Back im Startmenü erkannt. App-Exit am TV noch zu verifizieren.");
+    }
+  
+    const caps = getPlatformCapabilities(window);
+    document.getElementById("tizen-status").textContent = caps.tizen ? "vorhanden" : "nicht erkannt";
+    document.getElementById("avplay-status").textContent = caps.avplay ? "vorhanden" : "nicht erkannt";
+    document.getElementById("remote-status").textContent = caps.tvInputDevice ? "vorhanden" : "nicht erkannt";
+    registerOptionalKeys(window);
+    const intro = createStartupVideo({
+      overlay: document.getElementById("startup-cover"),
+      video: document.getElementById("startup-video"),
+      environment: window,
+      source: "./assets/branding/startvideo.mp4"
+    });
+    intro.start();
+  
+    document.addEventListener("keydown", function (event) {
+      const key = normalizeRemoteKey(event);
+      if (!key) return;
+      event.preventDefault();
+      keyStatus.textContent = key;
+      // Cover is presentation only: never activate a hidden navigation button.
+      if (intro.active()) {
+        if (key === "OK" || key === "BACK" || key === "STOP" ||
+            key === "PLAY" || key === "PAUSE") intro.skip();
+        return;
+      }
+      if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
+        setFocus(nextMenuIndex(focused, key, buttons.length));
+      } else if (key === "OK") {
+        showView(buttons[focused].getAttribute("data-view"));
+      } else if (key === "BACK") {
+        if (currentView !== "home") {
+          showView("home");
+          setFocus(0);
+        } else {
+          quitApp();
+        }
+      } else {
+        showMessage("Taste " + key + " empfangen (noch ohne Medienfunktion).");
+      }
+    });
+  
+    buttons.forEach(function (button, index) {
+      button.addEventListener("click", function () {
+        setFocus(index);
+        showView(button.getAttribute("data-view"));
+      });
+    });
+    setFocus(0);
+  }
+  
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+    else boot();
+  }
+  // END app/src/main.js
+
+}());
