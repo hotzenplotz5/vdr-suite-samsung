@@ -38,6 +38,16 @@ test("Tizen TV bundle accepts Windows CRLF checkout yet detects real changes", (
     assert.equal(ok.status, 0, ok.stderr);
     assert.match(ok.stdout, /Tizen 5\.5 classic runtime: synchronized/);
 
+    // Tizen Extension adds this TypeScript editor hint to local main.js.
+    // It must not invalidate the checked-in classic TV runtime.
+    const mainPath = join(tempRoot, "app/src/main.js");
+    const untouched = readFileSync(mainPath, "utf8");
+    writeFileSync(mainPath,
+      '/// <reference path="../../index.d.ts" />\r\n\r\n' + untouched, "utf8");
+    const tizenAnnotated = verify();
+    assert.equal(tizenAnnotated.status, 0, tizenAnnotated.stderr);
+    writeFileSync(mainPath, untouched, "utf8");
+
     const output = join(tempRoot, "app/tv-runtime.js");
     writeFileSync(output, readFileSync(output, "utf8") + "// unexpected change\r\n");
     const stale = verify();

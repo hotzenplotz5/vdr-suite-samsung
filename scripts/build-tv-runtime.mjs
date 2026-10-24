@@ -22,6 +22,9 @@ function normalizeNewlines(text) { return text.replace(/\r\n?/g, "\n"); }
 function makeRuntime() {
   const bodies = inputs.map(function (path) {
     const code = normalizeNewlines(readFileSync(join(root, path), "utf8"))
+      // Tizen VS Code extension adds an editor-only index.d.ts reference.
+      // It is not runtime code and must never enter the committed TV bundle.
+      .replace(/^\/\/\/[ \t]*<reference[ \t]+path=["\']\.\.\/\.\.\/index\.d\.ts["\'][ \t]*\/>[ \t]*\n(?:[ \t]*\n)?/gm, "")
       .replace(/^import\s+\{[^}\n]+\}\s+from\s+["'][^"'\n]+["'];\r?\n/gm, "")
       .replace(/^export\s+(?=function\s)/gm, "");
     if (/^\s*(?:import|export)\s/m.test(code)) {
