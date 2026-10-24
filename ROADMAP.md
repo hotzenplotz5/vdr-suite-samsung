@@ -1,6 +1,6 @@
 # VDR-Suite Samsung – client-lokale Roadmap
 
-Stand: 2026-10-24. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-Suite- oder VIDAA-Phase wird umnummeriert.
+Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-Suite- oder VIDAA-Phase wird umnummeriert.
 
 ## Regeln für jeden Slice
 
@@ -21,9 +21,9 @@ Stand: 2026-10-24. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 ## Phase S1 – echte Samsung-Runtime (nächster Arbeitsblock)
 
 - **S1.1 Toolchain und Verbindung:** Windows + Samsung TV Extension/Tizen-Tooling, lokales IP-Netz, TV Developer Mode, Zertifikatsprofil. Ergebnis: TV per Device Manager/SDB sichtbar.
-- **S1.2 App-Paket:** `config.xml`/Icon validieren, signiertes `.wgt` erzeugen und installieren. Original-VIDAA-Logo und lokales Startvideo sind quellsseitig eingebunden. Erster .wgt-Build und statischer App-Start am echten Tizen 5.5 bestätigt; JavaScript-Boot nicht sichtbar (Capabilities weiterhin 'wird geprüft'), Startvideo nicht gezeigt. Klassischer Offline-JS-Einstieg vorbereitet, Hardware-Retest OFFEN.
-- **S1.3 Eingabe und Fokus:** D-Pad, OK, Back, Play/Pause/Stop und Farbtasten soweit vom Gerät geliefert, jeweils per Bildschirmstatus prüfen. Ergebnis: kein Mauszeiger, kein Fokusverlust.
-- **S1.4 Fähigkeitstest und Restart:** Tizen-API und AVPlay-Verfügbarkeit erkennen, 1080p/4K-Darstellung prüfen, Start/Beenden/Neustart belegen. Ergebnis: [Hardware-Abnahme](docs/hardware-acceptance.md) ausgefüllt.
+- **S1.2 App-Paket:** `config.xml`/Icon validiert; signiertes `.wgt` gebaut und auf echtem Tizen 5.5 installiert. Original-VIDAA-Logo und lokales Startvideo erfolgreich angezeigt (**Nutzer bestätigt**); Ton der Animation nicht gesondert verifiziert. **Hardwaretest bestanden.**
+- **S1.3 Eingabe und Fokus:** D-Pad, OK und sichtbarer Fokus über alle vier S1-Menüpunkte am TV bestätigt. **Noch offen:** Zurück/Exit, Play/Pause/Stop und Farbtasten sowie Wiederholbarkeit.
+- **S1.4 Fähigkeitstest und Restart:** Tizen API, Samsung AVPlay und TV-Tasten API am Gerät als 'vorhanden' erkannt. Bildschirmdarstellung bestätigt. **Noch offen:** Back/Exit/Neustart, Auflösungstests und tatsächliche AVPlay-Medienwiedergabe. Details: [Hardware-Abnahme](docs/hardware-acceptance.md).
 
 **Gate:** echter TV startet die signierte App; Navigation und Exit funktionieren reproduzierbar. Bis dahin S1 = **unverified**.
 
@@ -71,5 +71,5 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**S1.1:** Lokale IPv4-Adressen von Windows-Laptop und Samsung feststellen, gleichen erreichbaren Netzwerkbereich prüfen, Tizen-Toolchain installieren, Samsung-Developer-Mode aktivieren. Anleitung: [docs/development-setup.md](docs/development-setup.md).
+**S1.3-b:** Auf dem echten Samsung von einer Unterseite mit Zurück zur Startseite gehen und bei erneutem Zurück kontrolliertes Beenden der App prüfen; anschließend Relaunch kontrollieren. Erst danach S1-Abnahme vervollständigen.
 

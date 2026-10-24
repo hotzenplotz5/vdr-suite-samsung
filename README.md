@@ -2,7 +2,7 @@
 
 Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsung Tizen TV; erstes Testgerät: **Samsung GU43TU6979U (2020 / Tizen-Generation 5.5)**.
 
-> **Status:** Phase S0 (Repository-/Architektur-Grundlage) vorbereitet; Phase S1 (echte TV-Hardware) **noch nicht abgenommen**. Weder Paketinstallation noch Wiedergabe oder API-Zugriff sind auf diesem Fernseher verifiziert.
+> **Status 2026-10-25:** S1-Hardwaretest teilweise erfolgreich: signiertes `.wgt` installiert; Startvideo und Logo am Samsung Tizen 5.5 sichtbar; Tizen/AVPlay/Tasten-API erkannt; D-Pad/OK-Menünavigation bestätigt. Back/Exit/Restart und Medien-/API-Zugriff noch offen.
 
 ## Projektgrenzen
 
@@ -20,7 +20,7 @@ Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsu
 4. [docs/development-setup.md](docs/development-setup.md) – Windows/Tizen/TV-Verbindung.
 5. [docs/hardware-acceptance.md](docs/hardware-acceptance.md) – Abnahme am realen Samsung.
 
-## Phase-S1-Prototyp (noch nicht auf TV getestet)
+## Phase-S1-Prototyp (auf echtem TV gestartet)
 
 Die im Verzeichnis `app/` enthaltene statische TV-Web-App zeigt einen Startbildschirm, vier Bereiche, sichtbaren Fokus und harmlose Gerätefähigkeits-Indikatoren. Sie nutzt **keine Netzwerkressourcen und keine VDR-Medienressourcen**. Das lokal paketierte VIDAA-Startvideo ist eine nichtblockierende Branding-Animation, keine Recording-MediaSession. Das Original-VIDAA-Logo liegt unter `app/assets/branding/`.
 
@@ -43,7 +43,7 @@ Keine Geräte-IP-Adressen, Zugangsdaten, Zertifikatsschlüssel oder Media-Tokens
 
 ## Branding und TV-Design
 
-Die beiden Originaldateien `app/assets/branding/vdr-suite-icon-v4.png` und `app/assets/branding/startvideo.mp4` wurden aus dem eigenständigen VIDAA-Projekt übernommen und bleiben unverändert. Die kurze Startanimation läuft lokal, kann mit OK/Zurück/Stop übersprungen werden und blockiert den TV-Start nicht, falls der Decoder sie ablehnt. Ob sie auf Tizen 5.5 tatsächlich mit Bild/Ton läuft, ist noch nicht getestet.
+Die beiden Originaldateien `app/assets/branding/vdr-suite-icon-v4.png` und `app/assets/branding/startvideo.mp4` wurden aus dem eigenständigen VIDAA-Projekt übernommen und bleiben unverändert. Die kurze Startanimation läuft lokal, kann mit OK/Zurück/Stop übersprungen werden und blockiert den TV-Start nicht, falls der Decoder sie ablehnt. Startvideo funktioniert nach Nutzerbestätigung mit Bild auf Tizen 5.5; Ton wurde noch nicht getrennt nachgewiesen.
 
 Verbindliches späteres UI-Ziel: das vom Nutzer bereitgestellte dunkle Media-Home-Design mit oberer Navigation, großer Live-TV-Hero-Karte und horizontalen Inhaltsschienen. Der kleine S1-Diagnosebildschirm ist ausdrücklich **noch nicht** dieses finale Design.
 
@@ -53,7 +53,7 @@ Der erste signierte `.wgt`-Build wurde am echten Samsung installiert und zeigte 
 
 Die paketierte App nutzt nun `app/tv-runtime.js` als klassisches Script ohne Modulimporte. Die Module unter `app/src/` bleiben die Entwicklungsquellen. Nach JS-Änderungen `npm run build:tv` ausführen und das generierte Script mitcommitten; `npm run check` verweigert veraltete Bundles. Das Tizen-VS-Code-Build-Tool führt npm nicht selbst aus.
 
-**Erneute Hardware-Abnahme offen:** Fähigkeitsanzeigen sollten auf „vorhanden“/„nicht erkannt“ wechseln; Fernbedienung, Startvideo-Bild/Ton und Videodecoder gesondert testen.
+**Erneuter Hardwaretest erfolgreich (2026-10-25):** Alle drei Fähigkeitsanzeigen stehen auf „vorhanden“; originales Startvideo funktioniert laut Nutzer, Fokus und OK auf allen vier Menüpunkten sichtbar. Back/Exit/Restart, Video-Ton und tatsächliche AVPlay-Playback-Funktion bleiben ungeprüft.
 
 ## Git for Windows: `Stale app/tv-runtime.js`
 
@@ -61,4 +61,4 @@ Die erste TV-Runtime-Generatorversion verglich die Zeilenenden bytegenau. Bei Gi
 
 ## TV-Runtime-Syntaxkorrektur
 
-Beim erneuten lokalen `npm run check` meldete Node.js einen Syntaxfehler in der ersten Kommentarzeile der generierten TV-Runtime. Die Glob-Schreibweise in einem Blockkommentar enthielt unabsichtlich einen Kommentarabschluss. Sowohl Generator als auch generiertes Script verwenden jetzt einen Kommentar ohne Glob-Syntax; der neue Regressionstest überprüft die Runtime zusätzlich mit `node --check`. Erneuter Check unter Windows und TV-Retest stehen noch aus.
+Beim erneuten lokalen `npm run check` meldete Node.js einen Syntaxfehler in der ersten Kommentarzeile der generierten TV-Runtime. Die Glob-Schreibweise in einem Blockkommentar enthielt unabsichtlich einen Kommentarabschluss. Sowohl Generator als auch generiertes Script verwenden jetzt einen Kommentar ohne Glob-Syntax; der neue Regressionstest überprüft die Runtime zusätzlich mit `node --check`. Windows-Check mit 15 erfolgreichen Tests und anschließender TV-Retest waren erfolgreich; Audio des Startvideos und spätere Medienfunktionen sind nicht dadurch abgenommen.

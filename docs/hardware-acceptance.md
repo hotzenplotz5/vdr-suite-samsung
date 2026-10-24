@@ -1,6 +1,6 @@
 # Hardware-Abnahme – Samsung GU43TU6979U
 
-> **Stand 2026-10-25: Erster TV-Start bestätigt.** Statische Oberfläche sichtbar; JavaScript-Boot und Startvideo beim ersten Test nicht nachgewiesen. Hardware-Retest nach Fix offen.
+> **Stand 2026-10-25: TV-Retest erfolgreich.** Signierte App startet auf Tizen 5.5; Nutzer bestätigt originales Startvideo. JavaScript-Probes und D-Pad/OK laufen auf Hardware. Back/Exit, Medienwiedergabe und Audio der Startanimation bleiben separat offen.
 
 ## Geräteprofil
 
@@ -20,15 +20,15 @@
 | --- | --- | --- | --- |
 | S1.1-a | Laptop-TV-LAN Verbindung bestätigt | BESTÄTIGT | lokaler Ping 4/4, danach Device Manager |
 | S1.1-b | Developer Mode ON, Device Manager/SDB sieht TV | BESTÄTIGT | TV-Anzeige DEVELOP MODE, Device Manager tv-5.5 |
-| S1.1-c | gültiges Samsung-Signierprofil lokal | BESTÄTIGT | Certificate Manager meldet Profil angelegt und aktiviert; Signierung noch nicht getestet |
+| S1.1-c | gültiges Samsung-Signierprofil lokal | BESTÄTIGT | Zertifikatsprofil aktiviert; mit Build und Installation auf echtem TV praktisch erprobt |
 | S1.2-a | `app/config.xml` mit realem SDK validiert | BESTÄTIGT | Tizen Extension meldet 'Project built successfully' |
 | S1.2-b | `.wgt` erfolgreich signiert und installiert | BESTÄTIGT | `app/Debug/app.wgt`; Run Project zeigt App auf realem TV |
-| S1.2-c | Launcher/Startbildschirm ohne Browserchrome | TEILWEISE | Statische S1-Seite auf TV sichtbar; JS-Boot nicht nachgewiesen |
-| S1.3-a | D-Pad/OK, sichtbarer Fokus | OFFEN | |
+| S1.2-c | Launcher/Startbildschirm ohne Browserchrome | BESTÄTIGT | S1-Startbildschirm am TV ohne Browserchrome; nach Fix funktionsfähige JS-Probes |
+| S1.3-a | D-Pad/OK, sichtbarer Fokus | BESTÄTIGT | Vier Screenshots: Fokus auf Startseite, Live-TV, Aufnahmen, Einstellungen; 'Letzte Taste: OK' |
 | S1.3-b | Back/Exit sauber | OFFEN | |
 | S1.3-c | Play/Pause/Stop/Farbtasten, soweit verfügbar | OFFEN | |
-| S1.4-a | Tizen-API- und AVPlay-Verfügbarkeit sichtbar | OFFEN | |
-| S1.4-b | Bildschirmdarstellung und Relaunch geprüft | OFFEN | |
+| S1.4-a | Tizen-API- und AVPlay-Verfügbarkeit sichtbar | BESTÄTIGT | TV zeigt Tizen API, Samsung AVPlay und TV-Tasten API jeweils 'vorhanden' (keine Codec-Akzeptanz) |
+| S1.4-b | Bildschirmdarstellung und Relaunch geprüft | TEILWEISE | Sichtbare Bildschirmdarstellung bestätigt; eigenständiger Exit und Relaunch noch offen |
 
 ## Spätere Media-Gates (nur Vormerkung)
 
@@ -44,4 +44,6 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 
 - Originaldateien `app/assets/branding/vdr-suite-icon-v4.png` und `app/assets/branding/startvideo.mp4` nachgewiesen.
 - Startvideo-Overlay implementiert: Timeout, Decode-Fehler, Autoplay-Ablehnung und Fernbedienungs-Skip behandeln; Boot der App bleibt unabhängig.
-- **Erster TV-Test:** Logo und statische Oberfläche sichtbar; Video nicht gestartet, Capability-Texte blieben bei 'wird geprüft'. Klassischer gebündelter JS-Einstieg vorbereitet; Wirkung am TV, Video und Fernbedienung weiter OFFEN.
+- **Historie:** Erster TV-Test zeigte nur statische Oberfläche (Capabilities blieben bei 'wird geprüft'), Startvideo fehlte. Klassischer gebündelter JS-Einstieg und Generator-Korrekturen wurden eingespielt.
+- **Retest 2026-10-25 – BESTÄTIGT:** Nutzer meldet 'Startvideo geht'; Logo und vier Menüs sichtbar. Tizen API / Samsung AVPlay / TV-Tasten API zeigen 'vorhanden', D-Pad-Fokus und OK funktionieren.
+- **OFFEN:** Ton des Startvideos nicht separat bestätigt, Skip/Timeout/Autoplay-Fehlerpfade auf Hardware nicht durchgespielt; AVPlay-Inhaltswiedergabe nicht getestet.
