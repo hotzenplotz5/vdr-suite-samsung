@@ -21,7 +21,7 @@ Stand: 2026-10-24. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 ## Phase S1 – echte Samsung-Runtime (nächster Arbeitsblock)
 
 - **S1.1 Toolchain und Verbindung:** Windows + Samsung TV Extension/Tizen-Tooling, lokales IP-Netz, TV Developer Mode, Zertifikatsprofil. Ergebnis: TV per Device Manager/SDB sichtbar.
-- **S1.2 App-Paket:** `config.xml`/Icon validieren, signiertes `.wgt` erzeugen und installieren. Ergebnis: App startet über TV-Launcher.
+- **S1.2 App-Paket:** `config.xml`/Icon validieren, signiertes `.wgt` erzeugen und installieren. Original-VIDAA-Logo und lokales Startvideo sind quellsseitig eingebunden; Wiedergabe auf Tizen 5.5, Paketbau und Launcherstart bleiben Hardware-Gates.
 - **S1.3 Eingabe und Fokus:** D-Pad, OK, Back, Play/Pause/Stop und Farbtasten soweit vom Gerät geliefert, jeweils per Bildschirmstatus prüfen. Ergebnis: kein Mauszeiger, kein Fokusverlust.
 - **S1.4 Fähigkeitstest und Restart:** Tizen-API und AVPlay-Verfügbarkeit erkennen, 1080p/4K-Darstellung prüfen, Start/Beenden/Neustart belegen. Ergebnis: [Hardware-Abnahme](docs/hardware-acceptance.md) ausgefüllt.
 
@@ -29,7 +29,7 @@ Stand: 2026-10-24. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 ## Phase S2 – TV-Oberfläche
 
-- **S2.1** Routen, Zustände (loading/ready/empty/error), nachvollziehbarer Back-Stack.
+- **S2.1** Verbindliche visuelle Referenz: vom Nutzer bereitgestellter Dark-Premium-Media-Home-Screenshot (obere Navigation, große Live-TV-Hero-Karte, Aktionsleiste, horizontale Reihen); keine fiktiven Sender/EPG-Daten als echte Inhalte ausgeben. Routen, Zustände (loading/ready/empty/error), nachvollziehbarer Back-Stack.
 - **S2.2** Samsung-tauglicher Fokusgraph, klare Remote-Events, Raster und Content-Rails.
 - **S2.3** Web-Frontend-Parität als Produktreferenz, ohne Browser-Private-API oder massenhaftes Laden.
 

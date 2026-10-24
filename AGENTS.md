@@ -20,7 +20,7 @@
 - Ein einheitlicher Eingabe- und Fokus-Owner; keine zweite Keydown-Instanz in View-Modulen.
 - Eine einheitliche Playback-Steuerung; Samsung AVPlay ausschließlich hinter einem Plattformadapter.
 - App-Start muss offline möglich sein; HTTP-Fehler dürfen den Startbildschirm nicht blockieren.
-- Keine Medienwiedergabe in Phase S1; keine echten Backend-Aufrufe ohne S3-Gate.
+- In S1 ausschließlich das lokale, nichtblockierende VIDAA-Branding-Startvideo; **keine Inhalte/MediaSessions** und keine echten Backend-Aufrufe ohne S3-Gate.
 
 ## Entwicklung
 

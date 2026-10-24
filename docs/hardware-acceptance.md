@@ -8,19 +8,19 @@
 | --- | --- |
 | Hersteller/Modell | Samsung GU43TU6979U (laut Typenschild) |
 | Generation | 2020 |
-| Erwartetes Tizen | 5.5 (Jahres-Tabelle; auf TV noch zu bestätigen) |
+| Bestätigtes Tizen | 5.5 (Device Manager zeigt tv-5.5) |
 | Firmware | unbekannt |
-| Windows-Host | vorhanden; SDK noch nicht nachgewiesen |
-| Netz | Routertyp und lokale IP-Konfiguration noch offen |
+| Windows-Host | Tizen TV 10.0 SDK/Device Manager installiert; TV verbunden |
+| Netz | lokaler Ping erfolgreich; SDB/Device Manager nach vollständigem TV-Neustart verbunden (keine IP in Repo) |
 | Remote VDR | vom Laptop per IPv6/SSH erreichbar, **nicht vom TV nachgewiesen** |
 
 ## Phase S1 Testmatrix
 
 | ID | Erwartung | Status | Nachweis (ohne Secrets/IP) |
 | --- | --- | --- | --- |
-| S1.1-a | Laptop-TV-LAN Verbindung bestätigt | OFFEN | |
-| S1.1-b | Developer Mode ON, Device Manager/SDB sieht TV | OFFEN | |
-| S1.1-c | gültiges Samsung-Signierprofil lokal | OFFEN | |
+| S1.1-a | Laptop-TV-LAN Verbindung bestätigt | BESTÄTIGT | lokaler Ping 4/4, danach Device Manager |
+| S1.1-b | Developer Mode ON, Device Manager/SDB sieht TV | BESTÄTIGT | TV-Anzeige DEVELOP MODE, Device Manager tv-5.5 |
+| S1.1-c | gültiges Samsung-Signierprofil lokal | BESTÄTIGT | Certificate Manager meldet Profil angelegt und aktiviert; Signierung noch nicht getestet |
 | S1.2-a | `app/config.xml` mit realem SDK validiert | OFFEN | |
 | S1.2-b | `.wgt` erfolgreich signiert und installiert | OFFEN | |
 | S1.2-c | Launcher/Startbildschirm ohne Browserchrome | OFFEN | |
@@ -39,3 +39,9 @@
 
 Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV-Firmware und SDK festhalten – niemals Credentials, Pairing-Token, IP-Adressen oder private URLs.
 
+
+## VIDAA-Branding-Probe (S1.2, quellsseitig)
+
+- Originaldateien `app/assets/branding/vdr-suite-icon-v4.png` und `app/assets/branding/startvideo.mp4` nachgewiesen.
+- Startvideo-Overlay implementiert: Timeout, Decode-Fehler, Autoplay-Ablehnung und Fernbedienungs-Skip behandeln; Boot der App bleibt unabhängig.
+- **ECHTER TV-TEST OFFEN:** Logo-Auflösung, Startvideo-Bild/Ton und Start ohne Hängen, mit und ohne funktionierendes Autoplay.

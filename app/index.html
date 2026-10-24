@@ -7,9 +7,20 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Original VIDAA intro: a nonblocking visual cover over the normal offline S1 shell. -->
+  <div class="startup-cover" id="startup-cover" aria-label="VDR-Suite Startanimation">
+    <video id="startup-video" class="startup-video" playsinline preload="none" tabindex="-1" aria-hidden="true"></video>
+  </div>
+  <!-- Failsafe first paint: never strand a TV on a black video overlay if app JS fails. -->
+  <script>
+    window.setTimeout(function () {
+      var cover = document.getElementById("startup-cover");
+      if (cover) cover.hidden = true;
+    }, 16000);
+  </script>
   <div class="app">
     <header>
-      <div class="brand"><span class="brand-icon">TV</span><div><strong>VDR-Suite</strong><small>Samsung · Phase S1</small></div></div>
+      <div class="brand"><img class="brand-icon" src="assets/branding/vdr-suite-icon-v4.png" alt=""><div><strong>VDR-Suite</strong><small>Samsung · Phase S1</small></div></div>
       <span class="build-tag">Hardware-Prototyp · offline</span>
     </header>
     <div class="layout">

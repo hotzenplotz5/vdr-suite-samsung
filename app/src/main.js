@@ -2,6 +2,7 @@ import { normalizeRemoteKey } from "./navigation/remote.js";
 import { nextMenuIndex } from "./navigation/focus.js";
 import { getPlatformCapabilities } from "./platform/capabilities.js";
 import { registerOptionalKeys } from "./platform/keys.js";
+import { createStartupVideo } from "./platform/startup-video.js";
 
 const VIEWS = {
   home: ["Willkommen bei VDR-Suite", "Dieser erste Prototyp prüft Bildschirm, Fernbedienung und Samsung-Laufzeit. Noch keine Verbindung zum Server."],
@@ -49,12 +50,25 @@ function boot() {
   document.getElementById("avplay-status").textContent = caps.avplay ? "vorhanden" : "nicht erkannt";
   document.getElementById("remote-status").textContent = caps.tvInputDevice ? "vorhanden" : "nicht erkannt";
   registerOptionalKeys(window);
+  const intro = createStartupVideo({
+    overlay: document.getElementById("startup-cover"),
+    video: document.getElementById("startup-video"),
+    environment: window,
+    source: "./assets/branding/startvideo.mp4"
+  });
+  intro.start();
 
   document.addEventListener("keydown", function (event) {
     const key = normalizeRemoteKey(event);
     if (!key) return;
     event.preventDefault();
     keyStatus.textContent = key;
+    // Cover is presentation only: never activate a hidden navigation button.
+    if (intro.active()) {
+      if (key === "OK" || key === "BACK" || key === "STOP" ||
+          key === "PLAY" || key === "PAUSE") intro.skip();
+      return;
+    }
     if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
       setFocus(nextMenuIndex(focused, key, buttons.length));
     } else if (key === "OK") {
