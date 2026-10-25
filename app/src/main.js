@@ -604,6 +604,7 @@ function boot() {
       if (recordingBackendName) recordingBackendName.textContent =
         "Backend: " + backend.name + " · " + backend.backendId +
         " · Seite " + String(pageIndex + 1);
+      if (pageIndex > 0 && recordingFocusIds.length) setFocus(recordingFocusIds[0]);
       recordingStatus(result.value.items.length ? "ready" : "empty",
         result.value.items.length ?
           String(result.value.items.length) + " echte Aufnahmen · Seite " +
@@ -841,7 +842,8 @@ function boot() {
       var chosen = recordingCurrentPageItems[Number(recordingIndex)];
       if (chosen) {
         recordingStatus("ready", chosen.title || "Aufnahme",
-          (chosen.description || "Aufnahme aus dem VDR-Katalog.") +
+          (chosen.description ? chosen.description.slice(0, 240) :
+           "Aufnahme aus dem VDR-Katalog.") +
           " · Wiedergabe wird in S5 integriert.");
       }
       return;
