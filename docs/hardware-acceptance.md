@@ -216,4 +216,15 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - **TEST F:** Nur Basisabruf positiv; alle weiteren F-Einzelchecks bleiben OPEN, insbesondere Berechtigungsfehler, Navigation, 100er-Pagination, HTTP-/Timeout-Fälle.
 - **Playback nicht geprüft:** S4.1 zeigt ausschließlich Aufnahmemetadaten, keine Wiedergabe/AVPlay-Akzeptanz.
 
-**Nächste sichere Hardwareprüfungen:** Installierte Buildkennung am TV ablesen, `Einstellungen → Anmeldung prüfen` ausführen (ohne Credentials zu veröffentlichen), Liste/ungefähre Anzahl der Aufnahmen melden; dann Aufnahme-Fernbedienungsnavigation und bei tatsächlich mehr als 100 Aufnahmen nächste/vorherige Cursorseite testen. **Keine** unnötige Neuinstallation, keine erneute Kopplung und kein Widerruf bei bestehendem Erfolg.
+**Historischer Prüfauftrag (inzwischen teilweise bestanden):** Der nachfolgende Hardware-PASS bestätigt D-Pad-Aufnahmenavigation sowie 100er-Folgeseite und Rückwärtsblättern. Ausstehend sind nur die getrennten Einzelfehler-/Metadaten-/Wiedergabe-Gates. Keine unnötige Neuinstallation, Neu-Kopplung oder Widerruf.
+
+
+## S4.1 – Aufnahme-Paginierung und D-Pad/Zurück auf realem Samsung (Hardware-PASS 2026-10-25)
+
+**Nutzer-Rückmeldungen:** „aufnahmen werden hundert gelistet und dann seite 2 weitere 100 usw“; anschließend „bei den aufnahmen geht die navigation! zurück zur vorherigen seite auch“.
+
+**Hardwarebestätigung:** Aufnahmeliste lädt echte Daten, die erste Seite enthält 100 Aufnahmen, die zweite Seite enthält weitere 100. D-Pad-Navigation innerhalb der Aufnahmeansicht funktioniert. Navigation **zur vorherigen Seite** wurde ebenfalls ausdrücklich erfolgreich getestet. Damit sind auf Samsung S4.1 sowohl der grundlegende Aufnahmeabruf, die Vorwärts-Paginierung als auch das Rückwärtsblättern und die Fernbedienungsnavigation als **PASS (Nutzerbeobachtung am realen TV)** zu werten. Die Antwort belegt mindestens 200 abrufbare Aufnahmeeinträge; kein Schluss auf eine vollständige Gesamtzahl oder eine bestimmte Anzahl weiterer Seiten.
+
+**Weiterhin nicht als PASS belegt:** tatsächliches Abspielen/AVPlay, vollständige Prüfung der Metadatenfelder, gezielte HTTP-401/403/409/503-Fehlerpfade, Neustart-Persistenz im einzelnen Abnahmeschritt. Die Senderliste lädt zwar erfolgreich, ist jedoch derzeit weder in `channels.conf`-Reihenfolge noch per D-Pad anwählbar (eigene offene Bugs). Aufnahme-PASS nicht auf Sendernavigation oder Wiedergabe übertragen.
+
+**Keine zusätzliche Installation erforderlich.** Der Nachweis gilt für den bereits laufenden Samsung-Build; dieser Doku-Commit verändert weder Runtime noch Backend.
