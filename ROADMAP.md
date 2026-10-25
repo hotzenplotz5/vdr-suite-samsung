@@ -43,6 +43,8 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 **Gate:** Erstseiten-Device-Authentifizierung, Grant-Isolation und echte Sender auf dem realen Tizen 5.5 **BESTÄTIGT**. Persistenz über Update, Paginierung/Numeric-Order, alle negativen Fehlerklassen und Wiedergabe **separat offen**.
 
+- **S3.4 QUELLCODE-KANDIDAT / HARDWARE OFFEN (25.10.2026):** Die Samsung-Senderliste fordert explizit `sort=backendId,channelNumber,channelId&order=asc` an und übergibt den vom Server gelieferten `ch2_`-Cursor unverändert. Der neue Public-v1-Serverpfad muss die **vollständige** Channels-Snapshot-Reihenfolge vor `limit=20` festlegen; andere Clients behalten `ch1_`/Sender-ID-Sortierung. Ist der Server noch alt, zeigt der Samsung einen HTTP-400-Hinweis statt stillschweigend falsch sortierter Sender. **Voraussetzung vor TV-Update:** korrekt installierter/neuer Serverkandidat mit gültiger numerischer API-v1-Sortierung; niemals `Run Project` und Pairing-Wiederholung nur für einen weiteren UI-Test erzwingen. Offen: echte hardwarebestätigte erste/zweite Seite samt `channels.conf`-Abgleich und Cursor-Wechsel. [Public-v1-Vertrag](https://github.com/hotzenplotz5/vdr-suite/blob/main/api/channel-collection.md) und [einzige serverseitige Abnahmematrix](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md).
+
 ## Phase S4 – Aufnahmen/Library
 
 - **S4.1** Backend- und Recording-Collection, begrenzte Seiten statt Katalog-Vollabruf.
@@ -56,6 +58,8 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 - **S5.1** AVPlay-Adapter: Lebenszyklus, Status/Fehler, ein Playback-Owner.
 - **S5.2** authorized Device Recording MediaSession mit von Suite gewähltem Profil.
 - **S5.3** Audio/Untertitel, Seek/Resume, Session-Cleanup, Abbruch/Widerruf.
+- **S5.4 P1 Resume / Continue Watching (CLIENT FEHLT):** Erst nach echter Recording-MediaSession und AVPlay-Bild/Ton die gemessene Position mit der Device-eigenen Public-v1-`POST /recording-playback-sessions/progress` samt Session-ID, `operationId` und Revision/CAS speichern; `GET /progress`/ `GET /continue-watching` lesen und dem Nutzer Fortsetzen anbieten. Nur bei bestätigtem HLS-Index/Profil eine neue MediaSession mit `startPositionSeconds` öffnen. Erfolgreiches API-GET allein ist noch keine Resume-Abnahme; STOP/Back, Race/409, Reset/Ende, Grants und Dauer separat prüfen.
+- **S5.5 P1 geräteübergreifender Wiedereinstieg (OPTIONAL; EXPLIZITER ADMIN):** Ein Device darf kein Human Account beim Pairing übernehmen. Die bestehende Browser-Admin-API `GET/POST /devices/{deviceId}/playback-account` kann Geräte nach bewusster Entscheidung an denselben Account binden; dann greift die vom Server geprüfte Schnittmenge der Device- und Human-Media-Grants. Ohne Link bleiben Fortschritte getrennt. Reale Cross-Device-/Grant-Widerruf-/Konflikt-Prüfung erst mit zwei echten berechtigten Clients und Freigabe. Keine neue parallele Resume-Datenbank im Samsung.
 
 **Gate:** Bild und Ton, Fehlerpfade und STOP/BACK am realen Gerät; keine URL-/Cookie-/Codec-Annahmen ohne Hardware-Nachweis. Priorität Pass-through -> Remux -> Transcode nur nach serverseitiger Policy.
 
@@ -71,7 +75,7 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**Nächste Entwicklungsarbeit: VDR-`channels.conf`-Reihenfolge sauber lösen.** Der Samsung-Erstseiten-Test ist erfolgreich; eine weitere Build-/Installationsrunde nur zur Wiederholung ist unnötig. Aktuell ist `sort=backendId,channelId&order=asc` die **einzige** unterstützte Sortierung. Zuerst den API-v1-Vertrag inklusive stabiler Keyset-Paginierung für `channelNumber ASC` auf dem Server erweitern und die entsprechenden Source-/Security-/Referenzclient-Tests bestehen lassen; danach den Samsung-Client auf diese echte serverseitige Ordnung umstellen. Nicht die ersten 20 bereits falsch ausgewählten Zeilen nachträglich umsortieren.
+**S3.4 Quellcode in Bearbeitung / TV-Gate offen: VDR-`channels.conf`-Reihenfolge sauber lösen.** Der Samsung-Erstseiten-Test ist erfolgreich; eine weitere Build-/Installationsrunde nur zur Wiederholung ist unnötig. Aktuell ist `sort=backendId,channelId&order=asc` die **einzige** unterstützte Sortierung. Zuerst den API-v1-Vertrag inklusive stabiler Keyset-Paginierung für `channelNumber ASC` auf dem Server erweitern und die entsprechenden Source-/Security-/Referenzclient-Tests bestehen lassen; danach den Samsung-Client auf diese echte serverseitige Ordnung umstellen. Nicht die ersten 20 bereits falsch ausgewählten Zeilen nachträglich umsortieren.
 
 **Zusätzliche gezielte Hardware-Gates:** „Mehr Sender“, Geräteanmeldung nach normalem App-Neustart und datenbewahrendem Tizen-Update, 10-Sekunden-Admin-Polling/Altgeräte-Widerruf und später AVPlay-Bild/Ton. Keine erneute produktive Kopplung oder Server-Write-Tests ohne konkrete Notwendigkeit.
 
