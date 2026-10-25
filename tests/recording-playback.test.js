@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createRecordingPlaybackClient, recordingPlaybackError} from "../app/src/api/recording-playback.js";
-import {createSamsungRecordingPlayer,conservativeSamsungCapabilities} from "../app/src/platform/recording-player.js";
+import {createSamsungRecordingPlayer,conservativeSamsungCapabilities,samsungPlaybackDiagnosis} from "../app/src/platform/recording-player.js";
 
 const cred={base:"https://example.invalid/vdr-suite",
   credentialId:"cred-one",credentialSecret:"abcdef0123456789wxyz"};
@@ -90,4 +90,52 @@ test("S5.1 decoder proof only advertises narrow verified browser formats",()=>{
   }});
   assert.deepEqual(c.videoCodecs,["h264"]);
   assert.deepEqual(c.audioCodecs,["aac"]);
+});
+
+test("S5.2 AVPlay reports the actual failure phase, but not secret URLs or exception messages",()=>{
+  const events=[];const api={
+    open(){},setDisplayRect(){},setListener(listener){this.listener=listener;},
+    prepareAsync(ready,failed){this.ready=ready;this.failed=failed;},
+    play(){},stop(){},close(){}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  assert.equal(player.start("https://example.invalid/media.ts",(state,detail)=>events.push({state,detail})),true);
+  api.failed(new Error("private host token in error"));
+  assert.deepEqual(events.find(x=>x.state==="error").detail,{stage:"prepare"});
+  const diagnose=samsungPlaybackDiagnosis({stage:"prepare"},"HLS");
+  assert.match(diagnose,/AVPlay.prepareAsync/);
+  assert.match(diagnose,/HLS/);
+  assert.doesNotMatch(diagnose,/private host token/i);
+
+  const second=[];
+  assert.equal(player.start("https://example.invalid/media.ts",(state,detail)=>second.push({state,detail})),true);
+  api.listener.onerror("PLAYER_ERROR_CONNECTION_FAILED");
+  assert.deepEqual(second.find(x=>x.state==="error").detail,{stage:"stream",code:"PLAYER_ERROR_CONNECTION_FAILED"});
+  assert.doesNotMatch(samsungPlaybackDiagnosis({stage:"stream",code:"secret;Cookie:123"},"TS"),/secret|123|Cookie:123/);
+});
+
+test("S5.2 preflight/play/open stages are unambiguous and safe",()=>{
+  const events=[];const api={open(){throw Error("sensitive media URL");},prepareAsync(){},play(){}};
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  assert.equal(player.start("https://example.invalid/media.mp4",(state,detail)=>events.push({state,detail})),false);
+  assert.deepEqual(events[0],{state:"error",detail:{stage:"open"}});
+  assert.match(samsungPlaybackDiagnosis(events[0].detail,"MP4"),/AVPlay.open/);
+  const invalid=[];
+  player.start("http://example.invalid/media.mp4",(state,detail)=>invalid.push({state,detail}));
+  assert.deepEqual(invalid[0],{state:"unsupported",detail:{stage:"unsupported"}});
+  const apiPlay={open(){},prepareAsync(done){this.ready=done;},play(){throw Error("do not expose");}};
+  const player2=createSamsungRecordingPlayer({webapis:{avplay:apiPlay}});
+  const events2=[];
+  player2.start("https://example.invalid/media.mp4",(state,detail)=>events2.push({state,detail}));
+  apiPlay.ready();
+  assert.deepEqual(events2.find(x=>x.state==="error").detail,{stage:"play"});
+});
+
+test("S5.2 late session-stop timeout cannot mask original AVPlay failure",()=>{
+  const main=readFileSync(new URL("../app/src/main.js",import.meta.url),"utf8");
+  assert.match(main,/if \(reason === "user" && currentView === "recordings" && !result\.ok\)/);
+  assert.match(main,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error","AVPlay-Wiedergabe fehlgeschlagen"/);
+  assert.match(main,/samsungPlaybackDiagnosis\(detail,transport\)/);
+  assert.match(main,/if \(recordingTeardownBusy\) \{/);
+  assert.match(main,/recordingSelected = null; \/\/ Changing folder\/page/);
 });
