@@ -7,6 +7,7 @@ import { nextPreviewState, getViewPresentation } from "./views/view-state.js";
 import { normalizeSuiteBase, createDiscoveryClient, classifyDiscoveryError } from "./api/public-discovery.js";
 import { createPairingClient, pairingError } from "./api/device-pairing.js";
 import { createDeviceVault } from "./platform/device-vault.js";
+import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -37,6 +38,14 @@ function boot() {
   var discovery = createDiscoveryClient(window);
   var pairingClient = createPairingClient(window);
   var vault = createDeviceVault(window);
+  var channelCatalog = createChannelCatalog(window);
+  var liveCredential = null;
+  var liveBackends = [];
+  var liveBackendIndex = 0;
+  var liveCursor = null;
+  var liveBusy = false;
+  var liveRun = 0;
+  var liveRows = 0;
   var pairingRequest = null;
   var pairingBase = null;
   var pairingApproved = false;
@@ -47,6 +56,8 @@ function boot() {
   var discoveredBase = null;
   var pairingResult = document.getElementById("pairing-result");
   var pairingCode = document.getElementById("pairing-user-code");
+  var liveList = document.getElementById("live-channel-list");
+  var liveBackendName = document.getElementById("live-backend-name");
   var serverInput = document.getElementById("suite-base-input");
   var serverTest = document.getElementById("settings-test-button");
   var connectionResult = document.getElementById("suite-connection-result");
@@ -62,6 +73,8 @@ function boot() {
 
   function focusRows() {
     if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
+    if (currentView === "live") return [NAV_ROW,
+      ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
     if (currentView === "settings") return [
       NAV_ROW,
       ["detail-settings-home", "settings-base-input", "settings-test"],
@@ -319,10 +332,172 @@ function boot() {
     skeleton.hidden = !presentation.skeleton;
   }
 
+
+  function liveStatus(state, title, description) {
+    var card = document.getElementById("detail-state-live");
+    var badge = document.getElementById("detail-state-badge-live");
+    var headline = document.getElementById("detail-state-title-live");
+    var explanation = document.getElementById("detail-state-description-live");
+    var skeleton = document.getElementById("detail-state-skeleton-live");
+    if (card) card.setAttribute("data-state", state);
+    if (badge) badge.textContent = state === "ready" ? "SENDER" :
+      state === "loading" ? "LÄDT" : state === "error" ? "FEHLER" :
+      state === "empty" ? "LEER" : "OFFLINE";
+    if (headline) headline.textContent = title;
+    if (explanation) explanation.textContent = description;
+    if (skeleton) skeleton.hidden = state !== "loading";
+  }
+
+  function clearLiveRows() {
+    liveRows = 0;
+    if (liveList) {
+      liveList.textContent = "";
+      liveList.hidden = true;
+    }
+  }
+
+  function showLiveError(result) {
+    clearLiveRows();
+    liveCursor = null;
+    liveStatus("error", "Sender nicht verfügbar", channelCatalogError(result));
+  }
+
+  function appendLiveRows(channels) {
+    if (!liveList) return;
+    channels.forEach(function (ch) {
+      // Untrusted server text is always inserted via textContent, never HTML.
+      var row = document.createElement("li");
+      row.className = "live-channel-row";
+      var name = document.createElement("strong");
+      name.textContent = String(ch.channelNumber) + " · " + ch.name;
+      var meta = document.createElement("span");
+      var details = [];
+      if (ch.groupName) details.push(ch.groupName);
+      if (ch.provider) details.push(ch.provider);
+      if (ch.radio) details.push("Radio");
+      if (ch.encrypted) details.push("Verschlüsselt");
+      if (!ch.enabled) details.push("Deaktiviert");
+      meta.textContent = details.join(" · ");
+      row.appendChild(name);
+      row.appendChild(meta);
+      liveList.appendChild(row);
+      liveRows += 1;
+    });
+    liveList.hidden = liveRows === 0;
+  }
+
+  function fetchLivePage(run, cursor) {
+    if (!liveCredential || !liveBackends.length || run !== liveRun) return;
+    var backend = liveBackends[liveBackendIndex];
+    liveBusy = true;
+    liveStatus("loading", "Lade Sender", backend.name + " · maximal 20 Sender pro Seite");
+    channelCatalog.listChannels(liveCredential, backend.backendId, cursor, function (result) {
+      if (run !== liveRun) return;
+      liveBusy = false;
+      if (!result.ok) { showLiveError(result); return; }
+      var response = result.value;
+      if (!cursor) clearLiveRows();
+      appendLiveRows(response.items);
+      liveCursor = response.page.hasMore ? response.page.nextCursor : null;
+      if (liveBackendName) liveBackendName.textContent =
+        "Backend: " + backend.name + " · " + backend.backendId;
+      var partial = response.meta.partial ?
+        " · Mindestens eine Backend-Quelle ist nicht erreichbar." : "";
+      liveStatus(liveRows ? "ready" : "empty",
+        liveRows ? String(liveRows) + " echte Sender geladen" : "Keine Sender gefunden",
+        "Nur freigegebene Senderdaten · " +
+        (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
+        " · Wiedergabe noch nicht freigeschaltet.");
+    });
+  }
+
+  function loadLiveChannels(action) {
+    if (liveBusy) return;
+    if (action === "more") {
+      if (!liveCursor) {
+        liveStatus(liveRows ? "ready" : "empty", "Keine weitere Seite",
+          "„Sender laden“ startet einen neuen Abruf."); return;
+      }
+      fetchLivePage(liveRun, liveCursor);
+      return;
+    }
+    if (action === "backend") {
+      if (liveBackends.length < 2 || !liveCredential) {
+        liveStatus("empty", "Kein weiteres Backend",
+          "Es wurde nur ein freigegebenes Backend gefunden."); return;
+      }
+      liveBackendIndex = (liveBackendIndex + 1) % liveBackends.length;
+      liveCursor = null;
+      clearLiveRows();
+      fetchLivePage(++liveRun, null);
+      return;
+    }
+    // Always re-read the persisted Tizen KeyManager after restart. No login
+    // secret is ever stored in localStorage, or copied into UI/error messages.
+    var saved = vault.read();
+    if (!saved.ok || !saved.credential) {
+      showLiveError({kind:"invalid_credential"});
+      return;
+    }
+    var selectedBase = serverInput && normalizeSuiteBase(serverInput.value);
+    if (selectedBase && selectedBase !== saved.credential.base) {
+      liveStatus("error", "Anderer Server ausgewählt",
+        "Die sichere Geräteanmeldung gehört zu einem anderen Server. Adresse prüfen; nicht erneut koppeln.");
+      return;
+    }
+    liveCredential = saved.credential;
+    liveCursor = null;
+    liveBackends = [];
+    liveBackendIndex = 0;
+    clearLiveRows();
+    liveBusy = true;
+    var run = ++liveRun;
+    liveStatus("loading", "Prüfe Geräteanmeldung", "Anmeldung mit dem gespeicherten Tizen-Credential …");
+    pairingClient.verify(liveCredential, function (verified) {
+      if (run !== liveRun) return;
+      if (!verified.ok) {
+        liveBusy = false;
+        showLiveError(verified);
+        return;
+      }
+      liveStatus("loading", "Prüfe freigegebene Backends", "Public API v1 · Geräteberechtigungen");
+      channelCatalog.listBackends(liveCredential, function (found) {
+        if (run !== liveRun) return;
+        if (!found.ok) {
+          liveBusy = false;
+          showLiveError(found);
+          return;
+        }
+        liveBackends = found.value.items;
+        if (!liveBackends.length) {
+          liveBusy = false;
+          liveStatus("empty", "Keine Backends freigegeben",
+            "Der Administrator muss den Senderzugriff für ein Backend freigeben.");
+          return;
+        }
+        if (found.value.page.hasMore) {
+          liveStatus("loading", "Backends gefunden", "Die ersten 30 freigegebenen Backends werden angeboten.");
+        }
+        fetchLivePage(run, null);
+      });
+    });
+  }
+
   function showView(view) {
     if (ROUTES.indexOf(view) < 0) return false;
+    if (currentView === "live" && view !== "live") {
+      // In-flight responses cannot update a hidden view after navigation.
+      liveRun += 1;
+      liveBusy = false;
+      channelCatalog.cancel();
+    }
     currentView = view;
-    if (PREVIEW_ROUTES.indexOf(view) >= 0) {
+    if (view === "live") {
+      clearLiveRows();
+      liveCursor = null;
+      liveStatus("offline", "Bereit für echte Sender",
+        "„Sender laden“ nutzt deine gespeicherte Geräteanmeldung.");
+    } else if (PREVIEW_ROUTES.indexOf(view) >= 0) {
       renderPreview(view, "offline");
       // Preserve S2.2's DOWN-to-first-detail-button behavior.
       if (!rowMemory[view]) rowMemory[view] = {};
@@ -418,6 +593,11 @@ function boot() {
       }
       return;
     }
+    var liveAction = item.getAttribute("data-live-action");
+    if (liveAction) {
+      loadLiveChannels(liveAction);
+      return;
+    }
     var previewRoute = item.getAttribute("data-preview-route");
     if (previewRoute && previewRoute === currentView) {
       renderPreview(previewRoute, nextPreviewState(previewStates[previewRoute]));
@@ -442,6 +622,11 @@ function boot() {
     // Valid user edits in TV Web storage take precedence over the bundle default.
     var restoredBase = normalizeSuiteBase(savedBase) ||
       normalizeSuiteBase(window.VDR_SUITE_SERVER_BASE);
+    if (!restoredBase) {
+      var device = vault.read();
+      if (device.ok && device.credential)
+        restoredBase = normalizeSuiteBase(device.credential.base);
+    }
     if (restoredBase) serverInput.value = restoredBase;
     serverInput.addEventListener("change", saveServerBase);
     serverInput.addEventListener("blur", function () {
