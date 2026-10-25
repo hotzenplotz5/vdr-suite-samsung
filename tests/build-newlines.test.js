@@ -22,6 +22,8 @@ const files = [
   "app/src/api/device-pairing.js",
   "app/src/api/channel-catalog.js",
   "app/src/api/recording-catalog.js",
+  "app/src/api/recording-playback.js",
+  "app/src/platform/recording-player.js",
   "app/src/main.js",
   "app/index.html",
   "app/styles.css",

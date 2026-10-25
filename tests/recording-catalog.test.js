@@ -152,3 +152,48 @@ test("S4.1 source UI exposes explicit recording action and a bounded focusable l
   assert.match(html,/data-recordings-action="previous"/);
   assert.match(html,/recording-list/);
 });
+
+test("S4.2 VDR root and nested folders use bounded public folder pages, never native paths",()=>{
+  const h=http(),client=createRecordingCatalog(h.env);let result;
+  const folder={kind:"folder",folderId:"fld1_0123456789abcdef0123456789abcdef",
+    name:"Serien",recordingCount:300};
+  const leaf={kind:"recording",...row};
+  client.listFolders(credential,"default",null,0,r=>result=r);
+  assert.equal(h.calls[0].method,"GET");
+  assert.equal(h.calls[0].url,credential.base+
+    "/api/v1/recordings?backendId=default&view=folders&limit=100&offset=0");
+  assert.equal(h.calls[0].withCredentials,false);
+  assert.match(h.calls[0].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(0,200,{items:[folder,leaf],
+    page:{limit:100,offset:0,totalCount:2,hasMore:false},meta:{partial:false}});
+  assert.equal(result.ok,true);
+  assert.equal(result.value.items[0].name,"Serien");
+  client.listFolders(credential,"default",folder.folderId,100,r=>result=r);
+  assert.match(h.calls[1].url,/view=folders&limit=100&offset=100&folderId=fld1_/);
+  h.reply(1,200,{items:[leaf],page:{limit:100,offset:100,totalCount:101,hasMore:false},
+    meta:{partial:false}});
+  assert.equal(result.ok,true);
+});
+test("S4.2 folder browse rejects invalid IDs, unexpected paths and malformed pages",()=>{
+  const h=http(),client=createRecordingCatalog(h.env);let result;
+  client.listFolders(credential,"default","/srv/vdr",0,r=>result=r);
+  assert.equal(result.kind,"bad_request");
+  client.listFolders(credential,"default",null,-1,r=>result=r);
+  assert.equal(result.kind,"bad_request");
+  assert.equal(h.calls.length,0);
+  client.listFolders(credential,"default",null,0,r=>result=r);
+  h.reply(0,200,{items:[{kind:"folder",folderId:"../bad",name:"Etc",recordingCount:1}],
+    page:{limit:100,offset:0,totalCount:1,hasMore:false},meta:{partial:false}});
+  assert.equal(result.kind,"bad_response");
+  client.listFolders(credential,"default",null,0,r=>result=r);
+  h.reply(1,200,{items:[{kind:"recording",...row,recordingId:"/media/recording"}],
+    page:{limit:100,offset:0,totalCount:1,hasMore:false},meta:{partial:false}});
+  assert.equal(result.kind,"bad_response");
+  client.listFolders(credential,"default",null,0,r=>result=r);
+  h.reply(2,200,{items:[{kind:"recording",...row}],
+    page:{limit:100,offset:0,totalCount:2,hasMore:false},meta:{partial:false}});
+  assert.equal(result.kind,"bad_response");
+  client.listFolders(credential,"default",null,0,r=>result=r);
+  h.reply(3,403,{code:"forbidden"});
+  assert.match(recordingCatalogError(result),/recordings.view/);
+});

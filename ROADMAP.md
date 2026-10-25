@@ -48,15 +48,15 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 ## Phase S4 – Aufnahmen/Library
 
 - **S4.1 QUELLCODE IMPLEMENTIERT, TV-HARDWARE-GATE OFFEN (2026-10-25):** Samsung Aufnahmen-Ansicht liest nach bewusster OK-Aktion über die vorhandene Device-Anmeldung `GET /api/v1/backends` und `GET /api/v1/recordings?backendId=...&limit=100&sort=recordingId&order=asc`. Maximal **100 Datensätze pro Serveranfrage, keine Begrenzung der gesamten Aufnahmemediathek**: über echte `rc1_`-Keyset-Cursor sind weitere Seiten erreichbar; aktuelle Seite ersetzt ältere DOM-Zeilen. D-Pad-fokussierbare Aufnahmezeilen, Vorherige Seite, Weitere Aufnahmen und Backendwechsel, sichere Textdarstellung, keine Browser-private Route. Unberechtigter Zugriff (fehlendes `recordings.view@backend`) zeigt explizit Fehler. Kein automatischer Abruf beim Fokus, keine MediaSession/Wiedergabe, kein lokales Speichern von Geheimnissen. Quelltests/CI und echter Samsung-TV-S4.1-Test getrennt dokumentieren.
-- **S4.2** VDR-Ordneransicht (`view=folders`), sichere Back-Navigation und echte Identitäten.
-- **S4.3** Genres, Artwork nur über freigegebene APIs, Details/Continue Watching.
+- **S4.2 QUELLCODE-KANDIDAT (TV-GATE OFFEN):** VDR-Aufnahmeverzeichnisse als Standardansicht über die bereits vorhandene öffentliche API `GET /api/v1/recordings?view=folders&limit=100&offset=...&folderId=...` mit opaken `fld1_`-IDs; D-Pad/OK zum Öffnen echter Unterordner, „Ordner hoch“/BACK und Seitenwechsel ohne fiktive Genre- oder Dateisystempfade. „Alle Aufnahmen“ erhält bewusst den bereits hardwarebestätigten flachen `rc1_`-100er-Katalog. Keine neue Server-DB oder Importlogik, keine Genre-Verzeichnisse.
+- **S4.3 AUFGESCHOBEN (Benutzerentscheidung 25.10.2026):** Genre-Verzeichnisse/Genre-Facetten später; bis dahin ausschließlich die reale VDR-Ordnerhierarchie. Artwork/Details erst über bestehende freigegebene API-Verträge.
 
 **Gate:** echte Ordner auf großem Katalog mit begrenzter DOM-Größe und unverfälschten Recording-IDs.
 
 ## Phase S5 – Samsung-Wiedergabe
 
-- **S5.1** AVPlay-Adapter: Lebenszyklus, Status/Fehler, ein Playback-Owner.
-- **S5.2** authorized Device Recording MediaSession mit von Suite gewähltem Profil.
+- **S5.1 QUELLCODE-KANDIDAT (REAL-TV BILD/TON OFFEN):** Samsung-AVPlay-Adapter mit `open → prepareAsync → play`, sichtbarem Fehlschlag, STOP/BACK-Teardown und PLAY/PAUSE; genau ein Playback-Owner. Gerät muss echtes H.264/AAC-Decoderprofil melden, kein blind angenommenes All-Codec-Format.
+- **S5.2 ERSTER INTEGRATIONSVERSUCH VORBEREITET (SERVER-/TV-GATE OFFEN):** Nur nach Nutzeraktion „Wiedergabe testen“ Device-POST `/api/v1/recording-playback-sessions` mit `media.recording.play@backend`, gültiger `rec_`-ID und verifizierter `ms_`-/same-origin-`mediaPath`; anschließend Samsung AVPlay. STOP/BACK fordert Device-Session-Teardown an. **HttpOnly-Mediencookie im separaten AVPlay-Netzwerkstack, HTTPS/CORS, Container/Codec, Bild/Ton müssen auf dem echten TV getestet werden.** Bei Abweisung kein ungeschützter Direktlink und keine automatische Neu-Kopplung.
 - **S5.3** Audio/Untertitel, Seek/Resume, Session-Cleanup, Abbruch/Widerruf.
 
 **Gate:** Bild und Ton, Fehlerpfade und STOP/BACK am realen Gerät; keine URL-/Cookie-/Codec-Annahmen ohne Hardware-Nachweis. Priorität Pass-through -> Remux -> Transcode nur nach serverseitiger Policy.
