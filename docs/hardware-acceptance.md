@@ -187,3 +187,17 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - [ ] WITs Watch kann `config.xml`, Store-/Release-Updates und nicht vorbereitete bestehende Pakete **nicht** als harmloses Update garantieren. Einmalige produktive Paket-/Signaturaktualisierung erhält erst mit eigener TV-Testmatrix den Status PASS.
 
 **Abgrenzung:** Die tatsächlich bereits verlorenen Tizen-KeyManager-Bytes lassen sich nicht aus dem Server-Device-Eintrag rekonstruieren. Nie Credential in JS-Konfiguration, PC-Dateien, Web-Storage, Logs oder ungeschützte Remote-Kanäle übertragen. Die API-v1-Gerätekopplung und per-Device-Grants bleiben serverseitig autorisiert und werden durch diesen Entwicklungspfad nicht verändert.
+
+## S4.1 – Hardware-Abnahme A–D und widerrufenes Device (2026-10-25)
+
+**TV:** Samsung GU43TU6979UXZG, Tizen 5.5. **Tatsächlich installiert:** `Samsung v0.1.0 · S4.1 · b8ca122aafa22` (`f19aab0c2dcf292b8a4f601c3033282073139fcc`). Die folgenden Resultate sind **Nutzerbeobachtungen auf realer Hardware**, keine CI-Behauptungen.
+
+- **A1–A6 PASS (6/6):** App, Intro, Media-Home, Versionskennung Footer/Einstellungen, kein sichtbarer Startfehler.
+- **B1–B9 PASS (9/9):** D-Pad, OK/Back, Fokuswiederherstellung, Home/Einstellungen.
+- **C1–C5 PASS (5/5):** gespeicherter Server, Public-v1-Prüfung, keine TLS-Fehler bzw. irreführende anonyme Login-Aussage.
+- **D1/D2/D6/D7/D9/D10 PASS (6):** Einstellungs-/Prüfbedienung sowie App- und TV-Neustart möglich.
+- **D3/D4/D5 FAIL (3), D8/D11/D12 OFFEN (3):** Nutzer hat zuvor die Device-Kopplung im Backend widerrufen. Samsung zeigt weiterhin einen vermeintlich gekoppelten lokalen Zustand, obwohl erfolgreiche Authentifizierung nicht bestätigt ist. Kein Token, Credential oder Device-ID-Secret dokumentiert. Exakte HTTP-Antwort auf Hardware noch nicht erhoben; ohne sie darf ein Server-401 nicht als hardwarebewiesen gelten.
+
+**Quellanalyse:** `app/src/main.js` leitete aus `vault.read().credential` das pauschale „bereits gekoppelt“ ab. Das lokale Credential kann nach einem serverseitigen Widerruf weiter vorhanden sein. Public v1 `GET /api/v1` mit Device-Authorization ist die richtige separate Authentifizierungsprobe und liefert für ungültige/widerrufene Credentials HTTP 401; ein erfolgreiches anonymes Discovery-GET ist hierfür kein Beweis.
+
+**S4.1-D Fix-Kandidat (Source/CI ≠ TV-Installation):** gespeichertes Credential konsequent als *lokal vorhanden, online ungeprüft* anzeigen. Bei nachgewiesenem HTTP 401 explizite Serverablehnung mit Geräte-ID (nicht Secret) anzeigen; eine lokale Bereinigung ist ausschließlich nach zweimaliger aktiver Bestätigung möglich. Bei 403, Offline, Timeout oder KeyManager-Fehler niemals automatisch löschen; keine automatische Neukopplung, keine Geräte-/Grant-Änderung auf dem Server. Der TV muss nach späterem bewusstem Update den Fix und die zwei Prüfungen (401, kontrollierter Reset) erneut hardwaretesten, bevor D3–D5 neu bewertet werden. D8/D11/D12 bleiben offen; E–H sind weiterhin nicht abgenommen.

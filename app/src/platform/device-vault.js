@@ -72,5 +72,17 @@ export function createDeviceVault(environment) {
       },function () {done({ok:false,kind:"storage"});});
     } catch (_) {done({ok:false,kind:"storage"});}
   }
-  return {read:read,preflight:preflight,store:store,supported:supported};
+  // Never erase a credential automatically on timeout, 403, network or storage errors.
+  function removeLocal(expectedCredentialId) {
+    var prior = read();
+    if (!prior.ok) return {ok:false,kind:prior.kind};
+    if (!prior.credential || prior.credential.credentialId !== expectedCredentialId)
+      return {ok:false,kind:"mismatch"};
+    try { manager.removeData(alias); }
+    catch (_) { return {ok:false,kind:"storage"}; }
+    var after = read();
+    return after.ok && !after.credential
+      ? {ok:true} : {ok:false,kind:"storage"};
+  }
+  return {read:read,preflight:preflight,store:store,removeLocal:removeLocal,supported:supported};
 }
