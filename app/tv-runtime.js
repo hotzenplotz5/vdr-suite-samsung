@@ -332,7 +332,13 @@
     function showView(view) {
       if (ROUTES.indexOf(view) < 0) return false;
       currentView = view;
-      if (PREVIEW_ROUTES.indexOf(view) >= 0) renderPreview(view, "offline");
+      if (PREVIEW_ROUTES.indexOf(view) >= 0) {
+        renderPreview(view, "offline");
+        // Preserve S2.2's DOWN-to-first-detail-button behavior even though
+        // S2.3 adds a second preview button alongside it.
+        if (!rowMemory[view]) rowMemory[view] = {};
+        rowMemory[view][1] = "detail-" + view + "-home";
+      }
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-panel") !== view;
       });
