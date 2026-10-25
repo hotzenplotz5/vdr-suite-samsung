@@ -79,6 +79,7 @@ function simulate(options = {}) {
   const versionSettings = {textContent:""};
   const pairResult = {textContent:""};
   const pairCode = {textContent:""};
+  const playerSurface = {hidden:true};
   const serverInput = nodes["settings-base-input"];
   const serverTestButton = nodes["settings-test"];
   const overlay = { hidden: true };
@@ -106,6 +107,7 @@ function simulate(options = {}) {
       if (id === "live-channel-list") return liveList;
       if (id === "live-backend-name") return liveBackendName;
       if (id === "recording-list") return recordingList;
+      if (id === "recording-player-surface") return playerSurface;
       if (id === "recording-backend-name") return recordingBackendName;
       if (!textNodes[id]) throw Error("Missing test node " + id);
       return textNodes[id];
@@ -141,7 +143,7 @@ function simulate(options = {}) {
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, playerSurface, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
