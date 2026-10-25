@@ -21,6 +21,7 @@ const files = [
   "app/src/platform/device-vault.js",
   "app/src/api/device-pairing.js",
   "app/src/api/channel-catalog.js",
+  "app/src/api/recording-catalog.js",
   "app/src/main.js"
 ];
 
