@@ -96,8 +96,8 @@ export function prepare() {
 export function verifyStaging({requireWitsConfig=true, source=production, target=staging}={}) {
   const problems=[];
   try {
-    const expected=devManifest(readFileSync(join(production,"config.xml"),"utf8"));
-    const actual=readFileSync(join(staging,"config.xml"),"utf8");
+    const expected=devManifest(readFileSync(join(source,"config.xml"),"utf8"));
+    const actual=readFileSync(join(target,"config.xml"),"utf8");
     if (actual!==expected) problems.push("Development manifest missing or differs; run tv:dev:prepare");
     const ids=manifestIdentity(actual);
     if (ids.package!==identity.devPackage || ids.app!==identity.devApp) problems.push("Wrong DEV identity");
