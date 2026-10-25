@@ -70,3 +70,8 @@ test("Tizen TV bundle accepts Windows CRLF checkout yet detects real changes", (
     rmSync(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("Tizen generated runtime has a repository-enforced LF checkout rule", () => {
+  const attrs = readFileSync(join(root, ".gitattributes"), "utf8");
+  assert.match(attrs, /^app\/tv-runtime\.js\s+text\s+eol=lf\s*$/m);
+});
