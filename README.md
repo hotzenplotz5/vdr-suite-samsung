@@ -19,6 +19,11 @@ Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsu
 3. [docs/api-contracts.md](docs/api-contracts.md) – geprüfte öffentliche Schnittstellen.
 4. [docs/development-setup.md](docs/development-setup.md) – Windows/Tizen/TV-Verbindung.
 5. [docs/hardware-acceptance.md](docs/hardware-acceptance.md) – Abnahme am realen Samsung.
+6. **[docs/windows-update-workflow.md](docs/windows-update-workflow.md)** – verbindlicher Windows-/VS-Code-/Tizen-Updateweg; verhindert wiederkehrende Git-Pull-Abbrüche und schützt lokale Entwicklerdateien.
+
+## Verbindlicher Windows-/Tizen-Updateweg (25.10.2026)
+
+Der tatsächliche Samsung-S4.1-Update-Lauf ist unter [Windows-Update-Workflow](docs/windows-update-workflow.md) festgehalten. **77/77 Quelltests PASS** nach gezielter Sicherung der generierten `app/tv-runtime.js`, ausschließlich deren Wiederherstellung, `git pull --ff-only`, `npm.cmd run build:tv` und `npm.cmd run check`. Die unversionierten VS-Code-/Tizen-Dateien blieben unverändert. Beim nächsten Build nicht wieder pauschal wegen eines `git status --porcelain` abbrechen oder ungefragt Stash/Clean/Hard-Reset verwenden. **Das ist kein TV-Installations-PASS.**
 
 ## Phase-S1-Prototyp (auf echtem TV gestartet)
 
@@ -69,7 +74,7 @@ Das vom Nutzer vorgegebene TV-Dark-Premium-Design wird als echte HTML/CSS/JavaSc
 
 Alle Kacheln sind **Offline-Designvorschau**; es gibt absichtlich keine fiktiven echten Sender, EPG-Daten, Timer, Benutzer oder MediaSessions. D-Pad/OK/Zurück durch eine einzige Keydown-Instanz. Samsung Tizen 5.5: kein flex-gap und keine modernen JS-/CSS-Features ohne Legacy-Fallback. Keine anderen Repositories geändert.
 
-Build: `npm.cmd run build:tv`, dann `npm.cmd run check`; danach in der Tizen Extension erneut Build Project / Run Project. Hardware-Abnahme der neuen S2-Ansicht bleibt bis zum echten TV-Test offen.
+Historischer S2-Build: `npm.cmd run build:tv`, dann `npm.cmd run check`. **Für weitere TV-Updates ausschließlich Build Project zur Paketierung verwenden; Run Project kann bestehende TV-Daten löschen.** Siehe [verbindlichen Windows-Update-Workflow](docs/windows-update-workflow.md). Die ursprüngliche S2-Hardware-Abnahme wurde separat durchgeführt.
 
 ## Phase S2.2 – Fernbedienung, Fokus und Zurück (2026-10-25)
 
