@@ -93,7 +93,7 @@ export function prepare() {
   console.log("Isolated sources prepared. WITs -i / Start NOT invoked.");
 }
 
-export function verifyStaging({requireWitsConfig=true}={}) {
+export function verifyStaging({requireWitsConfig=true, source=production, target=staging}={}) {
   const problems=[];
   try {
     const expected=devManifest(readFileSync(join(production,"config.xml"),"utf8"));
@@ -102,27 +102,27 @@ export function verifyStaging({requireWitsConfig=true}={}) {
     const ids=manifestIdentity(actual);
     if (ids.package!==identity.devPackage || ids.app!==identity.devApp) problems.push("Wrong DEV identity");
     for (const name of ["index.html","styles.css","tv-runtime.js"]) {
-      if (readFileSync(join(staging,name),"utf8")!==readFileSync(join(production,name),"utf8")) {
+      if (readFileSync(join(target,name),"utf8")!==readFileSync(join(source,name),"utf8")) {
         problems.push("Staged "+name+" is not current");
       }
     }
-    const ignore=readFileSync(join(staging,".witsignore"),"utf8");
+    const ignore=readFileSync(join(target,".witsignore"),"utf8");
     for (const name of [".witsconfig.json","Debug","*.p12","device-local.js"]) {
       if (!ignore.includes(name)) problems.push("WITs ignore rule absent: "+name);
     }
     const allow=new Set(["config.xml","index.html","styles.css","tv-runtime.js","assets",
                          ".witsignore",".witsconfig.json"]);
-    for(const entry of readdirSync(staging)) {
+    for(const entry of readdirSync(target)) {
       if (!allow.has(entry)) problems.push("Unknown file in WITs staging: "+entry);
     }
     if (requireWitsConfig) {
-      const config=JSON.parse(readFileSync(join(staging,".witsconfig.json"),"utf8"));
+      const config=JSON.parse(readFileSync(join(target,".witsconfig.json"),"utf8"));
       if (!config.connectionInfo || !config.profileInfo ||
           !config.profileInfo.path || !config.connectionInfo.deviceIp) {
         problems.push("WITs -i configuration incomplete in isolated project");
       } else {
         const base=config.connectionInfo.baseAppPath || ".";
-        if (typeof base!=="string" || resolve(staging,base)!==staging) {
+        if (typeof base!=="string" || resolve(target,base)!==resolve(target)) {
           problems.push("WITs baseAppPath MUST point to isolated .tizen-wits-dev, not app/");
         }
       }
