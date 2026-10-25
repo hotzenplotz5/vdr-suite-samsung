@@ -855,9 +855,9 @@ function boot() {
     if (view !== "settings") resetConfirmationId = null;
     if (view === "live") {
       // Keep S2.2 DOWN-to-first-detail-button focus behavior.
+      clearLiveRows();
       if (!rowMemory.live) rowMemory.live = {};
       rowMemory.live[1] = "detail-live-home";
-      clearLiveRows();
       liveCredential = null;
       liveBackends = [];
       liveBackendIndex = 0;
