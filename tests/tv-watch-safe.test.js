@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync} from "node:fs";
+import {readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, copyFileSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
 import {devManifest, manifestIdentity, identity, production, verifyStaging} from "../scripts/tv-wits-isolated.mjs";
-import {preflight} from "../scripts/tv-watch-safe.mjs";
 
 const original=readFileSync(join(production,"config.xml"),"utf8");
 const generated=devManifest(original);
@@ -59,19 +58,25 @@ test("Isolated WITs staging checks identity, source sync and local config withou
     assert.match(f.inspect().join(" "),/Unknown file/);
   } finally {rmSync(f.base,{recursive:true,force:true});}
 });
-test("Production watch without isolated WITs init is blocked (never falls back to installation)",()=>{
-  assert.ok(preflight().length>0); // CI has no local DEV WITs credentials/config
+test("Watch is fail-closed in a fresh checkout and cannot touch production",()=>{
   const script=readFileSync(new URL("../scripts/tv-watch-safe.mjs",import.meta.url),"utf8");
   const npm=JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8"));
   assert.match(script,/cwd:staging/);
-  assert.match(script,/\["--watch"\]/);
-  assert.doesNotMatch(script,/\["--start"\]|\["-s"\]|vd_appinstall|vd_appuninstall|Run Project/);
-  assert.match(npm.scripts["tv:dev:prepare"],/tv-wits-isolated\.mjs --prepare/);
-  assert.match(npm.scripts["tv:dev:identity"],/tv-wits-isolated\.mjs --identity/);
-  const result=spawnSync(process.execPath,["scripts/tv-watch-safe.mjs","--preflight"],{
-    cwd:new URL("..",import.meta.url),encoding:"utf8"
-  });
-  assert.notEqual(result.status,0);
-  assert.match(result.stderr,/WITs Watch blocked/);
-  assert.match(result.stderr,/No device contact/);
+  assert.match(script,/\\["--watch"\\]/);
+  assert.doesNotMatch(script,/\\["--start"\\]|\\["-s"\\]|vd_appinstall|vd_appuninstall|Run Project/);
+  assert.match(npm.scripts["tv:dev:prepare"],/tv-wits-isolated\\.mjs --prepare/);
+  assert.match(npm.scripts["tv:dev:identity"],/tv-wits-isolated\\.mjs --identity/);
+  const base=mkdtempSync(join(tmpdir(),"samsung-watch-no-init-"));
+  try {
+    mkdirSync(join(base,"scripts"));
+    copyFileSync(new URL("../scripts/tv-watch-safe.mjs",import.meta.url),join(base,"scripts","tv-watch-safe.mjs"));
+    copyFileSync(new URL("../scripts/tv-wits-isolated.mjs",import.meta.url),join(base,"scripts","tv-wits-isolated.mjs"));
+    writeFileSync(join(base,"package.json"),'{"type":"module"}');
+    const result=spawnSync(process.execPath,["scripts/tv-watch-safe.mjs","--preflight"],{
+      cwd:base,encoding:"utf8"
+    });
+    assert.notEqual(result.status,0);
+    assert.match(result.stderr,/WITs Watch blocked/);
+    assert.match(result.stderr,/No device contact/);
+  } finally {rmSync(base,{recursive:true,force:true});}
 });
