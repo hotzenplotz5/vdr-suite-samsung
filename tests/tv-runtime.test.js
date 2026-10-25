@@ -24,7 +24,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-recordings-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -53,6 +53,13 @@ function simulate(options = {}) {
     appendChild(child) { this.children.push(child); }
   };
   const liveBackendName = {textContent:""};
+  const recordingList = {
+    hidden:true, children:[], scrollTop:0, _text:"",
+    set textContent(value) {this._text=value;if(value==="") this.children=[];},
+    get textContent() {return this._text;},
+    appendChild(child) {this.children.push(child);}
+  };
+  const recordingBackendName = {textContent:""};
   const textNodes = Object.fromEntries([
     "message", "key-status", "tizen-status", "avplay-status", "remote-status"
   ].map(key => [key,{ textContent: "wird geprüft" }]));
@@ -94,12 +101,23 @@ function simulate(options = {}) {
       if (id === "pairing-user-code") return pairCode;
       if (id === "live-channel-list") return liveList;
       if (id === "live-backend-name") return liveBackendName;
+      if (id === "recording-list") return recordingList;
+      if (id === "recording-backend-name") return recordingBackendName;
       if (!textNodes[id]) throw Error("Missing test node " + id);
       return textNodes[id];
     },
     createElement(tag) {
-      return {tagName:tag.toUpperCase(),children:[],textContent:"",
-        appendChild(child) { this.children.push(child); }};
+      const attrs={};
+      const node={
+        tagName:tag.toUpperCase(),children:[],textContent:"",tabIndex:-1,isFocused:false,
+        classList:{toggle(name,enabled){if(name==="is-focused")node.isFocused=enabled;}},
+        appendChild(child){this.children.push(child);},
+        setAttribute(name,value){attrs[name]=value;},
+        getAttribute(name){return attrs[name] === undefined ? null : attrs[name];},
+        focus(){},scrollIntoView(){},
+        addEventListener(name,fn){if(name==="click")this.click=fn;}
+      };
+      return node;
     },
     querySelectorAll(selector) {
       if (selector === ".tv-focusable") return buttons;
@@ -119,7 +137,7 @@ function simulate(options = {}) {
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName };
 }
 
 test("S2.1 runtime boots original intro, capability probes and D-pad navigation", () => {
@@ -220,7 +238,7 @@ test("S2.3 tab selection does not navigate until OK", () => {
 });
 
 test("S2.3 all media detail routes cycle purely local preview states", () => {
-  for (const route of ["recordings", "search", "timers"]) {
+  for (const route of ["search", "timers"]) {
     const sim = simulate();
     sim.video.finish();
     const key = code => sim.listeners.keydown({ keyCode: code, preventDefault() {} });
@@ -247,7 +265,8 @@ test("S2.3 no backend requests, external images or media playback in view code",
   assert.doesNotMatch(views + app, /fetch\(|XMLHttpRequest|http:\/\//);
   assert.match(html, /Statusvorschau – keine echten Serverdaten/);
   assert.match(html, /data-live-action="load"/);
-  assert.match(html, /data-preview-route="recordings"/);
+  assert.match(html, /data-recordings-action="load"/);
+  assert.doesNotMatch(html, /data-preview-route="recordings"/);
   assert.match(html, /data-preview-route="search"/);
   assert.match(html, /data-preview-route="timers"/);
 });
@@ -448,4 +467,45 @@ test("S3.3 rejects changed server base, without leaking or reissuing secret",()=
   sim.nodes["detail-live-preview"].click();
   assert.match(sim.stateNodes["detail-state-description-live"].textContent,/anderen Server/);
   assert.equal(h.calls.length,0);
+});
+
+test("S4.1 on the packaged TV runtime reads 100 actual recording rows and remote-focuses next page",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-recordings"].click();
+  assert.equal(h.calls.length,0,"opening recordings must never auto-fetch");
+  sim.nodes["detail-recordings-load"].click();
+  assert.equal(h.calls.length,1);
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  assert.match(h.calls[1].url,/\/api\/v1\/backends\?/);
+  h.reply(1,200,backendPage);
+  assert.match(h.calls[2].url,/\/api\/v1\/recordings\?backendId=home&limit=100/);
+  const items=Array.from({length:100},(_,i)=>({
+    backendId:"home",recordingId:"rec_"+String(i+1).padStart(32,"0"),
+    title:"Aufnahme "+String(i+1),recordedAt:"2026-10-25T08:00:00Z",
+    durationSeconds:1800,durationKnown:true,description:"Echter Katalogeintrag",sizeMb:100
+  }));
+  h.reply(2,200,{items,page:{limit:100,hasMore:true,nextCursor:"rc1_6161"},
+    meta:{partial:false}});
+  // The previous fixture deliberately supplied the items array.
+  assert.equal(sim.recordingList.children.length,100);
+  assert.equal(sim.recordingList.children[0].children[0].textContent,"Aufnahme 1");
+  assert.equal(sim.recordingList.children[99].children[0].textContent,"Aufnahme 100");
+  const key=(keyCode)=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  sim.nodes["nav-recordings"].click();
+  key(40); // first action row
+  key(40); // first recording row, part of same keydown owner
+  assert.equal(sim.recordingList.children[0].isFocused,true);
+  key(40);
+  assert.equal(sim.recordingList.children[1].isFocused,true);
+  sim.nodes["detail-recordings-next"].click();
+  assert.match(h.calls[3].url,/cursor=rc1_6161/);
+  const later={...items[0],recordingId:"rec_00000000000000000000000000000101",title:"Aufnahme 101"};
+  h.reply(3,200,{items:[later],page:{limit:100,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  assert.equal(sim.recordingList.children.length,1,"old 100 DOM nodes are replaced");
+  assert.equal(sim.recordingList.children[0].children[0].textContent,"Aufnahme 101");
+  assert.equal(sim.recordingList.children[0].isFocused,true);
+  assert.ok(h.calls.every(x=>x.method==="GET"));
 });
