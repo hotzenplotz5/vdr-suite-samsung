@@ -612,3 +612,42 @@ test("S4.1 HTTP 403 and network errors never allow local reset",()=>{
   assert.ok(manager.getData({name:"vdr-suite-samsung-device-v1"}));
  }
 });
+test("S4.2 real VDR folders open and BACK returns to parent, with legacy flat list retained",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.match(h.calls[2].url,/view=folders&limit=100&offset=0$/);
+  const folder={kind:"folder",folderId:"fld1_0123456789abcdef0123456789abcdef",
+    name:"Filme",recordingCount:1};
+  const rec={kind:"recording",backendId:"home",
+    recordingId:"rec_00000000000000000000000000000001",title:"Ein Film",
+    description:"Beschreibung",recordedAt:"2026-10-25T08:00:00Z",
+    durationSeconds:3600,durationKnown:true,sizeMb:200};
+  function page(items,offset=0,totalCount=items.length) {
+    return {items,page:{limit:100,offset,totalCount,
+      hasMore:offset+items.length<totalCount},meta:{partial:false}};
+  }
+  h.reply(2,200,page([folder,rec]));
+  assert.equal(sim.recordingList.children.length,2);
+  assert.match(sim.recordingList.children[0].children[0].textContent,/Ordner: Filme/);
+  sim.recordingList.children[0].click();
+  assert.match(h.calls[3].url,/view=folders&limit=100&offset=0&folderId=fld1_/);
+  h.reply(3,200,page([rec]));
+  assert.equal(sim.recordingList.children.length,1);
+  const key=(keyCode)=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(10009);
+  assert.match(h.calls[4].url,/view=folders&limit=100&offset=0$/);
+  h.reply(4,200,page([folder,rec]));
+  assert.equal(sim.recordingList.children.length,2);
+  sim.nodes["detail-recordings-all"].click();
+  h.reply(5,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(6,200,backendPage);
+  assert.match(h.calls[7].url,/limit=100&sort=recordingId&order=asc$/);
+  h.reply(7,200,{items:[rec],page:{limit:100,nextCursor:null,hasMore:false},
+    meta:{partial:false}});
+  assert.equal(sim.recordingList.children.length,1);
+  assert.equal(sim.recordingList.children[0].children[0].textContent,"Ein Film");
+});
