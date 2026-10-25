@@ -217,3 +217,14 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - **Playback nicht geprüft:** S4.1 zeigt ausschließlich Aufnahmemetadaten, keine Wiedergabe/AVPlay-Akzeptanz.
 
 **Nächste sichere Hardwareprüfungen:** Installierte Buildkennung am TV ablesen, `Einstellungen → Anmeldung prüfen` ausführen (ohne Credentials zu veröffentlichen), Liste/ungefähre Anzahl der Aufnahmen melden; dann Aufnahme-Fernbedienungsnavigation und bei tatsächlich mehr als 100 Aufnahmen nächste/vorherige Cursorseite testen. **Keine** unnötige Neuinstallation, keine erneute Kopplung und kein Widerruf bei bestehendem Erfolg.
+
+
+## S4.1 – Sender geladen, aber per D-Pad nicht anwählbar (2026-10-25)
+
+**Echte TV-Rückmeldung:** Nutzer bestätigt nach dem erfolgreichen Aufnahmetest nun auch, dass die Samsung-App echte Sender lädt. Gleichzeitig meldet er: **„die sender werden angezeigt, aber ich kann nicht zu ihnen navigieren“**. Zusätzlich ist die Darstellung noch in `channelId`- statt VDR-`channels.conf`-Reihenfolge; die beiden Fehler sind technisch getrennt.
+
+**Im Samsung-Code bestätigt:** `appendLiveRows()` erzeugte bisher nur passive `<li>` ohne `data-focus-id` und ohne Registrierung in `focusRows()`/`controls`. `recording-row-*` ist bereits als Referenz dynamisch in den einzigen D-Pad-Fokusgraphen eingebunden. Der Navigationsfehler ist daher eine Quellcode-Ursache, keine Backend-/Credential-Störung.
+
+**Geplanter Fix / Source-Test-Gate:** `channel-row-*` wird mit `role=button`, `data-focus-id`, `tabIndex=-1`, eindeutigem Fokusrahmen und sicherem `textContent` registriert. D-Pad `DOWN` erreicht den ersten Sender, `UP/DOWN` navigieren, `OK` wählt nur lokale Sender-Metadaten und startet **keine** noch fehlende AVPlay-/MediaSession. `Mehr Sender` stellt den Fokus auf den ersten neu geladenen Eintrag; Wiederholungsabruf/Backendwechsel räumen alte Fokuselemente kontrolliert auf. Tests simulieren Navigation/Seitenwechsel und prüfen, dass keine zusätzliche Netzwerk-/Playback-Aktion ausgelöst wird. Kein TV-PASS vor wirklichem Retest.
+
+**Unabhängige Sortierungsfrage:** VDR-Suite Backend PR #543 implementiert `sort=backendId,channelNumber,channelId` (nach `channels.conf`) mit `ch2_`-Cursor. Quell-Merge ist **kein produktiver Deployment-Nachweis**; die ältere Samsung-S3.4-PR #3 muss gegen den aktuellen S4.1-Stand geprüft und nach verifiziertem Backend-Deployment integriert werden. Niemals nur die bereits geladenen 20 Sender sortieren, und keine automatische Umstellung mit unerkanntem HTTP-400-Risiko.
