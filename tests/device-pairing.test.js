@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPairingClient, pairingError } from "../app/src/api/device-pairing.js";
+import { createPairingClient, pairingError, deviceVerificationError } from "../app/src/api/device-pairing.js";
 import { createDeviceVault } from "../app/src/platform/device-vault.js";
 
 const base="https://example.invalid/vdr-suite";
@@ -124,4 +124,31 @@ test("S3.2 missing/failing keymanager fails closed before credential issuance",(
  v.mgr.saveData=(name,value,password,ok,fail)=>fail({name:"UnknownError"});
  v.vault.preflight(x=>failed=x);
  assert.equal(failed.ok,false);
+});
+
+test("S4.1 revoked Device verification is distinct from pairing-token errors",()=>{
+ const h=fakeHttp(); const client=createPairingClient(h.environment); let got;
+ client.verify({base,credentialId:"c1",credentialSecret:"secret"},x=>got=x);
+ h.reply(0,401,{code:"device_credential_revoked"});
+ assert.equal(got.ok,false);
+ assert.equal(got.kind,"http");
+ assert.equal(got.status,401);
+ assert.match(deviceVerificationError(got),/Device-Credential.*widerrufen/i);
+ assert.doesNotMatch(deviceVerificationError({kind:"timeout"}),/widerrufen/i);
+});
+test("S4.1 local removal is scoped to the matching credential and verifies absence",()=>{
+ const v=fakeVault(), secret={base,actorId:"a",deviceId:"d",credentialId:"c1",credentialSecret:"secret"};
+ v.vault.store(secret,()=>{});
+ assert.equal(v.vault.removeLocal("wrong").kind,"mismatch");
+ assert.ok(v.vault.read().credential);
+ assert.equal(v.vault.removeLocal("c1").ok,true);
+ assert.equal(v.vault.read().credential,null);
+ assert.deepEqual(Object.keys(v.data),[]);
+});
+test("S4.1 KeyManager removal errors never masquerade as success",()=>{
+ const v=fakeVault(), secret={base,actorId:"a",deviceId:"d",credentialId:"c1",credentialSecret:"secret"};
+ v.vault.store(secret,()=>{});
+ v.mgr.removeData=()=>{throw Error("storage temporarily locked");};
+ assert.equal(v.vault.removeLocal("c1").kind,"storage");
+ assert.equal(v.vault.read().credential.credentialId,"c1");
 });
