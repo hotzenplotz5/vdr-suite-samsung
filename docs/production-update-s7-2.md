@@ -70,6 +70,21 @@ node scripts/tv-update-preflight.mjs --inspect "app\Debug\app.wgt"
 node scripts/tv-update-preflight.mjs --candidate "app\Debug\app.wgt" --baseline "C:\Pfad\zum\tatsaechlich-installierten-alten.wgt"
 ```
 
+Alternativ kann das Werkzeug einen **maschinenlesbaren, nicht geheimen**
+Nachweis als JSON auf stdout ausgeben:
+
+```powershell
+node scripts/tv-update-preflight.mjs --candidate "app\Debug\app.wgt" --baseline "C:\Pfad\zum\tatsaechlich-installierten-alten.wgt" --json
+```
+
+Dieser Nachweis enthält WGT-SHA-256, Paket-/App-ID, die beiden Versionen und
+den SHA-256-Fingerabdruck des öffentlichen Autor-Zertifikats. Er gibt
+**ausdrücklich** `approval_to_install: false`, 
+`baseline_confirmed_installed_on_tv: false` und
+`data_preserving_tv_update_method_confirmed: false` aus. Das Tool kann
+nicht überprüfen, welches signierte WGT tatsächlich auf dem Gerät installiert
+ist, und erzeugt **keine** technische Installationsfreigabe.
+
 Die Pfade sind **Beispiele**, keine automatisch erkannten Dateien. Die
 Kandidatenprüfung kann bei fehlendem Basis-WGT nicht PASS melden. Sie gibt
 keine privaten Zertifikatsschlüssel aus, nur den Fingerabdruck des öffentlichen
@@ -110,6 +125,39 @@ S7.1 (`VDRSuitDev`) bleibt eine isolierte Entwicklervariante für Live Reload.
 Ein dortiges DEV-Pairing ist **nicht** das produktive Device. Das nun
 implementierte S7.2-Preflight akzeptiert **nur** `VDRSuiteTV` und installiert
 ausdrücklich nichts.
+
+## Verteilung: dokumentierter Samsung-Pfad statt Tizen-Testinstall
+
+Der für **regelmäßige veröffentlichte** Updates dokumentierte Weg ist
+**Samsung TV Seller Office → Upload App → Request New Release** für die
+ausgewählten Modellgruppen. Samsung führt Prüfungen und Zertifizierung durch.
+Eine bereits registrierte Anwendung benötigt beim Update dasselbe
+Autor-Zertifikat. Die bestehenden Produkt-IDs bleiben unverändert.
+
+Offizielle Quellen:
+- https://developer.samsung.com/tv-seller-office/guides/applications/distributing-application.html
+- https://developer.samsung.com/tv-seller-office/faq/application-update.html
+- https://developer.samsung.com/smarttv/develop/faq/data-and-file-handling.html
+
+**Für diese konkrete, bislang nur per Tizen-Entwicklerwerkzeugen installierte
+App ist ein Übergang auf den Store-Pfad nicht als datenbewahrend
+nachgewiesen.** Insbesondere ersetzt ein Seller-Office-Release nicht
+automatisch die lokale, developer-signierte Installation mitsamt bestehendem
+KeyManager-Eintrag. Eine neue Autor-Signatur macht aus der bestehenden
+Produktivinstallation keine sichere Aktualisierung.
+
+Für die laufende **Entwicklung** ist dagegen das isolierte S7.1-DEV-Paket
+(`VDRSuitDev`) vorgesehen, das nach **einem eigens genehmigten initialen
+Bootstrap** ohne erneute Paketinstallation per WITs Watch Codeänderungen
+nachladen kann. Das bestehende Produktivpaket bleibt bis zur verifizierten
+Update-/Distributionsentscheidung unangetastet.
+
+**Klare technische Schlussfolgerung:** Eine universelle, beweisbar
+datenbewahrende lokale Samsung-Tizen-5.5-Updatefunktion für das bereits
+developer-installierte Paket können wir aus dem verfügbaren SDK-Verhalten
+nicht behaupten oder durch npm automatisieren. Wer `Run Project` als
+Update benutzt, muss mit Datenverlust rechnen. Das ist eine
+Plattform-/Vertriebsgrenze, keine ausstehende Korrektur des Tizen-KeyManagers.
 
 ## Rollback
 
