@@ -416,11 +416,23 @@ function channelPage(cursor=null) {
     page:{limit:20,hasMore:!!cursor,nextCursor:cursor},
     meta:{partial:false,sources:[{backendId:"home",state:"ok"}]}};
 }
+test("S3.2 temporarily unreadable KeyManager is not reported as lost pairing",()=>{
+  const manager = savedDeviceManager();
+  manager.getData = function() {
+    throw Object.assign(new Error("vault temporarily busy"),{name:"UnknownError"});
+  };
+  const sim = simulate({keymanager:manager});
+  sim.video.finish();
+  assert.match(sim.pairResult.textContent,/nicht lesbar/i);
+  assert.doesNotMatch(sim.pairResult.textContent,/Kein gespeichertes Device-Credential/i);
+});
+
 test("S3.3 restart reads KeyManager, explicit Live click verifies and displays real channels",()=>{
   const h=liveTransport();
   const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
   sim.video.finish();
   assert.match(sim.pairResult.textContent,/gespeichert/);
+  assert.match(sim.pairResult.textContent,/Device-ID: tv1/);
   assert.equal(h.calls.length,0); // never contact server during app boot
   sim.nodes["nav-live"].click();
   assert.equal(h.calls.length,0); // no implicit request on tab activation
