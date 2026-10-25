@@ -694,7 +694,7 @@
         callback({ok:false,kind:"bad_request"}); return;
       }
       var path = "/api/v1/channels?backendId=" + encodeURIComponent(backendId) +
-        "&limit=20&sort=backendId,channelId&order=asc";
+        "&limit=20&sort=backendId,channelNumber,channelId&order=asc";
       if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
       fetchPage(credential, path, function (value) {
         return value.items.length <= 20 &&
@@ -722,6 +722,7 @@
     if (result.kind === "network") return "Server auf diesem TV nicht erreichbar (Netzwerk/TLS/CORS).";
     if (result.kind === "bad_response") return "Antwort entspricht nicht dem Public-API-v1-Vertrag.";
     if (result.kind === "http") {
+      if (result.status === 400) return "Server unterstützt die neue channels.conf-Sortierung nicht oder lehnt die Senderanfrage ab (HTTP 400). API-v1-Serverstand prüfen.";
       if (result.status === 401) return "Geräteanmeldung abgewiesen: Credential ungültig, abgelaufen oder widerrufen. Administrator kontaktieren.";
       if (result.status === 403) return "Senderzugriff verweigert. Der Administrator muss channels.view für dieses Backend freigeben.";
       if (result.status === 409) return "Senderliste hat sich geändert. Bitte mit „Sender laden“ neu beginnen.";
