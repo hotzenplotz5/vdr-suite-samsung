@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {createRecordingPlaybackClient, recordingPlaybackError} from "../app/src/api/recording-playback.js";
 import {createSamsungRecordingPlayer,conservativeSamsungCapabilities,samsungPlaybackDiagnosis} from "../app/src/platform/recording-player.js";
 
