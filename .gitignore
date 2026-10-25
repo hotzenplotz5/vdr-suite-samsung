@@ -26,3 +26,8 @@ profiles.xml
 
 # Per-developer TV server base (no credentials), excluded from Git.
 /app/device-local.js
+
+# WITs local machine-specific TV address / certificate profile config.
+/app/.witsconfig.json
+/app/.wits/
+/app/.wits-cache/
