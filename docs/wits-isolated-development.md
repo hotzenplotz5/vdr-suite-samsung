@@ -74,6 +74,25 @@ npm.cmd run tv:watch
 
 `tv:watch` runs `wits --watch` **only** with working directory `.tizen-wits-dev`. It refuses a mismatched `baseAppPath`, changed manifests, stale runtime, unapproved extra files and absent local init. No installation/uninstallation is implemented. Keep Watch running for UI changes; repeat `tv:dev:prepare` whenever app source/runtime/assets change, so the watcher sees only changes in the isolated development directory. Do not run `wits --start` or VS Code `Run Project` as a routine update.
 
+## Harmless one-shot visual reload (only AFTER DEV setup)
+
+Keep `npm.cmd run tv:watch` running in one VS Code terminal. In a second VS Code terminal, in the repository root, explicitly trigger:
+
+```powershell
+node scripts/tv-wits-isolated.mjs --smoke
+```
+
+This changes **only** the isolated `.tizen-wits-dev/index.html` branding text to `VDR-Suite · DEV-RELOAD-TEST`; it never touches `app/index.html` or a credential. WITs Watch should push the changed DEV file and reload the DEV application. Observe the new text on the real TV, check the *same DEV device* login, close/relaunch the DEV app, and check login again. Separately inspect the unchanged production app login. The smoke command itself only changes a local staged file: source/CI cannot establish actual TV behavior.
+
+After observing the TV and stopping Watch, return the local staging directory to the exact app sources:
+
+```powershell
+npm.cmd run tv:dev:prepare
+npm.cmd run tv:watch:check
+```
+
+No device installation occurs in either command. The one-shot marker intentionally makes the stage differ from app sources; further Watch invocations are blocked until it is restored.
+
 ## Hardware acceptance (remains OPEN)
 
 - **Before** any initial DEV install: read-only inventory of apps, actual signed WGT `config.xml` package/app ID, intended certificate profile, and explicit approval. Production package `VDRSuiteTV` must remain installed and not be targeted by installer/uninstaller.
