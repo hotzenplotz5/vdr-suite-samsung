@@ -169,9 +169,12 @@ function boot() {
     var saved = vault.read();
     if (saved.ok && saved.credential) {
       pairedCredential = saved.credential;
-      pairMessage("Gerät gespeichert. Anmeldung prüfen; Backend-Berechtigungen sind separat zu vergeben.");
+      pairMessage("Gerät gespeichert (Device-ID: " + saved.credential.deviceId +
+        "). Anmeldung prüfen; Backend-Berechtigungen sind separat zu vergeben.");
     } else if (!saved.ok) {
-      pairMessage("Sichere Geräteablage nicht verfügbar. Kopplung gesperrt (kein unsicherer Ersatz).");
+      pairMessage("Sichere Geräteablage nicht lesbar. Anmeldung später erneut prüfen; nicht neu koppeln.");
+    } else {
+      pairMessage("Kein gespeichertes Device-Credential gefunden. Nicht automatisch neu koppeln.");
     }
   }
   function pairStart() {
@@ -287,7 +290,14 @@ function boot() {
   function pairVerify() {
     if (pairingBusy || pendingCredential) {pairMessage("Bitte zuerst Speicherung abschließen.");return;}
     var saved=vault.read();
-    if (!saved.ok || !saved.credential) {pairMessage("Kein gespeichertes Device-Credential.");return;}
+    if (!saved.ok) {
+      pairMessage("KeyManager nicht lesbar. Credential-Status unbekannt; später erneut prüfen, nicht neu koppeln.");
+      return;
+    }
+    if (!saved.credential) {
+      pairMessage("Kein gespeichertes Device-Credential gefunden. Prüfe zuerst den App-/Installationsstatus.");
+      return;
+    }
     pairedCredential=saved.credential;
     pairingBusy = true;
     pairMessage("Prüfe Geräteanmeldung über Public API v1 …");
@@ -298,7 +308,8 @@ function boot() {
         if (homeServerState) homeServerState.textContent = "Device verbunden · Grants offen";
         if (topbarServerState) topbarServerState.textContent = "Gerät angemeldet";
         message.textContent = "Device authentifiziert · Berechtigungen werden separat vergeben";
-        pairMessage("Device-Authentifizierung erfolgreich. Sender/Aufnahmen benötigen Admin-Grants.");
+        pairMessage("Device-Authentifizierung erfolgreich (Device-ID: " +
+          pairedCredential.deviceId + "). Sender/Aufnahmen benötigen Admin-Grants.");
       } else pairMessage("Geräteanmeldung nicht bestätigt: "+pairingError(result.kind,result.status)+
         " Credential bleibt sicher gespeichert.");
     });
@@ -457,7 +468,12 @@ function boot() {
     // Always re-read the persisted Tizen KeyManager after restart. No login
     // secret is ever stored in localStorage, or copied into UI/error messages.
     var saved = vault.read();
-    if (!saved.ok || !saved.credential) {
+    if (!saved.ok) {
+      liveStatus("error", "Sicherer Gerätespeicher nicht lesbar",
+        "KeyManager-Zugriff vorübergehend fehlgeschlagen. Anmeldung erneut prüfen; nicht neu koppeln.");
+      return;
+    }
+    if (!saved.credential) {
       showLiveError({kind:"invalid_credential"});
       return;
     }
@@ -650,7 +666,12 @@ function boot() {
     }
     // Credentials remain in Tizen KeyManager; no localStorage or automatic pairing.
     var saved = vault.read();
-    if (!saved.ok || !saved.credential) {
+    if (!saved.ok) {
+      recordingStatus("error", "Sicherer Gerätespeicher nicht lesbar",
+        "KeyManager-Zugriff fehlgeschlagen. Anmeldung erneut prüfen; nicht neu koppeln.");
+      return;
+    }
+    if (!saved.credential) {
       showRecordingError({kind:"invalid_credential"}); return;
     }
     var selectedBase = serverInput && normalizeSuiteBase(serverInput.value);
