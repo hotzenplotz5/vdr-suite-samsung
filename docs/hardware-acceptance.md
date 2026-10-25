@@ -113,21 +113,27 @@ Keine Fotos oder Logs mit dem Kopplungscode (nur kurzlebig), Pairing-Token oder 
 - `Kopplung starten` führt fehlende Public-v1-Discovery selbst durch. Ungültige/unerreichbare Server stoppen vor KeyManager- und Pairing-POST.
 - **Hardware-Retest offen:** tatsächliches Mitsignieren/-packen der lokalen Datei im Tizen-VS-Code-Build; Darstellung, KeyManager und authentifiziertes Pairing auf dem realen Samsung noch nicht abgenommen.
 
-## S3.2 – Pairing-Erfolg am Gerät, Folgetest offen
+## S3.2 – Kopplung am TV real bestätigt, Update-Persistenz offen (2026-10-25)
 
-Nutzerbestätigung 2026-10-25: Samsung wurde erfolgreich gekoppelt und im Webfrontend als gekoppeltes Gerät angezeigt. channels.view wurde für sein Backend administrativ erteilt. Ob das Tizen-KeyManager-Credential nach App-Neustart tatsächlich noch lesbar ist, wurde dadurch nicht gesondert bewiesen.
+Der Samsung Tizen 5.5 hat die echte VDR-Suite-Public-v1-API per HTTPS erreicht, die Administratorfreigabe erhalten und ein einmaliges Device-Credential aktiviert. Nach einer erneuten VS-Code-/Tizen-`Run Project`-Testinstallation meldete das TV **„Kein gespeichertes Device-Credential“**; die alte serverseitige Device-Identität blieb aktiv. Erneutes Pairing/Aktivieren erzeugte ein **zweites** Samsung-Device im Admin-Inventar. Die neue Identität erhielt **nicht** automatisch die Berechtigung des alten Devices. Der Administrator musste `channels.view@default` explizit neu erteilen. Nach der neuen Kopplung konnte der TV authentifiziert echte Sender lesen. Erhalt nach einem weiteren TV-Neustart oder einem **datenbewahrenden** Update ist weiterhin offen.
 
-## S3.3 – Hardware-Testliste (noch nicht abgenommen)
+## S3.3 – Erste echte Senderseite HARDWARE-PASS, Folgegates offen (2026-10-25)
 
-- [ ] Paket mit neuem S3.3-Commit installiert; Logo/Startanimation/D-Pad unverändert.
-- [ ] TV-App neu gestartet; Live-TV mit OK geöffnet, Sender laden einmal gedrückt.
-- [ ] Keine neue Kopplung angefordert; vorhandene Tizen-KeyManager-Identität authentifiziert GET /api/v1.
-- [ ] GET /api/v1/backends zeigt freigegebenes Backend und GET /api/v1/channels zeigt reale Sendernamen und -nummern.
-- [ ] Weitere Sender nur nach Mehr Sender; kein ungewollter Datenabruf beim Reiterfokus.
-- [ ] Fehlendes Credential, HTTP 401 und HTTP 403 zeigen hilfreichen Fehler, ohne Secrets, Grantvergabe oder Pairing-POST.
-- [ ] Fokus/Zurück weiterhin korrekt; keinerlei Live-Wiedergabe oder erfundene EPG-Daten.
+- [x] S3.3-Paket mit VS Code/Tizen Extension per **Build Project / Run Project** auf Samsung Tizen 5.5 installiert; „Live-TV – Echte Sender“ sichtbar.
+- [x] Gespeichertes Credential fehlt nach Testinstallation: sichere Fehlermeldung statt privatem Fallback; kein automatischer Pairing-POST.
+- [x] Neue Kopplung vom Nutzer genehmigt und Gerät aktiviert; der Client authentifiziert sich für den anschließenden Channel-Read über Public v1.
+- [x] **Negativer Grant-Test:** `GET /api/v1/backends` resultiert für das neue noch nicht berechtigte Device in „Keine Backends freigegeben“; kein heimlicher Serverzugriff.
+- [x] **Positiver Grant-Test:** Der Administrator gibt `channels.view@default` **für die neue** Geräteidentität frei; anschließend `20 echte Sender geladen` inklusive Das Erste HD, SWR RP HD und weiteren echten Nummern/Namen. Source- und TV-Bestätigung vorhanden.
+- [ ] **Sender-Reihenfolge nach VDR `channels.conf`:** Aktuell sortiert der Public-v1-Vertrag nach `backendId,channelId` und zeigt deshalb auf der ersten Seite z. B. 1, 17 und 230; benötigte neue, über alle Cursorseiten stabile `channelNumber`-Sortierung zuerst **serverseitig** definieren und implementieren. Kein clientseitiges Sortieren nur der sichtbaren 20 Zeilen.
+- [ ] **Mehr Sender**/Cursor-Seite 2 und 409 bei Scope-/Snapshot-Wechsel; mehrere Backends/Backendwechsel nur falls tatsächlich vorhanden.
+- [ ] Device-Speicher **nach regulärem App-Neustart**, nach datenbewahrendem App-Update; kein erneutes Pairing pro Release.
+- [ ] HTTP 401 (widerrufenes Credential), explizit verweigertes Backend/403, Timeout, 503 und Navigation/Zurück in der aktualisierten Ansicht unter echten Bedingungen.
+- [ ] Browsergeräte-Refresh tatsächlich ≤10 Sekunden bei sichtbarem Tab; Stop bei unsichtbarem Tab und richtige Device-Auswahl bei doppelten Namen. UI für ausdrücklichen Widerruf/Retire alter Devices offen.
+- [ ] Echte Live-TV-MediaSession, AVPlay-Bild/Ton/Stop/Back; Recording/EPG und Backend-Mutationen sind **nicht** Teil des bestandenen S3.3-Tests.
 
-Bei Fehlern nur die sichtbare TV-Meldung (ohne private Adresse/Token) weitergeben. Keinen Backend-Neustart oder erneutes Pairing als erste Maßnahme durchführen. WGT-Test-Uninstall kann gespeicherte Appdaten einschließlich KeyManager entfernen.
+**Quelle der gemeinsamen API-Verträge und einziges serverseitiges Abnahme-Inventar:** [VDR-Suite API-v1-Hardwarematrix](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md). Servergrants, Pairing, REST-Fehler und Channel-Paging nicht als zweite Samsung-API erfinden; Samsung-spezifisch sind Tizen-KeyManager, App-Update-Verhalten, D-Pad und AVPlay.
+
+Bei Fehlern nur den angezeigten Wortlaut (ohne private Adresse/Token) teilen. Bestehende Geräte und Berechtigungen nicht auf Verdacht löschen; keine vorher bestandenen Server-Hardwaretests wiederholen.
 
 ### Achtung: Update kann Device-Identität löschen (Tizen 5.5)
 
