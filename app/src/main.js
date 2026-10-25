@@ -5,7 +5,7 @@ import { registerOptionalKeys } from "./platform/keys.js";
 import { createStartupVideo } from "./platform/startup-video.js";
 import { nextPreviewState, getViewPresentation } from "./views/view-state.js";
 import { normalizeSuiteBase, createDiscoveryClient, classifyDiscoveryError } from "./api/public-discovery.js";
-import { createPairingClient, pairingError } from "./api/device-pairing.js";
+import { createPairingClient, pairingError, deviceVerificationError } from "./api/device-pairing.js";
 import { createDeviceVault } from "./platform/device-vault.js";
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
@@ -65,6 +65,9 @@ function boot() {
   var pairingBusy = false;
   var pendingCredential = null;
   var pairedCredential = null;
+  // A local KeyManager entry is not proof of server-side Device authorization.
+  var rejectedCredentialId = null;
+  var resetConfirmationId = null;
   var discoveredBase = null;
   var pairingResult = document.getElementById("pairing-result");
   var pairingCode = document.getElementById("pairing-user-code");
@@ -108,7 +111,8 @@ function boot() {
       NAV_ROW,
       ["detail-settings-home", "settings-base-input", "settings-test"],
       ["settings-pair-start", "settings-pair-check", "settings-pair-activate",
-       "settings-pair-verify", "settings-pair-retry"]
+       "settings-pair-verify", "settings-pair-retry"],
+      ["settings-pair-clear"]
     ];
     return [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
       ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
@@ -177,13 +181,61 @@ function boot() {
     var saved = vault.read();
     if (saved.ok && saved.credential) {
       pairedCredential = saved.credential;
-      pairMessage("Gerät gespeichert (Device-ID: " + saved.credential.deviceId +
-        "). Anmeldung prüfen; Backend-Berechtigungen sind separat zu vergeben.");
+      pairMessage("Credential lokal gespeichert (Device-ID: " + saved.credential.deviceId +
+        "). Server-Anmeldung UNGEPRÜFT. Bitte „Anmeldung prüfen“ wählen.");
     } else if (!saved.ok) {
       pairMessage("Sichere Geräteablage nicht lesbar. Anmeldung später erneut prüfen; nicht neu koppeln.");
     } else {
       pairMessage("Kein gespeichertes Device-Credential gefunden. Nicht automatisch neu koppeln.");
     }
+  }
+  function updateVerificationFailure(credential, result) {
+    resetConfirmationId = null;
+    if (result.kind === "http" && result.status === 401) {
+      rejectedCredentialId = credential.credentialId;
+      pairedCredential = null;
+      if (homeServerState) homeServerState.textContent = "Geräteanmeldung abgewiesen";
+      if (topbarServerState) topbarServerState.textContent = "Anmeldung ungültig";
+      return true;
+    }
+    rejectedCredentialId = null;
+    if (homeServerState) homeServerState.textContent = "Geräteanmeldung nicht bestätigt";
+    if (topbarServerState) topbarServerState.textContent = "Anmeldung ungeprüft";
+    return false;
+  }
+  function clearRejectedLocalCredential() {
+    if (pairingBusy || pendingCredential || pairingRequest) {
+      pairMessage("Laufende Kopplung/Speicherung zuerst abschließen."); return;
+    }
+    if (!rejectedCredentialId) {
+      pairMessage("Lokale Anmeldung wird nur nach einer bestätigten HTTP-401-Ablehnung zurückgesetzt. Erst „Anmeldung prüfen“ wählen.");
+      return;
+    }
+    var saved = vault.read();
+    if (!saved.ok || !saved.credential ||
+        saved.credential.credentialId !== rejectedCredentialId) {
+      resetConfirmationId = null;
+      pairMessage("KeyManager nicht lesbar oder Credential inzwischen geändert. Nichts entfernt; erneut prüfen.");
+      return;
+    }
+    if (resetConfirmationId !== rejectedCredentialId) {
+      resetConfirmationId = rejectedCredentialId;
+      pairMessage("Nur dieses lokal abgewiesene Credential entfernen? Zum Bestätigen „Lokale Anmeldung zurücksetzen“ NOCH EINMAL drücken. Keine Server-Geräte werden verändert.");
+      return;
+    }
+    var cleared = vault.removeLocal(rejectedCredentialId);
+    resetConfirmationId = null;
+    if (!cleared.ok) {
+      pairMessage("Lokale Anmeldung NICHT entfernt: KeyManager nicht lesbar oder Credential geändert. Keine automatische Neukopplung.");
+      return;
+    }
+    pairedCredential = null;
+    rejectedCredentialId = null;
+    liveCredential = null;
+    recordingCredential = null;
+    if (homeServerState) homeServerState.textContent = "Keine lokale Geräteanmeldung";
+    if (topbarServerState) topbarServerState.textContent = "Nicht angemeldet";
+    pairMessage("Abgewiesenes Credential lokal entfernt. Kein Server-Gerät verändert. Bei Bedarf Kopplung ausdrücklich neu starten; Grants werden nicht übertragen.");
   }
   function pairStart() {
     if (pairingBusy || pendingCredential || pairingRequest) {
@@ -219,7 +271,7 @@ function boot() {
         pairingBusy = false;
         if (ready.credential) {
           pairedCredential = ready.credential;
-          pairMessage("Dieses TV-Gerät ist bereits gekoppelt. Vor erneutem Pairing Server-Identität prüfen.");
+          pairMessage("Credential nur lokal vorhanden. Das beweist KEINE gültige Kopplung. „Anmeldung prüfen“ wählen; bei HTTP 401 kann die lokale Anmeldung ausdrücklich zurückgesetzt werden.");
         } else pairMessage("KeyManager nicht schreib-/lesbar. Keine Kopplung gestartet.");
         return;
       }
@@ -290,6 +342,8 @@ function boot() {
         return;
       }
       pairedCredential = result.credential;
+      rejectedCredentialId = null;
+      resetConfirmationId = null;
       pendingCredential = null;
       clearPairRequest();
       pairMessage("Gerät sicher gekoppelt. „Anmeldung prüfen“ kontrolliert die Device-Authentifizierung. Noch keine Backend-Rechte.");
@@ -297,29 +351,47 @@ function boot() {
   }
   function pairVerify() {
     if (pairingBusy || pendingCredential) {pairMessage("Bitte zuerst Speicherung abschließen.");return;}
-    var saved=vault.read();
+    resetConfirmationId = null;
+    var saved = vault.read();
     if (!saved.ok) {
+      rejectedCredentialId = null;
       pairMessage("KeyManager nicht lesbar. Credential-Status unbekannt; später erneut prüfen, nicht neu koppeln.");
       return;
     }
     if (!saved.credential) {
+      rejectedCredentialId = null;
       pairMessage("Kein gespeichertes Device-Credential gefunden. Prüfe zuerst den App-/Installationsstatus.");
       return;
     }
-    pairedCredential=saved.credential;
+    var selectedBase = serverInput && normalizeSuiteBase(serverInput.value);
+    if (selectedBase && selectedBase !== saved.credential.base) {
+      rejectedCredentialId = null;
+      pairMessage("Credential gehört zu einem anderen Server. Adresse prüfen; keine lokale Löschung.");
+      return;
+    }
+    var checkingCredential = saved.credential;
+    pairedCredential = checkingCredential;
     pairingBusy = true;
     pairMessage("Prüfe Geräteanmeldung über Public API v1 …");
-    pairingClient.verify(pairedCredential,function (result) {
+    pairingClient.verify(checkingCredential,function (result) {
       pairingBusy = false;
       if (result.ok) {
-        discoveredBase=pairedCredential.base;
+        rejectedCredentialId = null;
+        resetConfirmationId = null;
+        discoveredBase = checkingCredential.base;
         if (homeServerState) homeServerState.textContent = "Device verbunden · Grants offen";
         if (topbarServerState) topbarServerState.textContent = "Gerät angemeldet";
         message.textContent = "Device authentifiziert · Berechtigungen werden separat vergeben";
         pairMessage("Device-Authentifizierung erfolgreich (Device-ID: " +
-          pairedCredential.deviceId + "). Sender/Aufnahmen benötigen Admin-Grants.");
-      } else pairMessage("Geräteanmeldung nicht bestätigt: "+pairingError(result.kind,result.status)+
-        " Credential bleibt sicher gespeichert.");
+          checkingCredential.deviceId + "). Sender/Aufnahmen benötigen Admin-Grants.");
+      } else if (updateVerificationFailure(checkingCredential,result)) {
+        pairMessage("Geräteanmeldung ABGEWIESEN: " + deviceVerificationError(result) +
+          " Lokales Credential noch vorhanden (Device-ID: " + checkingCredential.deviceId +
+          "). Für bewusstes Neu-Koppeln zuerst „Lokale Anmeldung zurücksetzen“ zweimal bestätigen.");
+      } else {
+        pairMessage("Geräteanmeldung nicht bestätigt: " + deviceVerificationError(result) +
+          " Lokales Credential bleibt unverändert; nicht auf Verdacht neu koppeln.");
+      }
     });
   }
 
@@ -502,6 +574,7 @@ function boot() {
     pairingClient.verify(liveCredential, function (verified) {
       if (run !== liveRun) return;
       if (!verified.ok) {
+        updateVerificationFailure(liveCredential, verified);
         liveBusy = false;
         showLiveError(verified);
         return;
@@ -702,6 +775,7 @@ function boot() {
     pairingClient.verify(recordingCredential, function (verified) {
       if (run !== recordingRun) return;
       if (!verified.ok) {
+        updateVerificationFailure(recordingCredential, verified);
         recordingBusy = false;
         showRecordingError(verified); return;
       }
@@ -740,6 +814,7 @@ function boot() {
       channelCatalog.cancel(); // Backend discovery may still be pending.
     }
     currentView = view;
+    if (view !== "settings") resetConfirmationId = null;
     if (view === "live") {
       // Keep S2.2 DOWN-to-first-detail-button focus behavior.
       if (!rowMemory.live) rowMemory.live = {};
@@ -848,6 +923,7 @@ function boot() {
       else if (pairAction === "activate") pairActivate();
       else if (pairAction === "verify") pairVerify();
       else if (pairAction === "retry") savePendingCredential();
+      else if (pairAction === "clear") clearRejectedLocalCredential();
       return;
     }
     if (item.getAttribute("data-server-test") === "true") {
