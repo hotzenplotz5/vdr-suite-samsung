@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"6d5dd71d6d44","label":"Samsung v0.1.0 · S5.1 · b6d5dd71d6d44"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"efb04b4ebd7c","label":"Samsung v0.1.0 · S5.1 · befb04b4ebd7c"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1184,6 +1184,40 @@
   }
   // END app/src/platform/recording-player.js
 
+  // BEGIN app/src/views/device-auth-status.js
+  // Presentation only: credentials stay in the Tizen KeyManager.
+  // A locally stored credential, verified device auth and an unavailable store
+  // are distinct states. No server calls, localStorage or automatic re-pairing.
+  function devicePairingStatus(saved, lastVerified, rejectedCredentialId) {
+    if (!saved || !saved.ok) {
+      return {state:"unknown",text:"Sichere Geräteablage momentan nicht lesbar. " +
+        "Anmeldung unbekannt; nicht erneut koppeln."};
+    }
+    var cred = saved.credential;
+    if (!cred) {
+      // A short-lived KeyManager read result must not contradict a successful
+      // authenticated catalog request in the same running application.
+      if (lastVerified && lastVerified.credentialId) {
+        return {state:"conflict",text:"Geräteanmeldung war in dieser Sitzung erfolgreich. " +
+          "Der KeyManager liefert gerade keinen Eintrag; bitte „Anmeldung prüfen“. Nicht neu koppeln."};
+      }
+      return {state:"missing",text:"Kein gespeichertes Device-Credential gefunden. " +
+        "Nicht automatisch neu koppeln."};
+    }
+    if (rejectedCredentialId && rejectedCredentialId === cred.credentialId) {
+      return {state:"rejected",text:"Geräteanmeldung vom Server mit HTTP 401 abgewiesen " +
+        "(Device-ID: " + cred.deviceId + "). Credential lokal noch vorhanden."};
+    }
+    if (lastVerified && lastVerified.credentialId === cred.credentialId &&
+        lastVerified.base === cred.base) {
+      return {state:"authenticated",text:"Gerät authentifiziert (Device-ID: " +
+        cred.deviceId + "). Sender und Aufnahmen können mit den vorhandenen Grants genutzt werden."};
+    }
+    return {state:"local",text:"Device-Credential lokal gespeichert (Device-ID: " +
+      cred.deviceId + "). Server-Anmeldung noch nicht geprüft; „Anmeldung prüfen“ wählen."};
+  }
+  // END app/src/views/device-auth-status.js
+
   // BEGIN app/src/main.js
   
   // Every control is in exactly one row per visible route. Navigation never
@@ -1253,6 +1287,8 @@
     var pairingBusy = false;
     var pendingCredential = null;
     var pairedCredential = null;
+    // Volatile session proof, never cached across restarts or written to storage.
+    var lastVerifiedDevice = null;
     // A local KeyManager entry is not proof of server-side Device authorization.
     var rejectedCredentialId = null;
     var resetConfirmationId = null;
@@ -1367,21 +1403,30 @@
       if (pairingCode) pairingCode.textContent = "– – – – – –";
     }
     function storedStatus() {
+      // Always refresh on entering Settings: cached startup text becomes stale
+      // after authenticating via Live TV / Recordings.
+      if (pairingBusy || pendingCredential || pairingRequest) return;
       var saved = vault.read();
-      if (saved.ok && saved.credential) {
-        pairedCredential = saved.credential;
-        pairMessage("Credential lokal gespeichert (Device-ID: " + saved.credential.deviceId +
-          "). Server-Anmeldung UNGEPRÜFT. Bitte „Anmeldung prüfen“ wählen.");
-      } else if (!saved.ok) {
-        pairMessage("Sichere Geräteablage nicht lesbar. Anmeldung später erneut prüfen; nicht neu koppeln.");
-      } else {
-        pairMessage("Kein gespeichertes Device-Credential gefunden. Nicht automatisch neu koppeln.");
-      }
+      if (saved.ok && saved.credential) pairedCredential = saved.credential;
+      var status = devicePairingStatus(saved,lastVerifiedDevice,rejectedCredentialId);
+      pairMessage(status.text);
+      if (pairingResult) pairingResult.setAttribute("data-pair-state",status.state);
+    }
+    function markDeviceAuthenticated(credential) {
+      // Only successful public-v1 Device verification can set this marker.
+      lastVerifiedDevice = {credentialId:credential.credentialId,base:credential.base};
+      pairedCredential = credential;
+      rejectedCredentialId = null;
+      resetConfirmationId = null;
+      if (homeServerState) homeServerState.textContent = "Device verbunden";
+      if (topbarServerState) topbarServerState.textContent = "Gerät angemeldet";
+      storedStatus();
     }
     function updateVerificationFailure(credential, result) {
       resetConfirmationId = null;
       if (result.kind === "http" && result.status === 401) {
         rejectedCredentialId = credential.credentialId;
+        lastVerifiedDevice = null;
         pairedCredential = null;
         if (homeServerState) homeServerState.textContent = "Geräteanmeldung abgewiesen";
         if (topbarServerState) topbarServerState.textContent = "Anmeldung ungültig";
@@ -1420,6 +1465,7 @@
       }
       pairedCredential = null;
       rejectedCredentialId = null;
+      lastVerifiedDevice = null;
       liveCredential = null;
       recordingCredential = null;
       if (homeServerState) homeServerState.textContent = "Keine lokale Geräteanmeldung";
@@ -1531,6 +1577,8 @@
           return;
         }
         pairedCredential = result.credential;
+        // Saving locally does not establish server authentication.
+        lastVerifiedDevice = null;
         rejectedCredentialId = null;
         resetConfirmationId = null;
         pendingCredential = null;
@@ -1565,11 +1613,8 @@
       pairingClient.verify(checkingCredential,function (result) {
         pairingBusy = false;
         if (result.ok) {
-          rejectedCredentialId = null;
-          resetConfirmationId = null;
           discoveredBase = checkingCredential.base;
-          if (homeServerState) homeServerState.textContent = "Device verbunden · Grants offen";
-          if (topbarServerState) topbarServerState.textContent = "Gerät angemeldet";
+          markDeviceAuthenticated(checkingCredential);
           message.textContent = "Device authentifiziert · Berechtigungen werden separat vergeben";
           pairMessage("Device-Authentifizierung erfolgreich (Device-ID: " +
             checkingCredential.deviceId + "). Sender/Aufnahmen benötigen Admin-Grants.");
@@ -1768,6 +1813,7 @@
           showLiveError(verified);
           return;
         }
+        markDeviceAuthenticated(liveCredential);
         liveStatus("loading", "Prüfe freigegebene Backends", "Public API v1 · Geräteberechtigungen");
         channelCatalog.listBackends(liveCredential, function (found) {
           if (run !== liveRun) return;
@@ -2150,6 +2196,7 @@
           recordingBusy = false;
           showRecordingError(verified); return;
         }
+        markDeviceAuthenticated(recordingCredential);
         recordingStatus("loading", "Prüfe sichtbare Backends",
           "Für Aufnahmen ist recordings.view erforderlich.");
         channelCatalog.listBackends(recordingCredential, function (found) {
@@ -2228,6 +2275,7 @@
         // A new server address/test row must not steal the first DOWN key.
         if (!rowMemory.settings) rowMemory.settings = {};
         rowMemory.settings[1] = "detail-settings-home";
+        storedStatus();
       }
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-panel") !== view;
