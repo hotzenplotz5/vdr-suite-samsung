@@ -144,3 +144,18 @@ https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/conn
 https://developer.samsung.com/smarttv/develop/faq/application-installation.html
 
 Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs Watch ermöglicht auf unterstützten Samsung-TV-Modellen Live-Reload ohne erneute Installation, verlangt jedoch ein eigenes geprüftes Setup und ist hier NICHT als sicherer Erhalt des bestehenden KeyManager-Zustands bestätigt. Kein Secret exportieren und keine automatisch wiederholte Kopplung als Workaround.
+
+
+## S4.1 – Echte Aufnahme-Metadaten (noch kein TV-Test, 2026-10-25)
+
+**Stand: IMPLEMENTIERT IM SAMSUNG-SOURCE-BRANCH; REAL-SAMSUNG = NOT_VERIFIED.** Das bestehende S3.3-Channel-Hardware-PASS ist **kein** Nachweis für die separate Aufnahmen-Berechtigung. Keine neue Test-Device-Identität auf Verdacht anlegen.
+
+- [ ] Nach Daten-/Credential-schonender TV-Installation unter Einstellungen **Anmeldung prüfen**. Ein VS-Code-`Run Project`-Update kann lokale KeyManager-Daten löschen: Verlust ausdrücklich als Update-Risiko dokumentieren und nicht mit stiller Neu-Kopplung kaschieren.
+- [ ] Unter **Aufnahmen** per OK auf **Aufnahmen laden**: ohne `recordings.view@default` eine klare, sichere Berechtigungsfehlermeldung; eine bereits existierende `channels.view@default`-Freigabe ist dafür unzureichend.
+- [ ] Administrator erteilt danach dem **aktuell aktiven Samsung-Device** explizit `recordings.view@default`; erneuter manueller Aufruf zeigt echte Aufnahmen mit Server-Titel, Zeit, Dauer/Größe und **Suite-`rec_...`-ID intern** statt erfundener Demos.
+- [ ] D-Pad-Pfeile/OK fokussieren Aufnahmezeilen, scrollen sichtbar und bleiben nach Backend-/Seitenwechsel bedienbar. Eine Auswahl zeigt derzeit Metadatenhinweis; **weder Session noch Playback**.
+- [ ] Bei mehr als 100 Aufnahmen navigieren **Weitere Aufnahmen** und **Vorherige Seite** über echten `rc1_`-Cursor; maximal 100 DOM-Zeilen, aber **keine Gesamtgrenze**. Bei höchstens 100 Aufnahmen keinen künstlichen Testkatalog erzeugen; Cursormehrseite dann gezielt später prüfen.
+- [ ] Browser-/HTTP-Fehler 401, 403, 409, 503, Netzwerk/TLS/CORS sowie eine verspätete Antwort nach Zurück zur Startseite oder Live-TV: keine heimlich angezeigten Fremddaten und keine private API als Fallback.
+- [ ] Nach erneutem Öffnen kein ungefragter Backend-/Recording-Fetch durch bloßes Menü-Fokussieren; OK löst den Lesevorgang aus; kein Medien-Cookie oder secret in UI/Logs.
+
+**Upstream Hardware-Matrix:** [API-v1 kumulative REAL-VDR-/Client-Gates](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md). S4.1 zeigt nur Metadaten; S4.2 Ordnernavigation, S5 AVPlay/MediaSession und S5.3 P1-Resume folgen. Bereits akzeptierte Backend-Recording-READ-/WRITE-Proben werden nicht allein wegen dieses Samsung-Clients erneut ausgeführt.
