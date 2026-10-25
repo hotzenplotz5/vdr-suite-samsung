@@ -61,3 +61,15 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - Implementiert und automatisiert geprüft: Fokusgraph für Menü, Hero, Aktionsleiste, horizontale Rail; Fokus-Rückkehr nach Back, Verlauf zwischen Detailansichten, Vermeidung versteckter Fokuselemente. GitHub-Actions-Checks zum Implementierungscommit `785b4b9` erfolgreich.
 - **Bewusste Bedienungsentscheidung:** Links/Rechts markiert den Reiter ohne sofortigen Seitenwechsel; OK öffnet ihn. So sind bei künftiger API-Anbindung keine unnötigen Seitenladungen durch bloßes Blättern nötig.
 - **Separat weiterhin offen:** Exit-/Relaunch-Detailprotokoll aus S1, Medienfunktionen und API-/Netzwerk-Gates. Die allgemeine S2.2-PASS-Meldung ist kein gesonderter Messnachweis für jeden Einzelpunkt.
+
+
+## Phase S2.3 – Detailansichten (Hardwaretest offen)
+
+- [ ] S2.1-Startbildschirm und lokales MP4-Intro unverändert, kein schwarzer Bildschirm
+- [ ] Reiter mit Pfeilen nur fokussieren, mit OK öffnen (kein ungewolltes Nachladen)
+- [ ] Live-TV/Aufnahmen/Suche/Timer: in allen vier Ansichten Statuskarte und visuelle Grafik vorhanden
+- [ ] „Zustände ansehen“ erreicht der D-Pad-Fokus; OK zeigt nacheinander Laden, Leer, Fehler, Offline
+- [ ] Testzustände deutlich als Demo erkennbar; kein echter Serververkehr, keine fiktiven Inhalte
+- [ ] Zurück führt zur zuvor fokussierten Reiter-/Home-Kachel
+- [ ] Einstellungen zeigen weiter Tizen-/AVPlay-/Fernbedienungsdiagnose
+- [ ] Keine abgeschnittenen Fokusrahmen auf dem echten Samsung-Bildschirm

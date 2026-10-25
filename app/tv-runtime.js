@@ -185,6 +185,58 @@
   }
   // END app/src/platform/startup-video.js
 
+  // BEGIN app/src/views/view-state.js
+  // Offline S2.3 presentation states; no transport, media or mock 'real' data.
+  const PREVIEW_SEQUENCE = ["offline", "loading", "empty", "error"];
+  const SECTION_LABELS = {
+    live: "Sender",
+    recordings: "Aufnahmen",
+    search: "Suchergebnisse",
+    timers: "Timer"
+  };
+  
+  function nextPreviewState(current) {
+    var index = PREVIEW_SEQUENCE.indexOf(current);
+    return PREVIEW_SEQUENCE[(index + 1) % PREVIEW_SEQUENCE.length];
+  }
+  
+  function getViewPresentation(route, requested) {
+    var name = SECTION_LABELS[route];
+    if (!name) return null;
+    var state = PREVIEW_SEQUENCE.indexOf(requested) >= 0 ? requested : "offline";
+    if (state === "loading") {
+      return {
+        state: "loading", badge: "LADEVORSCHAU",
+        title: name + " werden geladen",
+        description: "So sieht der Ladezustand später aus. Es wird jetzt keine Anfrage gesendet.",
+        skeleton: true
+      };
+    }
+    if (state === "empty") {
+      return {
+        state: "empty", badge: "LEERE ANSICHT · DEMO",
+        title: "Noch keine " + name,
+        description: "Beispiel für eine leere Ansicht. Es wurden keine echten Inhalte abgefragt.",
+        skeleton: false
+      };
+    }
+    if (state === "error") {
+      return {
+        state: "error", badge: "FEHLERVORSCHAU",
+        title: "Verbindung derzeit nicht möglich",
+        description: "Simulierter Fehlerzustand. Später erscheinen hier konkrete Hinweise und eine sichere Wiederholen-Aktion.",
+        skeleton: false
+      };
+    }
+    return {
+      state: "offline", badge: "OFFLINE",
+      title: "Noch keine Serververbindung",
+      description: "Die Inhalte werden erst nach autorisierter API-Anbindung geladen.",
+      skeleton: false
+    };
+  }
+  // END app/src/views/view-state.js
+
   // BEGIN app/src/main.js
   
   // Every control is in exactly one row per visible route. Navigation never
@@ -198,6 +250,7 @@
     ["rail-recordings", "rail-live", "rail-search", "rail-timers"]
   ];
   const ROUTES = ["home", "live", "recordings", "search", "timers", "settings"];
+  const PREVIEW_ROUTES = ["live", "recordings", "search", "timers"];
   
   function boot() {
     var items = Array.prototype.slice.call(document.querySelectorAll(".tv-focusable"));
@@ -209,6 +262,7 @@
     var lastHomeFocus = "nav-home";
     var history = [];
     var rowMemory = {};
+    var previewStates = {};
     var message = document.getElementById("message");
     var keyStatus = document.getElementById("key-status");
   
@@ -220,7 +274,9 @@
     function focusRows() {
       return currentView === "home"
         ? [NAV_ROW].concat(HOME_ROWS)
-        : [NAV_ROW, ["detail-" + currentView + "-home"]];
+        : [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
+          ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
+          : ["detail-" + currentView + "-home"]];
     }
   
     function isVisibleFocus(id) {
@@ -256,9 +312,27 @@
       return true;
     }
   
+    function renderPreview(route, state) {
+      var presentation = getViewPresentation(route, state);
+      if (!presentation) return;
+      var card = document.getElementById("detail-state-" + route);
+      var badge = document.getElementById("detail-state-badge-" + route);
+      var title = document.getElementById("detail-state-title-" + route);
+      var description = document.getElementById("detail-state-description-" + route);
+      var skeleton = document.getElementById("detail-state-skeleton-" + route);
+      if (!card || !badge || !title || !description || !skeleton) return;
+      previewStates[route] = presentation.state;
+      card.setAttribute("data-state", presentation.state);
+      badge.textContent = presentation.badge;
+      title.textContent = presentation.title;
+      description.textContent = presentation.description;
+      skeleton.hidden = !presentation.skeleton;
+    }
+  
     function showView(view) {
       if (ROUTES.indexOf(view) < 0) return false;
       currentView = view;
+      if (PREVIEW_ROUTES.indexOf(view) >= 0) renderPreview(view, "offline");
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-panel") !== view;
       });
@@ -325,6 +399,11 @@
   
     function activate(item) {
       if (!item) return;
+      var previewRoute = item.getAttribute("data-preview-route");
+      if (previewRoute && previewRoute === currentView) {
+        renderPreview(previewRoute, nextPreviewState(previewStates[previewRoute]));
+        return;
+      }
       var view = item.getAttribute("data-route") || item.getAttribute("data-target-view");
       if (view) navigateTo(view, item.getAttribute("data-focus-id"));
     }

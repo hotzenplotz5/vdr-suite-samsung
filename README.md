@@ -76,3 +76,11 @@ Build: `npm.cmd run build:tv`, dann `npm.cmd run check`; danach in der Tizen Ext
 S2.2 ergänzt einen stabilen Fokusgraphen für Header, Hero, Aktionen, Rail und Offline-Unteransichten. Reihen merken ihre zuletzt ausgewählte Kachel; D-Pad umbricht an den Rändern nicht. Beim Zurückspringen aus einer Unteransicht wird der vorherige Fokus wiederhergestellt. Mehrere Unteransichten bilden einen begrenzten Verlauf; eine explizite Home-Aktion leert den Verlauf. Ein einziger Keydown-Owner behandelt die Samsung-Fernbedienung. ScrollIntoView sichert den Fokus bei kleinen Bildschirmen oder später längeren Reihen. Die gesamte Oberfläche bleibt offline startfähig; keine echten Inhalte, API-Aufrufe oder AVPlay-Inhalte.
 
 Nur JS/CSS/Offline-Navigation geändert; Original-Intro und Branding unverändert. Automatisierte GitHub-Checks erfolgreich. **S2.2 auf realem Samsung-TV vom Nutzer als PASS bestätigt (2026-10-25).** Links/Rechts ändert nur die Reiterauswahl; OK öffnet die Ansicht. Nächster Slice: S2.3 (Detailansichten, leere/Lade-/Fehlerzustände, Premium-Feinschliff).
+
+## Phase S2.3 – Detailseiten und leere/Lade-/Fehlerzustände (2026-10-25)
+
+Vier Bereiche (Live-TV, Aufnahmen, Suche, Timer) erhalten einheitliche, gerätefreundliche Dark-Premium-Detailansichten mit lokaler Statuskarte. Ein minimales Präsentationsmodell `app/src/views/view-state.js` liefert ausschließlich `offline`, `loading`, `empty` und `error`. Auf jeder dieser Seiten zeigt die Taste **„Zustände ansehen“** nacheinander die Ansichten; alle Testzustände sind ausdrücklich als Demo/Simulation gekennzeichnet. Es werden keine Daten abgerufen, keine tatsächlichen Sendungen/Aufnahmen vorgespiegelt und keine Medien gestartet. Der vorhandene S2.2-Fokusgraph bleibt der einzige D-Pad-Owner; Reiterwechsel allein lädt weiterhin keine Seite.
+
+HTML/CSS verwenden nur mit Tizen 5.5 kompatible Grundlagen. Startvideo, Logo und Hardwarediagnose unter Einstellungen bleiben bestehen. Nach S3-API-Einführung ersetzt echte Anwendungslogik die lokalen Statusvorschauen; bis dahin gehört die Demonstration nicht zur Live-Nutzung.
+
+Automatisierte Unit-/Runtime-/Zeilenenden-Checks hinzugefügt; echte TV-Abnahme der neuen S2.3-Oberfläche bleibt noch offen.

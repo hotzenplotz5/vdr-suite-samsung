@@ -31,7 +31,7 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 - **S2.1 VISUELLES HARDWARE-PASS (Nutzerbestätigung 2026-10-25):** Dark-Premium-Media-Home im Samsung-Client mit oberer Navigation, großer Hero-Karte, seitlichen Karten, Aktionsleiste, horizontaler Mediathek-Reihe und sechs routbaren Offline-Ansichten. Alle Daten erkennbar als Designvorschau; kein echter Sender/EPG/Account behauptet. Back-Stack zunächst Home->Unteransicht->Home; weitere Lade-/Fehlerzustände und verschachtelte Routen folgen in S2.2/S2.3. Dark-Premium-Oberfläche auf dem echten Samsung vom Nutzer mit 'gefällt mir! und pass!' bestätigt; umfassende Fernbedienungs-Abnahme ist S2.2.
 - **S2.2 HARDWARE-PASS (2026-10-25, Nutzer bestätigt):** Fokusgraph für Navigation, Hero, Aktionsleiste, Content-Rail und Detailansichten; D-Pad/OK/Zurück, Fokus-Rückkehr und Routenverlauf. Getestet vom Nutzer auf dem echten Samsung-TV und mit „pass, hab schon getestet“ bestätigt. **Reiterwechsel bleibt bewusst ohne Ansichtswechsel; erst OK aktiviert eine Ansicht**, um bei der späteren API-Anbindung unnötiges Nachladen zu vermeiden. Automatisierte Samsung-Client-Checks grün (Commit `785b4b9`).
-- **S2.3** Web-Frontend-Parität als Produktreferenz, ohne Browser-Private-API oder massenhaftes Laden.
+- **S2.3 IMPLEMENTIERT – HARDWARE-ABNAHME OFFEN (2026-10-25):** Visuell einheitliche Premium-Detailseiten für Live-TV, Aufnahmen, Suche und Timer. Offline-/Loading-/Empty-/Error-Anzeigen über ein reines, deterministisches Präsentationsmodell; am TV per ausdrücklich markierter lokaler Demo-Taste umschaltbar. Keine Netzwerkaufrufe, keine echten Inhalte oder AVPlay-Streams. Gewohnte OK-auf-Reiter-Navigation und S2.2-Fokusgraph bleiben erhalten. Erweiterte Tests und TV-Retest erforderlich.
 
 **Gate:** Bedienung per D-Pad am TV; noch ausschließlich kontrollierte Fixtures.
 
@@ -71,5 +71,5 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**S1.3-b:** Auf dem echten Samsung von einer Unterseite mit Zurück zur Startseite gehen und bei erneutem Zurück kontrolliertes Beenden der App prüfen; anschließend Relaunch kontrollieren. Erst danach S1-Abnahme vervollständigen.
+**S2.3 Hardware-Gate:** Neue App paketieren und auf Samsung Tizen 5.5 starten. In jedem Bereich „Zustände ansehen“ per OK durch Offline → Laden → Leer → Fehler → Offline schalten, Fokusrahmen und Zurück prüfen. Danach S3.1 (TV-seitige Erreichbarkeit und öffentlicher API-v1-Vertrag), keine vorgezogene Serveranbindung.
 

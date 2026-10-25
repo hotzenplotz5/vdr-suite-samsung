@@ -24,7 +24,7 @@ function simulate() {
   const focusIds = [...html.matchAll(/<button[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -47,6 +47,17 @@ function simulate() {
   const textNodes = Object.fromEntries([
     "message", "key-status", "tizen-status", "avplay-status", "remote-status"
   ].map(key => [key,{ textContent: "wird geprüft" }]));
+  const stateNodes = {};
+  for (const route of ["live", "recordings", "search", "timers"]) {
+    const card = { dataState: null, setAttribute(name, value) {
+      if (name === "data-state") this.dataState = value;
+    } };
+    stateNodes["detail-state-" + route] = card;
+    for (const suffix of ["badge", "title", "description"]) {
+      stateNodes["detail-state-" + suffix + "-" + route] = { textContent: "" };
+    }
+    stateNodes["detail-state-skeleton-" + route] = { hidden: true };
+  }
   const overlay = { hidden: true };
   const video = {
     addEventListener(name, fn) { if (name === "ended") this.finish = fn; },
@@ -59,6 +70,7 @@ function simulate() {
     getElementById(id) {
       if (id === "startup-cover") return overlay;
       if (id === "startup-video") return video;
+      if (stateNodes[id]) return stateNodes[id];
       if (!textNodes[id]) throw Error("Missing test node " + id);
       return textNodes[id];
     },
@@ -76,7 +88,7 @@ function simulate() {
     webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
   runInNewContext(runtime, { document, window });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes };
 }
 
 test("S2.1 runtime boots original intro, capability probes and D-pad navigation", () => {
@@ -162,6 +174,51 @@ test("S2.2 explicit Home clears history and restores origin from detail Home but
   assert.equal(sim.nodes["stage-favorites"].isFocused, true);
   key(10009);
   assert.equal(sim.exits.count, 1); // no stale detail history
+});
+
+
+test("S2.3 tab selection does not navigate until OK", () => {
+  const sim = simulate();
+  sim.video.finish();
+  const key = code => sim.listeners.keydown({ keyCode: code, preventDefault() {} });
+  key(39); // focus Live-TV header only
+  assert.equal(sim.nodes["nav-live"].isFocused, true);
+  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
+  key(13); // actually open Live-TV
+  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
+});
+
+test("S2.3 all media detail routes cycle purely local preview states", () => {
+  for (const route of ["live", "recordings", "search", "timers"]) {
+    const sim = simulate();
+    sim.video.finish();
+    const key = code => sim.listeners.keydown({ keyCode: code, preventDefault() {} });
+    sim.nodes["nav-" + route].click();
+    assert.equal(sim.panels.find(p => p.route === route).hidden, false);
+    assert.equal(sim.stateNodes["detail-state-" + route].dataState, "offline");
+    assert.equal(sim.stateNodes["detail-state-title-" + route].textContent, "Noch keine Serververbindung");
+    key(40); // down to detail Home button
+    key(39); // right to local state preview
+    assert.equal(sim.nodes["detail-" + route + "-preview"].isFocused, true);
+    for (const [mode, skeleton] of [["loading",false],["empty",true],["error",true],["offline",true]]) {
+      key(13);
+      assert.equal(sim.stateNodes["detail-state-" + route].dataState, mode);
+      assert.equal(sim.stateNodes["detail-state-skeleton-" + route].hidden, skeleton);
+    }
+    key(10009); // Back restores Home; detail previews are not a subroute
+    assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
+  }
+});
+
+test("S2.3 no backend requests, external images or media playback in view code", () => {
+  const views = readFileSync("app/src/views/view-state.js", "utf8");
+  const app = readFileSync("app/src/main.js", "utf8");
+  assert.doesNotMatch(views + app, /fetch\(|XMLHttpRequest|http:\/\//);
+  assert.match(html, /Statusvorschau – keine echten Serverdaten/);
+  assert.match(html, /data-preview-route="live"/);
+  assert.match(html, /data-preview-route="recordings"/);
+  assert.match(html, /data-preview-route="search"/);
+  assert.match(html, /data-preview-route="timers"/);
 });
 
 test("Generated TV runtime header is safe JavaScript", () => {

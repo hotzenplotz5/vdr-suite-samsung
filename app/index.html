@@ -96,28 +96,108 @@
       </section>
 
       <section class="page detail-page" data-panel="live" hidden>
-        <span class="detail-eyebrow">LIVE-TV</span><h1>Deine Sender.</h1>
-        <p>Kanäle, Favoriten und EPG erscheinen hier, sobald dein Gerät mit VDR-Suite verbunden ist.</p>
-        <div class="detail-empty"><strong>Keine Serververbindung</strong><span>Diese Ansicht ist eine Offline-Designvorschau. Es werden keine Sender oder Programmdaten vorgetäuscht.</span></div>
-        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-home" data-target-view="home">Zurück zu Home</button>
+        <span class="detail-eyebrow">LIVE-TV · DESIGNVORSCHAU</span>
+        <h1>Deine Sender.</h1>
+        <p>Deine Kanäle, Favoriten und das Programm auf einen Blick.</p>
+        <div class="detail-grid">
+          <div class="detail-art detail-art-live" aria-hidden="true">
+            <span class="detail-art-kicker">IMMER ALLES IM BLICK</span>
+            <span class="detail-art-motif">◉</span>
+            <strong>Sender & Programm</strong>
+            <span>VDR-Suite Samsung</span>
+          </div>
+          <section class="detail-status-card" id="detail-state-live" data-state="offline" aria-label="Bereichsstatus">
+            <span class="detail-status-label" id="detail-state-badge-live">OFFLINE</span>
+            <strong id="detail-state-title-live">Noch keine Serververbindung</strong>
+            <p id="detail-state-description-live">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
+            <div class="detail-skeleton" id="detail-state-skeleton-live" hidden aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+          </section>
+        </div>
+        <div class="detail-actions">
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-live-preview" data-preview-route="live">Zustände ansehen</button>
+        </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>
-        <span class="detail-eyebrow">AUFNAHMEN</span><h1>Deine Mediathek.</h1>
-        <p>Ordner, Artwork und Fortsetzen erscheinen später über die autorisierte VDR-Suite Public API v1.</p>
-        <div class="detail-empty"><strong>Bibliothek noch nicht verbunden</strong><span>Keine echten Aufnahmen geladen – Offline-Designvorschau.</span></div>
-        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-recordings-home" data-target-view="home">Zurück zu Home</button>
+        <span class="detail-eyebrow">AUFNAHMEN · DESIGNVORSCHAU</span>
+        <h1>Deine Mediathek.</h1>
+        <p>Aufnahmen, Serien, Filme und Ordner – an einem Ort.</p>
+        <div class="detail-grid">
+          <div class="detail-art detail-art-recordings" aria-hidden="true">
+            <span class="detail-art-kicker">DEINE GESCHICHTEN</span>
+            <span class="detail-art-motif">▣</span>
+            <strong>Ordner & Wiedergabe</strong>
+            <span>VDR-Suite Samsung</span>
+          </div>
+          <section class="detail-status-card" id="detail-state-recordings" data-state="offline" aria-label="Bereichsstatus">
+            <span class="detail-status-label" id="detail-state-badge-recordings">OFFLINE</span>
+            <strong id="detail-state-title-recordings">Noch keine Serververbindung</strong>
+            <p id="detail-state-description-recordings">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
+            <div class="detail-skeleton" id="detail-state-skeleton-recordings" hidden aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+          </section>
+        </div>
+        <div class="detail-actions">
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-recordings-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-recordings-preview" data-preview-route="recordings">Zustände ansehen</button>
+        </div>
       </section>
       <section class="page detail-page" data-panel="search" hidden>
-        <span class="detail-eyebrow">SUCHE</span><h1>Alles finden.</h1>
-        <p>Suche und Filter werden nach der API-Anbindung ergänzt.</p>
-        <div class="detail-empty"><strong>Suche noch nicht verfügbar</strong><span>In diesem S2-Prototyp werden keine Serveranfragen gesendet.</span></div>
-        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
+        <span class="detail-eyebrow">SUCHE · DESIGNVORSCHAU</span>
+        <h1>Alles finden.</h1>
+        <p>Durchsuche später Sender, Filme und Aufnahmen.</p>
+        <div class="detail-grid">
+          <div class="detail-art detail-art-search" aria-hidden="true">
+            <span class="detail-art-kicker">MEHR ENTDECKEN</span>
+            <span class="detail-art-motif">⌕</span>
+            <strong>Suche & Filter</strong>
+            <span>VDR-Suite Samsung</span>
+          </div>
+          <section class="detail-status-card" id="detail-state-search" data-state="offline" aria-label="Bereichsstatus">
+            <span class="detail-status-label" id="detail-state-badge-search">OFFLINE</span>
+            <strong id="detail-state-title-search">Noch keine Serververbindung</strong>
+            <p id="detail-state-description-search">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
+            <div class="detail-skeleton" id="detail-state-skeleton-search" hidden aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+          </section>
+        </div>
+        <div class="detail-actions">
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-search-preview" data-preview-route="search">Zustände ansehen</button>
+        </div>
       </section>
       <section class="page detail-page" data-panel="timers" hidden>
-        <span class="detail-eyebrow">TIMER</span><h1>Alles im Plan.</h1>
-        <p>Geplante Aufnahmen und Timer erscheinen nach Freigabe der öffentlichen API-Verträge.</p>
-        <div class="detail-empty"><strong>Timer noch nicht verbunden</strong><span>Keine echten Timer geladen oder verändert.</span></div>
-        <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-home" data-target-view="home">Zurück zu Home</button>
+        <span class="detail-eyebrow">TIMER · DESIGNVORSCHAU</span>
+        <h1>Alles im Plan.</h1>
+        <p>Behalte geplante Sendungen und Aufnahmetimer im Blick.</p>
+        <div class="detail-grid">
+          <div class="detail-art detail-art-timers" aria-hidden="true">
+            <span class="detail-art-kicker">NICHTS VERPASSEN</span>
+            <span class="detail-art-motif">◷</span>
+            <strong>Geplante Aufnahmen</strong>
+            <span>VDR-Suite Samsung</span>
+          </div>
+          <section class="detail-status-card" id="detail-state-timers" data-state="offline" aria-label="Bereichsstatus">
+            <span class="detail-status-label" id="detail-state-badge-timers">OFFLINE</span>
+            <strong id="detail-state-title-timers">Noch keine Serververbindung</strong>
+            <p id="detail-state-description-timers">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
+            <div class="detail-skeleton" id="detail-state-skeleton-timers" hidden aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+          </section>
+        </div>
+        <div class="detail-actions">
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-timers-preview" data-preview-route="timers">Zustände ansehen</button>
+        </div>
       </section>
       <section class="page detail-page" data-panel="settings" hidden>
         <span class="detail-eyebrow">EINSTELLUNGEN</span><h1>Dein Samsung-TV.</h1>
@@ -134,7 +214,7 @@
         <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-settings-home" data-target-view="home">Zurück zu Home</button>
       </section>
     </main>
-    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S2.2</span></footer>
+    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S2.3</span></footer>
   </div>
   <script src="tv-runtime.js"></script>
 </body>
