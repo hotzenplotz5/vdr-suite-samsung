@@ -134,6 +134,38 @@ Fehlende oder widerrufene Geräteidentitäten und fehlende channels.view-Grants 
 Quellenänderungen erfordern npm run build:tv und danach npm run check. Tests laufen ohne npm-Pakete. Das signierte WGT und ein realer TV-Test sind separate Gates. Rollback: vorheriger Samsung-main-Stand ohne Server-Eingriff.
 
 
+
+## Entwicklungs-Updates ohne erneutes Geräte-Pairing – Samsung WITs Watch (2026-10-25)
+
+**Ursache:** Die Samsung-VS-Code-Funktion `Run Project` kann die bisherige Test-App deinstallieren und erneut installieren. Samsung dokumentiert, dass bei einer Deinstallation App-Daten verloren gehen können. Der sichere `tizen.keymanager`-Eintrag gehört zur App-Identität; weder `device-local.js` noch die auf dem Server weiterhin bestehende Device-Zeile stellen das bereits verlorene Geheimnis wieder her. Wir kopieren oder exportieren das Credential daher **nicht** in Web-Storage, Dateien, WITs-Konfiguration, URLs oder den Entwicklungsrechner.
+
+**Für wiederholte Slices auf dem 2020er Samsung / Tizen 5.5:** Samsung unterstützt [WITs Live Reload](https://github.com/Samsung/Wits) ausdrücklich für Tizen 5.5. Ein bestehendes und einmal eingerichtetes WITs-Projekt wird über `wits --watch` aktualisiert, **ohne** die App neu zu installieren. Auf dieser Basis liefert das Repository einen fail-closed Watch-Befehl. Änderungen an `config.xml`, Paket-ID, Zertifikaten oder Store-/Release-Installationen bleiben ein anderes, **nicht** als KeyManager-datenbewahrend akzeptiertes Gate.
+
+**Einmalige Einrichtung (auf dem Windows-Rechner im VS-Code-PowerShell-Terminal):**
+
+```powershell
+npm.cmd install -g @tizentv/wits
+Set-Location app
+wits.cmd -i
+Set-Location ..
+```
+
+WITs fragt dabei unter anderem nach dem **lokalen** TV/PC und dem vorhandenen Zertifikatsprofil. Dabei erstellte `app/.witsconfig.json` ist Git-ignoriert und enthält **keine Device-Credentials**. `-i` konfiguriert nur den Entwicklerrechner. Ob die installierte App schon WITs-fähig vorbereitet ist, muss auf dem konkreten TV festgestellt werden. **Nur wenn für eine erstmalige WITs-Verbindung erforderlich, kann `wits -s` eine einmalige Neuinstallation bedeuten** – dabei können bereits vorhandene KeyManager-Credentials verloren gehen; niemals als ungefährliche Update-Aktion ausgeben. Der Nutzer entscheidet bewusst, ob ein solcher einmaliger Bootstrap in dieser Situation akzeptabel ist. Bereits verlorene Credentials erfordern anschließend eine neue, bewusst genehmigte Pairing-Identität mit eigenen Grants.
+
+**Ab dann nach Änderungen (PowerShell im Repository-Hauptordner):**
+
+```powershell
+npm.cmd run build:tv
+npm.cmd run check
+npm.cmd run tv:watch
+```
+
+`tv:watch` prüft zuerst `app/.witsconfig.json`, `app/.witsignore`, die unveränderte Paketidentität `VDRSuiteTV.VDRSuite`, das erzeugte Bundle und alle Quelltests. Es startet **ausschließlich `wits --watch` im App-Projektverzeichnis**. Fehlt WITs oder ist kein Watch-Bootstrap auf dem TV vorhanden, gibt es einen Fehler **ohne Run-Project-/Installations-Fallback**. Nach späteren Änderungen an `app/src/...` immer zunächst `npm.cmd run build:tv` ausführen (erst `app/tv-runtime.js` ist das an den TV übertragene Script); WITs synchronisiert die geänderte gebündelte Runtime. Beenden mit `Strg+C` im Terminal.
+
+**Sicherheits- und Abnahme-Gate:** Vor dem Watch auf dem TV `Einstellungen → Anmeldung prüfen`; nach dem Live Reload dieselbe Aktion erneut, dann `Live-TV → Sender laden` und `Aufnahmen → Aufnahmen laden` mit den bestehenden Grants. Ein erfolgreicher Quelltest belegt **noch nicht**, dass WITs Watch auf dem konkreten TV das KeyManager-Credential bewahrt; diesen Hardwaretest getrennt durchführen. Niemals `Run Project`, `Wits Start`, `tizen install` oder `sdb uninstall` als vermeintlich gleichwertigen, datenbewahrenden Ersatz anbieten. Kein blindes Löschen alter Geräte und keine automatische Grant-Übernahme.
+
+**Dokumentierte Herstellerreferenzen:** [Samsung VS Code Extension / WITs](https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode-extension.html) · [Samsung WITs](https://github.com/Samsung/Wits) · [Samsung Installationsverhalten](https://developer.samsung.com/smarttv/develop/faq/application-installation.html).
+
 ## Phase S4.1 – echte Aufnahmen im Samsung-Client (Source-Kandidat, 2026-10-25)
 
 Der Menüpunkt **Aufnahmen** verwendet jetzt nach **OK → Aufnahmen laden** die vorhandene, sicher im Tizen-KeyManager gespeicherte Geräteanmeldung für `GET /api/v1/backends` und `GET /api/v1/recordings`. `recordings.view@backend` muss der Administrator ausdrücklich für dieses Gerät gewähren; der für Live-TV vorhandene Grant `channels.view` genügt **nicht**.
@@ -142,4 +174,4 @@ Die Mediathek ist **nicht auf 20 oder 100 Aufnahmen insgesamt begrenzt**. Es wer
 
 **Status:** Code/Tests zunächst source-only; die TV-Installation und der reale Grant-/Mehrseiten-Test müssen separat bestätigt werden. Nach einer VS-Code-`Run Project`-Neuinstallation kann das lokale Device-Credential verlorengehen; dadurch entsteht auf dem Server **kein** automatisch wiederverwendbares Device. Bestehende Geräte nicht blind löschen oder erneut koppeln. Die VDR-`channels.conf`-Senderreihenfolge bleibt unabhängig davon eine offene API-v1-Serverfrage.
 
-**Lokaler Samsung-Workflow:** `git pull origin main`, `npm.cmd run build:tv`, `npm.cmd run check`, anschließend in der bestehenden VS-Code-Tizen-Extension **Build Project** und **Run Project**. Nur ausführen, wenn ein TV-Retest ausdrücklich beabsichtigt ist.
+**Lokaler Samsung-Workflow:** Für wiederholte Slices nach einer separat genehmigten WITs-Erstinstallation **nur** `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:watch` verwenden. `Build Project → Run Project` kann die Device-Anmeldung löschen; [sicheren Watch-Pfad oben](#entwicklungs-updates-ohne-erneutes-geräte-pairing--samsung-wits-watch-2026-10-25) beachten.
