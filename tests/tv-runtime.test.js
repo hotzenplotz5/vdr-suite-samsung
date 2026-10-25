@@ -101,7 +101,7 @@ function simulate() {
     tizen: { tvinputdevice: { registerKey() {} }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
     webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
-  runInNewContext(runtime, { document, window });
+  runInNewContext(runtime, { document, window, URL });
   return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode };
 }
 
