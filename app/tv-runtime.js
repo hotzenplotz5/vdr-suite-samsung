@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S4.1","build":"659eaf54fff5","label":"Samsung v0.1.0 · S4.1 · b659eaf54fff5"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S4.1","build":"18e9dca4c3e1","label":"Samsung v0.1.0 · S4.1 · b18e9dca4c3e1"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -944,6 +944,8 @@
     var liveBusy = false;
     var liveRun = 0;
     var liveRows = 0;
+    var liveFocusIds = [];
+    var liveCurrentChannels = [];
     var pairingRequest = null;
     var pairingBase = null;
     var pairingApproved = false;
@@ -983,8 +985,12 @@
   
     function focusRows() {
       if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
-      if (currentView === "live") return [NAV_ROW,
-        ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
+      if (currentView === "live") {
+        var liveFocusRows = [NAV_ROW,
+          ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
+        liveFocusIds.forEach(function (id) { liveFocusRows.push([id]); });
+        return liveFocusRows;
+      }
       if (currentView === "recordings") {
         var rows = [NAV_ROW,
           ["detail-recordings-home", "detail-recordings-load",
@@ -1348,7 +1354,18 @@
     }
   
     function clearLiveRows() {
+      if (currentView === "live" && liveFocusIds.indexOf(focusedId) >= 0)
+        setFocus("detail-live-preview");
+      liveFocusIds.forEach(function (id) {
+        var item = controls[id];
+        delete controls[id];
+        var index = items.indexOf(item);
+        if (index !== -1) items.splice(index, 1);
+      });
+      liveFocusIds = [];
+      liveCurrentChannels = [];
       liveRows = 0;
+      if (rowMemory.live) rowMemory.live = {};
       if (liveList) {
         liveList.textContent = "";
         liveList.hidden = true;
@@ -1364,9 +1381,17 @@
     function appendLiveRows(channels) {
       if (!liveList) return;
       channels.forEach(function (ch) {
-        // Untrusted server text is always inserted via textContent, never HTML.
+        // Same single D-Pad focus owner as recordings; no separate key handler.
+        // Untrusted server text is inserted only via textContent.
+        var index = liveCurrentChannels.length;
+        var id = "channel-row-" + String(index);
         var row = document.createElement("li");
-        row.className = "live-channel-row";
+        row.className = "live-channel-row tv-focusable";
+        row.tabIndex = -1;
+        row.setAttribute("role", "button");
+        row.setAttribute("data-focus-id", id);
+        row.setAttribute("data-channel-index", String(index));
+        row.setAttribute("aria-label", String(ch.channelNumber) + " · " + ch.name);
         var name = document.createElement("strong");
         name.textContent = String(ch.channelNumber) + " · " + ch.name;
         var meta = document.createElement("span");
@@ -1379,8 +1404,15 @@
         meta.textContent = details.join(" · ");
         row.appendChild(name);
         row.appendChild(meta);
+        controls[id] = row;
+        items.push(row);
+        liveFocusIds.push(id);
+        liveCurrentChannels.push(ch);
         liveList.appendChild(row);
         liveRows += 1;
+        row.addEventListener("click", function () {
+          if (setFocus(id)) activate(row);
+        });
       });
       liveList.hidden = liveRows === 0;
     }
@@ -1396,6 +1428,8 @@
         if (!result.ok) { showLiveError(result); return; }
         var response = result.value;
         if (!cursor) clearLiveRows();
+        var firstNewRow = liveFocusIds.length;
+        var jumpToNewPage = !!cursor && focusedId === "detail-live-more";
         appendLiveRows(response.items);
         liveCursor = response.page.hasMore ? response.page.nextCursor : null;
         if (liveBackendName) liveBackendName.textContent =
@@ -1407,6 +1441,10 @@
           "Nur freigegebene Senderdaten · " +
           (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
           " · Wiedergabe noch nicht freigeschaltet.");
+        // The More button sits above the list. Focus the first newly appended
+        // channel, without traversing all preceding pages.
+        if (jumpToNewPage && liveFocusIds[firstNewRow])
+          setFocus(liveFocusIds[firstNewRow]);
       });
     }
   
@@ -1703,9 +1741,9 @@
       if (view !== "settings") resetConfirmationId = null;
       if (view === "live") {
         // Keep S2.2 DOWN-to-first-detail-button focus behavior.
+        clearLiveRows();
         if (!rowMemory.live) rowMemory.live = {};
         rowMemory.live[1] = "detail-live-home";
-        clearLiveRows();
         liveCredential = null;
         liveBackends = [];
         liveBackendIndex = 0;
@@ -1826,6 +1864,16 @@
       var liveAction = item.getAttribute("data-live-action");
       if (liveAction) {
         loadLiveChannels(liveAction);
+        return;
+      }
+      var channelIndex = item.getAttribute("data-channel-index");
+      if (channelIndex !== null && currentView === "live") {
+        var chosenChannel = liveCurrentChannels[Number(channelIndex)];
+        if (chosenChannel) {
+          liveStatus("ready", String(chosenChannel.channelNumber) + " · " + chosenChannel.name,
+            "Sender ausgewählt · Wiedergabe folgt in der AVPlay-Phase. " +
+            "Mit ↑/↓ weitere Sender wählen.");
+        }
         return;
       }
       var recordingIndex = item.getAttribute("data-recording-index");
