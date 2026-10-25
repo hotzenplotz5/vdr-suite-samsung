@@ -47,6 +47,12 @@ function boot() {
   var recordingCursors = [null];
   var recordingPageIndex = 0;
   var recordingNextCursor = null;
+  var recordingMode = "folders";
+  var recordingFolderId = null;
+  var recordingFolderName = "VDR";
+  var recordingFolderStack = [];
+  var recordingFolderOffset = 0;
+  var recordingFolderHasMore = false;
   var recordingFocusIds = [];
   var recordingCurrentPageItems = [];
   var recordingBusy = false;
@@ -102,7 +108,8 @@ function boot() {
     if (currentView === "recordings") {
       var rows = [NAV_ROW,
         ["detail-recordings-home", "detail-recordings-load",
-         "detail-recordings-backend", "detail-recordings-previous"]];
+         "detail-recordings-backend", "detail-recordings-up",
+         "detail-recordings-all", "detail-recordings-previous"]];
       recordingFocusIds.forEach(function (id) { rows.push([id]); });
       rows.push(["detail-recordings-next"]);
       return rows;
@@ -652,15 +659,20 @@ function boot() {
       row.tabIndex = -1;
       row.setAttribute("role", "button");
       row.setAttribute("data-focus-id", id);
-      row.setAttribute("data-recording-index", String(index));
-      row.setAttribute("aria-label", recording.title || "Aufnahme ohne Titel");
+      if (recording.kind === "folder")
+        row.setAttribute("data-folder-index", String(index));
+      else row.setAttribute("data-recording-index", String(index));
+      row.setAttribute("aria-label", recording.kind === "folder" ?
+        "VDR-Ordner " + recording.name : (recording.title || "Aufnahme ohne Titel"));
       controls[id] = row;
       items.push(row);
       recordingFocusIds.push(id);
       var title = document.createElement("strong");
-      title.textContent = recording.title || "Ohne Titel";
+      title.textContent = recording.kind === "folder" ?
+        "Ordner: " + recording.name : (recording.title || "Ohne Titel");
       var details = document.createElement("span");
       var info = [];
+      if (recording.kind === "folder") info.push(String(recording.recordingCount) + " Aufnahmen");
       if (recording.recordedAt) {
         info.push("Aufgenommen: " +
           recording.recordedAt.replace("T", " ").slice(0, 16));
@@ -679,6 +691,63 @@ function boot() {
     });
     recordingList.hidden = rows.length === 0;
     recordingList.scrollTop = 0;
+  }
+
+  function fetchRecordingFolderPage(run, folderId, offset) {
+    if (!recordingCredential || !recordingBackends.length || run !== recordingRun) return;
+    var backend = recordingBackends[recordingBackendIndex];
+    recordingBusy = true;
+    recordingStatus("loading","Lade VDR-Verzeichnis",recordingFolderName);
+    recordingCatalog.listFolders(recordingCredential,backend.backendId,folderId,offset,
+      function (result) {
+        if (run !== recordingRun || recordingMode !== "folders" ||
+            recordingFolderId !== folderId) return;
+        recordingBusy = false;
+        if (!result.ok) { showRecordingError(result); return; }
+        recordingFolderOffset = offset;
+        recordingFolderHasMore = result.value.page.hasMore;
+        showRecordingRows(result.value.items);
+        if (recordingBackendName) recordingBackendName.textContent =
+          "VDR: " + recordingFolderName + " · Backend: " + backend.name +
+          " · Seite " + String(Math.floor(offset / 100) + 1);
+        if (offset > 0 && recordingFocusIds.length) setFocus(recordingFocusIds[0]);
+        recordingStatus(result.value.items.length ? "ready" : "empty",
+          result.value.items.length ?
+            String(result.value.items.length) + " VDR-Verzeichniseinträge" :
+            "VDR-Verzeichnis leer",
+          "Ordner mit OK öffnen · Aufnahmen mit OK auswählen · " +
+          (recordingFolderHasMore ? "Weitere Einträge über „Weitere Aufnahmen“" :
+            "Letzte Verzeichnisseite") + " · Genres folgen später.");
+      });
+  }
+  function openRecordingFolder(folder) {
+    if (recordingMode !== "folders" || recordingBusy ||
+        !folder || folder.kind !== "folder" ||
+        !/^fld1_[0-9a-f]{32}$/.test(folder.folderId)) return;
+    if (recordingFolderStack.length >= 32) {
+      recordingStatus("error","Ordnertiefe begrenzt",
+        "Maximal 32 Ordnerstufen; zurückgehen oder anderen Ordner wählen.");
+      return;
+    }
+    recordingFolderStack.push({
+      folderId:recordingFolderId,name:recordingFolderName,offset:recordingFolderOffset
+    });
+    recordingFolderId = folder.folderId;
+    recordingFolderName = folder.name;
+    recordingFolderOffset = 0;
+    clearRecordingRows();
+    fetchRecordingFolderPage(++recordingRun, recordingFolderId, 0);
+  }
+  function recordingFolderUp() {
+    if (recordingMode !== "folders" || recordingBusy ||
+        !recordingFolderStack.length) return false;
+    var parent = recordingFolderStack.pop();
+    recordingFolderId = parent.folderId;
+    recordingFolderName = parent.name;
+    recordingFolderOffset = parent.offset;
+    clearRecordingRows();
+    fetchRecordingFolderPage(++recordingRun,recordingFolderId,recordingFolderOffset);
+    return true;
   }
 
   function fetchRecordingPage(run, cursor, pageIndex) {
@@ -715,6 +784,28 @@ function boot() {
 
   function loadRecordings(action) {
     if (recordingBusy) return;
+    if (action === "up") {
+      if (!recordingFolderUp())
+        recordingStatus("ready","Oberstes Verzeichnis","Kein übergeordneter VDR-Ordner.");
+      return;
+    }
+    if (action === "previous" && recordingMode === "folders") {
+      if (!recordingFolderOffset) {
+        recordingStatus("ready","Erste Verzeichnisseite",
+          "Zum übergeordneten Ordner „Ordner hoch“ verwenden.");
+        return;
+      }
+      fetchRecordingFolderPage(recordingRun,recordingFolderId,
+        Math.max(0,recordingFolderOffset-100));
+      return;
+    }
+    if (action === "next" && recordingMode === "folders") {
+      if (recordingFolderHasMore)
+        fetchRecordingFolderPage(recordingRun,recordingFolderId,
+          recordingFolderOffset+100);
+      else recordingStatus("ready","Letzte Verzeichnisseite","Keine weiteren Einträge.");
+      return;
+    }
     if (action === "previous") {
       if (recordingPageIndex === 0 || !recordingCredential) {
         recordingStatus("empty", "Erste Seite",
@@ -741,8 +832,15 @@ function boot() {
       recordingCursors = [null];
       recordingPageIndex = 0;
       recordingNextCursor = null;
+      recordingFolderId = null;
+      recordingFolderName = "VDR";
+      recordingFolderStack = [];
+      recordingFolderOffset = 0;
+      recordingFolderHasMore = false;
       clearRecordingRows();
-      fetchRecordingPage(++recordingRun, null, 0);
+      if (recordingMode === "folders")
+        fetchRecordingFolderPage(++recordingRun,null,0);
+      else fetchRecordingPage(++recordingRun,null,0);
       return;
     }
     // Credentials remain in Tizen KeyManager; no localStorage or automatic pairing.
@@ -761,6 +859,12 @@ function boot() {
         "Die sichere Geräteanmeldung gehört zu einem anderen Server. Adresse prüfen.");
       return;
     }
+    recordingMode = action === "all" ? "all" : "folders";
+    recordingFolderId = null;
+    recordingFolderName = "VDR";
+    recordingFolderStack = [];
+    recordingFolderOffset = 0;
+    recordingFolderHasMore = false;
     recordingCredential = saved.credential;
     recordingBackends = [];
     recordingBackendIndex = 0;
@@ -794,7 +898,8 @@ function boot() {
             "Der Administrator muss recordings.view für ein Backend freigeben.");
           return;
         }
-        fetchRecordingPage(run, null, 0);
+        if (recordingMode === "folders") fetchRecordingFolderPage(run,null,0);
+        else fetchRecordingPage(run, null, 0);
       });
     });
   }
@@ -836,6 +941,12 @@ function boot() {
       recordingCursors = [null];
       recordingPageIndex = 0;
       recordingNextCursor = null;
+      recordingMode = "folders";
+      recordingFolderId = null;
+      recordingFolderName = "VDR";
+      recordingFolderStack = [];
+      recordingFolderOffset = 0;
+      recordingFolderHasMore = false;
       if (recordingBackendName)
         recordingBackendName.textContent = "Noch kein Backend geladen";
       recordingStatus("offline", "Bereit für echte Aufnahmen",
@@ -900,6 +1011,11 @@ function boot() {
   }
 
   function goBack() {
+    if (currentView === "recordings" && recordingFolderStack.length &&
+        recordingMode === "folders") {
+      recordingFolderUp();
+      return;
+    }
     if (currentView === "home") {
       quitApp();
       return;
@@ -940,6 +1056,11 @@ function boot() {
     var liveAction = item.getAttribute("data-live-action");
     if (liveAction) {
       loadLiveChannels(liveAction);
+      return;
+    }
+    var folderIndex = item.getAttribute("data-folder-index");
+    if (folderIndex !== null && currentView === "recordings") {
+      openRecordingFolder(recordingCurrentPageItems[Number(folderIndex)]);
       return;
     }
     var recordingIndex = item.getAttribute("data-recording-index");
