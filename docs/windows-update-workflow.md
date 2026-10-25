@@ -6,88 +6,38 @@
 
 Die Windows-/VS-Code-/Tizen-Umgebung erzeugt bzw. verändert regelmäßig lokale Dateien:
 
-- `app/tv-runtime.js` — **von Git verwaltetes, generiertes** Runtime-Bundle. Git for Windows kann LF/CRLF-Zeilenenden verändern; `git pull` kann deswegen selbst dann abbrechen, wenn nur diese Datei als geändert erscheint.
+- `app/tv-runtime.js` — **von Git verwaltetes, generiertes** Runtime-Bundle. Git for Windows konnte bei `core.autocrlf=true` CRLF auschecken, während `npm run build:tv` LF schreibt. **Die neue `.gitattributes`-Regel `app/tv-runtime.js text eol=lf` verhindert künftig diesen Zeilenendenkonflikt unabhängig von globalen Git-Einstellungen.** Die alte Windows-Arbeitskopie braucht einmalig einen gezielten Restore.
 - `.vscode/`, `app/.tizen-rds/`, `app/Debug/`, `app/tizen_web_project.yaml` — gerätespezifische bzw. lokal erzeugte Tizen-/Editor-Dateien. Sie dürfen **nicht** gelöscht oder überschrieben werden. Ihre Existenz ist **kein** Grund, die Installation abzubrechen.
 
 **Nicht erneut verwenden:** pauschales `git status --porcelain` als Abbruchbedingung, `git stash` als vermeintlich zuverlässige Bereinigung der Runtime, `git stash pop` nach dem Update, `git clean`, `git reset --hard`, Löschen der Tizen-/VS-Code-Verzeichnisse oder ein allgemeines `git restore .`. Kein erzwungenes Überschreiben, falls weitere bearbeitete Quelldateien vorhanden sind.
 
 **Reihenfolge:** Erst vorhandene generierte Runtime sichern und **nur diese** bei Bedarf gezielt auf HEAD zurücksetzen; dann `git pull --ff-only`; **erst danach** `npm.cmd run build:tv` und `npm.cmd run check`. Vor Pull nicht bereits die Runtime neu generieren.
 
-## Wiederholbarer PowerShell-Block (im Repository-Hauptordner)
+## Einmalige Reparatur einer alten Windows-Arbeitskopie (PowerShell)
 
-Der Block verwendet keinen privaten Benutzerpfad; er muss im bestehenden Samsung-Git-Repository in PowerShell laufen. Es werden **keine** unversionierten Dateien verändert oder gelöscht. Bei unerwarteten Änderungen bricht er ohne einen allgemeinen Reset ab.
+**Nicht mit einem riesigen Sammelskript wiederholen.** Prüfe zunächst mit `git status --short --untracked-files=no`, dass **keine weiteren veränderten oder vorgemerkten Quelldateien** existieren. Falls doch, hier stoppen und diese Änderungen getrennt untersuchen.
+
+Nur falls `app/tv-runtime.js` die einzige veränderte getrackte Datei ist und nichts vorgemerkt ist, im bestehenden Repo ausführen:
 
 ```powershell
-& {
-    $ErrorActionPreference = "Stop"
+# Nur die generierte Runtime extern sichern; keine lokalen TV-SDK-Dateien anfassen.
+Copy-Item app/tv-runtime.js (Join-Path $env:TEMP ("samsung-runtime-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".js"))
 
-    $repo = (git rev-parse --show-toplevel)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repo)) {
-        throw "Bitte PowerShell im Samsung-Git-Repository oeffnen."
-    }
+# Einmalig LF statt Windows-CRLF beim Zurueckschreiben erzwingen.
+git -c core.autocrlf=false -c core.eol=lf restore --source=HEAD --worktree -- app/tv-runtime.js
 
-    Set-Location $repo
+# Hier muss fuer getrackte Dateien KEINE Aenderung mehr stehen.
+git -c core.autocrlf=false status --short --untracked-files=no
 
-    $branch = (git branch --show-current).Trim()
-    if ($LASTEXITCODE -ne 0 -or $branch -ne "main") {
-        throw "Abbruch: Erwarteter Branch main nicht aktiv."
-    }
-
-    # Unversionierte VS-Code-/Tizen-Dateien bewusst NICHT als Fehler bewerten.
-    $changed = @(git diff --name-only HEAD)
-    if ($LASTEXITCODE -ne 0) { throw "Git-Diff fehlgeschlagen." }
-
-    $other = @($changed | Where-Object { $_ -ne "app/tv-runtime.js" })
-    if ($other.Count -gt 0) {
-        $other | Out-Host
-        throw "Abbruch: Weitere bearbeitete Quelldateien; nichts zuruecksetzen."
-    }
-
-    $staged = @(git diff --cached --name-only)
-    if ($LASTEXITCODE -ne 0 -or $staged.Count -gt 0) {
-        throw "Abbruch: Vorgemerkte Git-Aenderungen vorhanden."
-    }
-
-    # Nur die bekannte GENERIERTE Runtime: extern sichern, Hash pruefen,
-    # dann ausschliesslich diese Datei auf den lokalen HEAD zuruecksetzen.
-    if ($changed -contains "app/tv-runtime.js") {
-        $source = Join-Path $repo "app/tv-runtime.js"
-        $backup = Join-Path $env:TEMP (
-            "samsung-runtime-backup-" +
-            (Get-Date -Format "yyyyMMdd-HHmmss-fff") + ".js"
-        )
-
-        Copy-Item -LiteralPath $source -Destination $backup -ErrorAction Stop
-        $before = (Get-FileHash $source -Algorithm SHA256).Hash
-        $after = (Get-FileHash $backup -Algorithm SHA256).Hash
-        if ($before -ne $after) { throw "Runtime-Sicherung fehlgeschlagen." }
-        Write-Host "Gesichert: $backup"
-
-        git restore --source=HEAD --worktree -- app/tv-runtime.js
-        if ($LASTEXITCODE -ne 0) { throw "Gezieltes Restore fehlgeschlagen." }
-    }
-
-    $remaining = @(git status --porcelain --untracked-files=no)
-    if ($LASTEXITCODE -ne 0 -or $remaining.Count -gt 0) {
-        $remaining | Out-Host
-        throw "Weitere versionierte Aenderungen vorhanden; Abbruch."
-    }
-
-    git pull --ff-only origin main
-    if ($LASTEXITCODE -ne 0) { throw "Git-Pull fehlgeschlagen." }
-
-    npm.cmd run build:tv
-    if ($LASTEXITCODE -ne 0) { throw "TV-Build fehlgeschlagen." }
-
-    npm.cmd run check
-    if ($LASTEXITCODE -ne 0) { throw "Samsung-Tests fehlgeschlagen." }
-
-    Write-Host "Samsung-Quellstand aktualisiert; Build und Tests erfolgreich." -ForegroundColor Green
-    Write-Host "Jetzt signiertes Tizen Build Project, NICHT Run Project."
-}
+# Nur nach sauberem Status:
+git -c core.autocrlf=false pull --ff-only origin main
+npm.cmd run build:tv
+npm.cmd run check
 ```
 
-**Wichtig:** `git restore --source=HEAD --worktree -- app/tv-runtime.js` darf **nur** nach erfolgreicher externer Sicherung und nur bei dieser ausdrücklich als generiert geprüften Datei erfolgen. Bei zusätzlichen Änderungen nicht improvisieren, sondern Ursachen untersuchen. Der externe Backup-Pfad wird lediglich lokal ausgegeben und niemals committed. Eine eventuelle ältere Stash-Sicherung bleibt unberührt. Bei unverändertem Git-Stand reicht `npm.cmd run build:tv` gefolgt von `npm.cmd run check`; **kein unnötiger Pull vor jedem Tizen-Build**.
+**Wenn der Status nach `restore` weiter `M app/tv-runtime.js` zeigt: NICHT erneut pullen oder restore/stash wiederholen.** Stattdessen die Ausgabe von `git ls-files --eol -- app/tv-runtime.js`, `git diff --numstat -- app/tv-runtime.js` und `git config --show-origin --get core.autocrlf` prüfen. Der echte Grund könnte dann über die Zeilenenden hinausgehen (etwa ein Editor, Git-Filter oder ein staged Change). Ein Git-Pull darf solche lokalen Änderungen weiterhin nicht überschreiben.
+
+**Nach dem einmaligen erfolgreichen Pull gilt `.gitattributes` verbindlich:** Git checkt `app/tv-runtime.js` mit LF aus; `npm run build:tv` generiert LF. Die besondere Restore-/Pull-Reparatur ist bei späteren sauberen Checkouts **nicht mehr erforderlich**. Beim reinen TV-Paketbau in einem bereits aktuellen Checkout nur `npm.cmd run build:tv`, `npm.cmd run check`, danach `Tizen > Build Project` ausführen. Kein unnötiges `git pull`.
 
 ## Tizen-Build und Installation sind separate Schritte
 

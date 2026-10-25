@@ -1,0 +1,3 @@
+# Keep generated TV bundle byte-stable across Windows/macOS/Linux checkouts.
+# A CRLF working copy makes git pull refuse updates to this tracked file.
+app/tv-runtime.js text eol=lf
