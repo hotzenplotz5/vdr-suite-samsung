@@ -22,7 +22,11 @@ const files = [
   "app/src/api/device-pairing.js",
   "app/src/api/channel-catalog.js",
   "app/src/api/recording-catalog.js",
-  "app/src/main.js"
+  "app/src/main.js",
+  "app/index.html",
+  "app/styles.css",
+  "app/config.xml",
+  "package.json"
 ];
 
 test("Tizen TV bundle accepts Windows CRLF checkout yet detects real changes", () => {
