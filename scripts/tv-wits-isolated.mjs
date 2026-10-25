@@ -131,11 +131,27 @@ export function verifyStaging({requireWitsConfig=true, source=production, target
   return problems;
 }
 
+// Deliberate one-shot visual smoke probe. Do this ONLY while DEV WITs Watch is running.
+// Changes the DEV COPY only; the next tv:dev:prepare restores the original markup.
+export function smoke({source=production,target=staging}={}) {
+  const problems=verifyStaging({source,target,requireWitsConfig:true});
+  if (problems.length) throw Error("DEV smoke blocked: "+problems.join("; "));
+  const path=join(target,"index.html");
+  const html=readFileSync(path,"utf8");
+  const from="<strong>VDR-Suite</strong>";
+  const to="<strong>VDR-Suite · DEV-RELOAD-TEST</strong>";
+  if (!html.includes(from)) throw Error("DEV visual smoke anchor missing");
+  writeFileSync(path,html.replace(from,to),"utf8");
+  console.log("DEV-only visual marker set. WITs Watch should sync it; NO direct TV action here.");
+  console.log("After TV verification: npm.cmd run tv:dev:prepare restores clean staging.");
+}
+
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
     if (process.argv.includes("--identity")) printIdentity();
     else if (process.argv.includes("--prepare")) prepare();
-    else throw Error("Use --identity or --prepare");
+    else if (process.argv.includes("--smoke")) smoke();
+    else throw Error("Use --identity, --prepare or --smoke");
   } catch(e) {
     console.error("WITs DEV blocked: "+e.message);
     process.exitCode=1;
