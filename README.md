@@ -140,6 +140,10 @@ Quellenänderungen erfordern npm run build:tv und danach npm run check. Tests la
 
 
 
+## Produktive Samsung-App aktualisieren (S7.2 — Source/CI, Hardware offen)
+
+**Wichtig:** `Run Project` ist kein datenbewahrendes Update: Eine Tizen-Studio-Testinstallation kann vorher deinstallieren und damit KeyManager-Daten löschen. Der neue **rein lokale** WGT-Preflight liest ein fertig signiertes Paket und vergleicht die Original-App-/Paketkennung, aktuelle Quellen, höhere Version und das Autor-Zertifikat mit einem **nachweislich bereits installierten alten WGT**. Kein TV-Zugriff, keine automatische Installation, keine Credential-Migration. Ohne alte Paket-/Signaturidentität oder belegte datenbewahrende Installationsmethode ist eine TV-Aktualisierung nicht freigegeben. Vollständiger Ablauf: [S7.2 Produktions-Update](docs/production-update-s7-2.md). Hardware-PASS bleibt offen.
+
 ## WITs-Updates nur als isolierte DEV-App (S7.1 — Source, Hardware offen)
 
 **Kritische Korrektur 2026-10-25:** WITs hängt `WITs` an die Tizen-Application-ID an, **ändert aber nicht zuverlässig die Paket-ID**. `wits --start` im normalen `app/`-Projekt könnte daher `VDRSuiteTV` (bestehende Geräteanmeldung!) treffen. **Dort niemals WITs Start ausführen.** Das bisherige `tv:watch` wurde auf eine vollständig getrennte lokale Entwicklungskopie `.tizen-wits-dev/` umgestellt.

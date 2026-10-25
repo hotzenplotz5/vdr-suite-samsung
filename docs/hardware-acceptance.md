@@ -268,3 +268,18 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 **Quellcode-Befund:** WITs erzeugt aus der Produktions-App `VDRSuiteTV.VDRSuite` eine Host-App-ID `VDRSuiteTV.VDRSuiteWITs`, ohne in `hostAppHelper.setDefaultConfigData` die Tizen-Paketkennung `VDRSuiteTV` zu ändern. Der von WITs genutzte Paketbauer verändert sie in `buildWidget` ebenfalls nicht. Die bislang empfohlene Verwendung der produktiven `app/`-Quelle für WITs ist deshalb **gesperrt**. Die Fehlermeldung `Failed to launchApp` mit WITs Watch ist mit einer fehlenden WITs-Host-App vereinbar und rechtfertigt keine Installation der Produktionskennung.
 
 **Neuer Kandidat:** lokales, getrenntes Paket `VDRSuitDev` und WITs-Host `VDRSuitDev.VDRSuiteWITs`. Ein separater DEV-Device-Account kann ausdrücklich einmalig notwendig werden, dessen KeyManager-Persistenz nach Live-Reload und Neustart muss am TV geprüft werden. Keine Produktions-App wurde durch diesen Quell-Slice deinstalliert, und keine neue Dev-App wurde vom Assistenten installiert. Historische Hardware-PASS für Aufnahme-Paginierung bleiben gültig; S4.2/S5.1 sowie Update-Persistenz bleiben **OPEN**. [Vollständige S7.1-Gates](wits-isolated-development.md).
+
+
+## S7.2 – Produktions-WGT-Preflight gegen das wirklich installierte Paket (2026-10-25)
+
+**Quell-/GitHub-Stand:** `scripts/tv-update-preflight.mjs` liest fertige WGT-Pakete ausschließlich offline, vergleicht Paket-/App-ID, Version, eingebettete Quellen und SHA-256-Fingerabdruck des öffentlichen Author-X509-Zertifikats mit einem als installiert nachgewiesenen Basis-WGT. Negative Tests (DEV-Kollision, anderer Autor, Downgrade, veraltete Runtime, fehlende Signatur, fehlerhaftes ZIP) ergänzen diesen Slice. Keine TV-Installation/Deinstallation und keine KeyManager-/Backend-Änderungen.
+
+**Weiter offen – kein Hardware-PASS:**
+
+- [ ] Signiertes altes Basis-WGT **eindeutig** der installierten produktiven App zuordnen. `sdb applist` beweist nur die App-ID, nicht die Identität des ursprünglich signierten WGT.
+- [ ] Bisheriges Author-Signaturzertifikat nachweisen; die lokale WITs-`profiles.xml` wurde nicht gefunden, sagt aber nichts Sicheres über das Zertifikat des existierenden Tizen-Studio-Produktions-Builds.
+- [ ] Neues Paket mit **höherer** Tizen-Version und **gleichem** Autor-Zertifikat signieren und Preflight gegen Basispaket bestehen.
+- [ ] Für Samsung Tizen 5.5 **konkret datenbewahrende** Produktions-Installations-/Verteilmethode belegen. Tizen-Studio-`Run Project` ist kein solcher Beleg (Testinstallation kann vorher deinstallieren).
+- [ ] Vorher dieselbe aktive Device-ID und KeyManager-Anmeldung, nach Update und Neustart unveränderte Device-ID, gültige Authentifizierung und gleiche Grants beobachten.
+
+**STOP bei unbekanntem Basis-WGT, verlorener Author-Identität, abweichender Paketkennung, drohendem Uninstall oder fehlender Hardware-Freigabe.** Source-PASS bedeutet nicht TV-PASS. Siehe [S7.2](production-update-s7-2.md).
