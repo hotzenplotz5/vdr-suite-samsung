@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"122e120c2952","label":"Samsung v0.1.0 · S5.1 · b122e120c2952"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"9f224a53fbd2","label":"Samsung v0.1.0 · S5.1 · b9f224a53fbd2"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1682,6 +1682,13 @@
         if (currentState.state !== "conflict") {
           pairMessage(currentState.text + " Nach einer deinstallierenden Testinstallation " +
             "ist das Credential nicht wiederherstellbar; niemals alte Server-Geräte auf Verdacht löschen.");
+          return;
+        }
+        // Do not recover a credential for a different selected server.
+        var requestedBase = serverInput && normalizeSuiteBase(serverInput.value);
+        if (requestedBase && pairedCredential && requestedBase !== pairedCredential.base) {
+          pairMessage("Die Sitzung gehört zu einem anderen Server. Adresse prüfen; " +
+            "keine lokale Wiederherstellung, keine neue Kopplung.");
           return;
         }
         // Only in the running process can we possess a credential that was
