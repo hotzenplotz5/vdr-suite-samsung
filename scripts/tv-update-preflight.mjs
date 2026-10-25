@@ -13,6 +13,16 @@ const APP_ID="VDRSuiteTV.VDRSuite";
 const PACKAGE_ID="VDRSuiteTV";
 
 function fail(reason) {throw Error(reason);}
+
+// ZIP CRC32 is an archive-integrity check, not a replacement for XMLDSig validation.
+export function crc32(buffer) {
+  let value=0xffffffff;
+  for(const byte of buffer) {
+    value^=byte;
+    for(let bit=0;bit<8;bit++) value=(value>>>1) ^ ((value&1)?0xedb88320:0);
+  }
+  return (value^0xffffffff)>>>0;
+}
 function readU16(buf,at) {
   if (at<0||at+2>buf.length) fail("Truncated WGT ZIP");
   return buf.readUInt16LE(at);
@@ -45,7 +55,7 @@ export function zipEntries(buffer) {
   for(let i=0;i<count;i++) {
     if(readU32(buffer,at)!==0x02014b50) fail("Invalid ZIP central entry");
     const flags=readU16(buffer,at+8), method=readU16(buffer,at+10);
-    const compressed=readU32(buffer,at+20), size=readU32(buffer,at+24);
+    const crc=readU32(buffer,at+16), compressed=readU32(buffer,at+20), size=readU32(buffer,at+24);
     const nameLength=readU16(buffer,at+28);
     const extra=readU16(buffer,at+30), comment=readU16(buffer,at+32);
     const offset=readU32(buffer,at+42);
@@ -60,7 +70,7 @@ export function zipEntries(buffer) {
       fail("Unsafe or duplicate WGT filename");
     const unixMode=readU32(buffer,at+38)>>>16;
     if((unixMode&0xf000)===0xa000) fail("Symlinks are not accepted in WGT");
-    entries.set(name.toLowerCase(),{name,flags,method,compressed,size,offset});
+    entries.set(name.toLowerCase(),{name,flags,method,crc,compressed,size,offset});
     at=nameEnd+extra+comment;
     if(at>start+length) fail("Invalid ZIP directory bounds");
   }
@@ -71,6 +81,11 @@ export function zipEntries(buffer) {
     const o=item.offset;
     if(readU32(buffer,o)!==0x04034b50) fail("Invalid ZIP local header");
     if(readU16(buffer,o+8)!==item.method) fail("Conflicting ZIP compression method");
+    if(readU16(buffer,o+6)!==item.flags) fail("Conflicting ZIP entry flags");
+    if(!(item.flags&8) && (readU32(buffer,o+14)!==item.crc ||
+                           readU32(buffer,o+18)!==item.compressed ||
+                           readU32(buffer,o+22)!==item.size))
+      fail("Conflicting ZIP entry lengths or CRC");
     const n=readU16(buffer,o+26), e=readU16(buffer,o+28);
     const pos=o+30+n+e;
     if(pos+item.compressed>start) fail("Invalid ZIP data bounds");
@@ -78,6 +93,7 @@ export function zipEntries(buffer) {
     const data=buffer.subarray(pos,pos+item.compressed);
     const decoded=item.method===0?data:inflateRawSync(data,{maxOutputLength:MAX_ENTRY});
     if(decoded.length!==item.size) fail("ZIP entry size mismatch");
+    if(crc32(decoded)!==item.crc) fail("WGT ZIP entry CRC mismatch: "+name);
     return decoded;
   }
   return {names:[...entries.values()].map(x=>x.name),file};
