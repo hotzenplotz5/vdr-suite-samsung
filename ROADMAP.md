@@ -67,9 +67,13 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 ## Phase S7 – Verteilung/Wartung
 
-Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kompatibilitätsmatrix; Store-Einreichung erst nach getrenntem Entscheid.
+- **S7.1 SOURCE IMPLEMENTIERT, TV-HARDWARE-NACHWEIS OFFEN (25.10.2026):** Samsung-Tizen-5.5-Entwicklungsupdates über **WITs Watch ohne Paket-Neuinstallation**, statt nach jedem Slice `Run Project` und damit erneutes Device-Pairing zu riskieren. `npm.cmd run tv:watch` prüft WITs-Konfiguration, Git-ignorierte Entwicklerinformationen, stabile Tizen-Paket-ID, vollständige klassische Runtime und Unit-Tests. Es ruft **ausschließlich `wits --watch`**, niemals `--start`, Install oder Uninstall auf; ohne bereits eingerichtetes WITs bricht es ab. Initiales WITs Start kann eine letzte bewusste Neuinstallation erfordern; verloren gegangene KeyManager-Credentials lassen sich nicht rekonstruieren. Siehe [Entwicklungsanleitung](docs/development-setup.md) und [Hardware-Abnahme](docs/hardware-acceptance.md).
+- **S7.2 OFFEN:** Datenbewahrender signierter Release-/Store-/Paket-Updatepfad, Signatur-/ABI-/Versionsmigration und unabhängige Hardware-Akzeptanz. WITs-Entwicklungs-Live-Reload ist **nicht gleich einem produktiven Tizen-App-Update**.
+- Weiterhin: Signierung, Reproduzierbarkeit, Versionierung, Rollback, Modell-Kompatibilitätsmatrix; Store-Einreichung nur nach gesondertem Entscheid.
 
 ## Nächster konkreter Schritt
+
+**Zuerst S7.1: sichere Entwicklungs-Updates statt Run Project.** Das gilt vor jedem weiteren Samsung-Slice: WITs-Watch einmalig einrichten; einen möglichen ersten WITs-Start als potenziell deinstallierende Neuinstallation behandeln; nach bewusstem Pairing auf realer Hardware Anmeldung vor/nach `tv:watch` prüfen. Noch kein KeyManager-Persistenz-PASS.
 
 **S4.1 Hardware-Gate (noch offen):** Aktuellen Samsung-S4.1-Client auf der realen Tizen-5.5-Hardware testen: bei bereits gespeichertem Device-Credential in die Aufnahmen wechseln und ausdrücklich **„Aufnahmen laden“** wählen. **Wichtig:** Zusätzlich zu `channels.view` muss der Administrator `recordings.view@default` für die **aktuelle** Geräteidentität freigeben. Die Senderberechtigung verleiht keinen Aufnahmezugriff. Nach erfolgreichem Laden echte Aufnahmezeilen, D-Pad-Fokus, nächste/vorherige Seite, Backendwahl und fehlende Grants prüfen. Server ist unverändert; keine automatische neue Pairing- oder Device-Grants-Operation.
 
@@ -81,7 +85,7 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 **Nichtziele:** Neue Device-Identität, automatische Berechtigungsvergabe, Vollkatalog-Abruf, Recording-Aktionen/MOVE/DELETE, Ordneransicht, EPG, AVPlay und P1 Resume.
 **Rollback:** Samsung-Client auf den vorigen `main`-Stand zurücksetzen; keine Server-DB-/Dateiänderung. TV-Installationen können lokale App-Daten löschen.
 
-### Achtung: Update kann Device-Identität löschen (Tizen 5.5)
+### Achtung: Paketinstallation kann Device-Identität löschen (Tizen 5.5)
 
 Vor einem neuen Run Project oder Installieren den aktuellen TV-App-Stand nur beenden und neu starten, dann unter Einstellungen einmal Anmeldung prüfen wählen. Damit wird zuerst die Persistenz der bereits erfolgten Kopplung geprüft, ohne die App zu ersetzen.
 
@@ -89,4 +93,4 @@ Samsung dokumentiert, dass beim Installieren einer neuen App-Version die bisheri
 https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/connecting-to-tv-device.html
 https://developer.samsung.com/smarttv/develop/faq/application-installation.html
 
-Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs Watch ermöglicht auf unterstützten Samsung-TV-Modellen Live-Reload ohne erneute Installation, verlangt jedoch ein eigenes geprüftes Setup und ist hier NICHT als sicherer Erhalt des bestehenden KeyManager-Zustands bestätigt. Kein Secret exportieren und keine automatisch wiederholte Kopplung als Workaround.
+**Neuer Quellpfad:** `npm.cmd run tv:watch` nutzt nach einmaliger WITs-Einrichtung **ausschließlich WITs Watch** (keine erneute Paketinstallation), mit Fail-Closed-Preflight. Das konkrete TV-/KeyManager-Persistenz-Gate bleibt offen. `Run Project` / `Wits Start` nicht als sicheren Updatebefehl verwenden; kein Secret exportieren und keine automatische Kopplung als Workaround.
