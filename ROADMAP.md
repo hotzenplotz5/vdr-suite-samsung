@@ -71,5 +71,5 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**S3.2 Hardware-Gate:** neues Samsung-Paket installieren, bei bereits bestätigter Serverbasis erneut „Verbindung prüfen“, Tizen-KeyManager durch „Kopplung starten“ testen und echten User-Code/Administratorfreigabe durchspielen. Credential-Ausstellung genau einmal; nur nach nachgewiesen erfolgreichem Vault-Preflight. Kein automatischer Admin-Grant.
+**S3.2 Hardware-Gate:** neues Samsung-Paket installieren, Git-ignorierte `app/device-local.js` über `npm.cmd run configure:tv -- <HTTPS-Basisadresse>` lokal konfigurieren (Tizen Studio kann beim Test-Update Web-Storage löschen); **„Kopplung starten“ prüft Public API v1 nun bei Bedarf selbst, ohne zusätzlichen Tastendruck auf „Verbindung prüfen“**. Tizen-KeyManager anschließend prüfen und echten User-Code/Administratorfreigabe durchspielen. Credential-Ausstellung genau einmal; nur nach nachgewiesen erfolgreichem Vault-Preflight. Kein automatischer Admin-Grant.
 

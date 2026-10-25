@@ -7,7 +7,8 @@
   "scripts": {
     "test": "node --test",
     "check": "node scripts/build-tv-runtime.mjs --check && node --check app/tv-runtime.js && node --check app/src/platform/startup-video.js && node --check app/src/main.js && node --check app/src/navigation/remote.js && node --check app/src/navigation/focus.js && node --check app/src/navigation/premium-focus.js && node --check app/src/views/view-state.js && node --check app/src/api/public-discovery.js && node --check app/src/api/device-pairing.js && node --check app/src/platform/device-vault.js && node --check app/src/platform/capabilities.js && node --check app/src/platform/keys.js && node --test",
-    "build:tv": "node scripts/build-tv-runtime.mjs"
+    "build:tv": "node scripts/build-tv-runtime.mjs",
+    "configure:tv": "node scripts/configure-tv-server.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -19,7 +19,7 @@ test("Samsung S2.1 loads a classic offline runtime and renders premium home", ()
   assert.match(runtime, /source: "\.\/assets\/branding\/startvideo\.mp4"/);
 });
 
-function simulate() {
+function simulate(options = {}) {
   const nodes = {};
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
@@ -101,6 +101,9 @@ function simulate() {
     tizen: { tvinputdevice: { registerKey() {} }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
     webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
+  if (options.localBase !== undefined) window.VDR_SUITE_SERVER_BASE = options.localBase;
+  if (options.localStorage !== undefined) window.localStorage = options.localStorage;
+  if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
   return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode };
 }
@@ -280,9 +283,62 @@ test("S3.2 pairing is reachable by D-pad but refuses unverified server/unsafe va
   // A server address alone must not bypass the S3.1 compatibility gate.
   sim.serverInput.value="https://example.invalid/vdr-suite";
   key(13);
-  assert.match(sim.pairResult.textContent,/Verbindung prüfen/i);
+  assert.match(sim.pairResult.textContent,/Serverprüfung fehlgeschlagen/i);
   key(10009);
   assert.equal(sim.panels.find(p=>p.route==="home").hidden,false);
+});
+
+test("Developer-local HTTPS origin restores the input after Test Build deletes localStorage", () => {
+  const sim = simulate({localBase:"https://example.test/vdr-suite"});
+  assert.equal(sim.serverInput.value,"https://example.test/vdr-suite");
+  assert.equal(sim.serverStatus.textContent,""); // boot never probes
+  assert.equal(sim.nodes["nav-home"].isFocused,true);
+});
+
+test("Saved TV origin takes precedence and valid edits persist on change or blur", () => {
+  const values = {"vdr-suite.samsung.serverBase":"https://saved.test/vdr-suite"};
+  const store = {
+    getItem(key) { return values[key] || null; },
+    setItem(key,value) { values[key]=value; }
+  };
+  const sim = simulate({localBase:"https://fallback.test/vdr-suite",localStorage:store});
+  assert.equal(sim.serverInput.value,"https://saved.test/vdr-suite");
+  sim.serverInput.value="https://edited.test/vdr-suite/";
+  sim.serverInput.change();
+  assert.equal(values["vdr-suite.samsung.serverBase"],"https://edited.test/vdr-suite");
+  sim.serverInput.value="http://insecure.test";
+  sim.serverInput.blur();
+  assert.equal(values["vdr-suite.samsung.serverBase"],"https://edited.test/vdr-suite");
+});
+
+test("Kopplung starten automatically checks public API on a restored address, never at boot", () => {
+  const calls=[];
+  function XHR() { calls.push(this);this.headers={}; }
+  XHR.prototype.open=function(method,url){this.method=method;this.url=url;};
+  XHR.prototype.setRequestHeader=function(key,val){this.headers[key]=val;};
+  XHR.prototype.send=function(){};
+  XHR.prototype.abort=function(){};
+  const sim=simulate({localBase:"https://example.test/vdr-suite",XMLHttpRequest:XHR});
+  assert.equal(calls.length,0);
+  sim.video.finish();
+  sim.nodes["nav-settings"].click();
+  const key=(keyCode)=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(40);key(40);
+  assert.equal(sim.nodes["settings-pair-start"].isFocused,true);
+  key(13);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].method,"GET");
+  assert.equal(calls[0].url,"https://example.test/vdr-suite/api/v1");
+  assert.equal(calls[0].headers.Authorization,undefined);
+  const root={apiVersion:"v1",supportedApiMajors:["v1"],links:{capabilities:"/api/v1/capabilities"},compatibilityPolicy:{},authentication:{authenticated:false}};
+  calls[0].responseURL=calls[0].url;calls[0].status=200;calls[0].responseText=JSON.stringify(root);calls[0].onload();
+  assert.equal(calls.length,2);
+  assert.equal(calls[1].url,"https://example.test/vdr-suite/api/v1/capabilities");
+  const caps={apiVersion:"v1",capabilities:[{id:"one"}],compatibility:{},links:{root:"/api/v1"}};
+  calls[1].responseURL=calls[1].url;calls[1].status=200;calls[1].responseText=JSON.stringify(caps);calls[1].onload();
+  assert.match(sim.serverStatus.textContent,/1 Fähigkeiten/);
+  assert.match(sim.pairResult.textContent,/KeyManager nicht schreib-/i);
+  assert.equal(calls.length,2); // no pairing POST without secure vault
 });
 
 test("Generated TV runtime header is safe JavaScript", () => {

@@ -73,18 +73,37 @@ function boot() {
       : ["detail-" + currentView + "-home"]];
   }
 
+  function reportDiscoverySuccess(result) {
+    discoveredBase = result.base;
+    if (connectionResult) {
+      connectionResult.setAttribute("data-connection-state", "success");
+      connectionResult.textContent = "Public API v1 erreichbar. " +
+        result.capabilityCount + " Fähigkeiten gemeldet; noch nicht angemeldet oder freigegeben.";
+    }
+    if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung offen";
+    if (topbarServerState) topbarServerState.textContent = "API v1 erreichbar";
+    message.textContent = "Einstellungen · Public API v1 erreichbar · noch kein Device-Grant";
+  }
+
+  function saveServerBase() {
+    if (!serverInput) return;
+    var base = normalizeSuiteBase(serverInput.value);
+    if (!base) return;
+    try {
+      if (window.localStorage) window.localStorage.setItem("vdr-suite.samsung.serverBase", base);
+    } catch (_) { /* Tizen test installations may erase/deny Web storage */ }
+  }
+
   function testServerConnection() {
-    if (testingConnection || !serverInput || !connectionResult) return;
+    if (testingConnection || pairingBusy || !serverInput || !connectionResult) return;
     var address = normalizeSuiteBase(serverInput.value);
     if (!address) {
       connectionResult.textContent = classifyDiscoveryError("invalid_origin");
       connectionResult.setAttribute("data-connection-state", "error");
       return;
     }
-    // Only the server base is retained, never credentials or query parameters.
-    try {
-      if (window.localStorage) window.localStorage.setItem("vdr-suite.samsung.serverBase", address);
-    } catch (_) {}
+    // Store only the validated base; credentials never use localStorage.
+    saveServerBase();
     discoveredBase = null;
     if (homeServerState) homeServerState.textContent = "Noch nicht verbunden";
     if (topbarServerState) topbarServerState.textContent = "Offline";
@@ -100,13 +119,7 @@ function boot() {
         connectionResult.textContent = classifyDiscoveryError(result.kind, result.status);
         return;
       }
-      connectionResult.setAttribute("data-connection-state", "success");
-      discoveredBase = result.base;
-      if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung offen";
-      if (topbarServerState) topbarServerState.textContent = "API v1 erreichbar";
-      message.textContent = "Einstellungen · Public API v1 erreichbar · noch kein Device-Grant";
-      connectionResult.textContent = "Public API v1 erreichbar. " +
-        result.capabilityCount + " Fähigkeiten gemeldet; noch nicht angemeldet oder freigegeben.";
+      reportDiscoverySuccess(result);
     });
   }
 
@@ -128,13 +141,31 @@ function boot() {
   }
   function pairStart() {
     if (pairingBusy || pendingCredential || pairingRequest) {
-      pairMessage("Es läuft bereits eine Kopplung. Status prüfen oder Ablauf abwarten.");return;
+      pairMessage("Es läuft bereits eine Kopplung. Status prüfen oder Ablauf abwarten."); return;
     }
     var base = serverInput && normalizeSuiteBase(serverInput.value);
-    if (!base) {pairMessage("Zuerst eine gültige HTTPS-Serveradresse eingeben.");return;}
+    if (!base) { pairMessage("Zuerst eine gültige HTTPS-Serveradresse eingeben."); return; }
+    if (testingConnection) { pairMessage("Die Verbindung wird noch geprüft."); return; }
+    saveServerBase();
     if (base !== discoveredBase) {
-      pairMessage("Bitte zuerst für genau diese Serveradresse „Verbindung prüfen“ ausführen.");return;
+      // Only an explicit pairing click starts the required anonymous discovery.
+      pairingBusy = true;
+      pairMessage("Prüfe die öffentliche API v1 vor dem Kopplungsstart …");
+      discovery.probe(base, function (result) {
+        pairingBusy = false;
+        if (!result.ok) {
+          pairMessage("Serverprüfung fehlgeschlagen: " +
+            classifyDiscoveryError(result.kind, result.status));
+          return;
+        }
+        reportDiscoverySuccess(result);
+        beginPairingOnVerifiedServer(base);
+      });
+      return;
     }
+    beginPairingOnVerifiedServer(base);
+  }
+  function beginPairingOnVerifiedServer(base) {
     pairingBusy = true;
     pairMessage("Prüfe den sicheren Tizen KeyManager …");
     vault.preflight(function (ready) {
@@ -402,11 +433,21 @@ function boot() {
   document.getElementById("remote-status").textContent = caps.tvInputDevice ? "vorhanden" : "nicht erkannt";
   registerOptionalKeys(window);
   if (serverInput) {
+    var savedBase = null;
     try {
-      var savedBase = window.localStorage && window.localStorage.getItem("vdr-suite.samsung.serverBase");
-      if (normalizeSuiteBase(savedBase)) serverInput.value = savedBase;
-    } catch (_) {}
-    serverInput.addEventListener("blur", function () { editingServerAddress = false; });
+      savedBase = window.localStorage &&
+        window.localStorage.getItem("vdr-suite.samsung.serverBase");
+    } catch (_) { /* Tizen test install can erase Web storage */ }
+    // A Git-ignored developer-local bundle restores the origin across re-installs.
+    // Valid user edits in TV Web storage take precedence over the bundle default.
+    var restoredBase = normalizeSuiteBase(savedBase) ||
+      normalizeSuiteBase(window.VDR_SUITE_SERVER_BASE);
+    if (restoredBase) serverInput.value = restoredBase;
+    serverInput.addEventListener("change", saveServerBase);
+    serverInput.addEventListener("blur", function () {
+      editingServerAddress = false;
+      saveServerBase();
+    });
   }
 
 

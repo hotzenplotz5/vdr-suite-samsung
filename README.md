@@ -104,3 +104,21 @@ Nach erfolgreicher manueller S3.1-Prüfung unter **Einstellungen** die Schaltfl�
 Samsung dokumentiert die seit Tizen 2.4 vorhandene KeyManager-API für TV unter https://developer.samsung.com/smarttv/develop/api-references/tizen-web-device-api-references/keymanager-api.html . Für Tizen 5.5 wird die veraltete `keymanager`-Privilege **nicht** ins Manifest eingetragen (API-Doku: seit Tizen 3.0 nicht deklarieren). Ob die API auf dem konkreten TV funktioniert, muss die Hardware-Abnahme zeigen.
 
 **Dateien:** `app/src/api/device-pairing.js`, `app/src/platform/device-vault.js`, `app/src/main.js`, `app/index.html`, `app/styles.css`, generierte Classic-Runtime und Tests. **Rollback:** vorherigen Samsung-Commit zurückholen und Paket neu installieren; bereits am Server ausgestellte Geräteidentitäten werden dadurch nicht widerrufen, das muss ein Administrator separat tun.
+
+## Entwicklungs-Testinstallationen: Serveradresse am Laptop hinterlegen
+
+Samsung dokumentiert: Bei einem Tizen-Studio-Test-Build kann die vorherige Test-App vor der Installation deinstalliert werden. Dabei gehen lokale Web-Storage-Daten verloren. Ein reguläres App-Update ohne Deinstallation behält die Daten dagegen. Quelle: https://developer.samsung.com/smarttv/develop/faq/data-and-file-handling.html
+
+Einmalig auf dem Windows-Entwicklungsrechner im Samsung-Repository:
+
+```powershell
+npm.cmd run configure:tv -- https://server.example/vdr-suite
+```
+
+Die Kommandozeile erzeugt `app/device-local.js`. Sie enthält **nur** die überprüfte HTTPS-Serverbasis, niemals ein Credential oder Passwort. Die Datei wird **nicht eingecheckt** (`.gitignore`), bleibt aber auf dem Entwicklungsrechner liegen und wird beim nächsten Samsung-Paket-Build zusammen mit den übrigen `app/`-Ressourcen gebündelt. Die HTML-Datei lädt die optionale Konfiguration vor der klassischen Runtime; die App startet auch dann offline, wenn die lokale Konfigurationsdatei fehlt. Lokale Konfiguration entfernen: `npm.cmd run configure:tv -- --clear`.
+
+Nach `npm.cmd run build:tv` und `npm.cmd run check` das Samsung-WGT mit der Tizen Extension erstellen/installieren. Die HTTPS-Adresse ist nun bei einer Neuinstallation bereits im Feld ausgefüllt, ohne sie am TV zu tippen. Eine am TV gespeicherte gültige Adresse hat Vorrang. Beim Verlassen des Eingabefeldes wird sie zusätzlich gespeichert.
+
+**Kopplung starten** prüft die öffentliche API v1 bei Bedarf selbst; der bisherige separate Tastendruck auf **Verbindung prüfen** entfällt. Erst nach erfolgreicher Discovery folgt der sichere KeyManager-Preflight und dann der Pairing-POST. **Keine** automatische Serveranfrage beim App-Start oder bloßen Reiterwechsel.
+
+**Wichtig für S3.2:** Bei einem Uninstall können auch TV-KeyManager-Daten verloren gehen. Bereits auf dem Server ausgestellte Device-Credentials und Grants verschwinden dadurch nicht. Der produktive, datenbewahrende Update-Pfad muss vor regelmäßigem Live-Pairing gesondert abgenommen werden.

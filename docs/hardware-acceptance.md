@@ -104,3 +104,11 @@ Der Samsung-TV selbst muss TLS, Proxy-Pfad und CORS erfolgreich nutzen können. 
 - [ ] Server-Grants werden nicht als durch Pairing erteilt angezeigt.
 
 Keine Fotos oder Logs mit dem Kopplungscode (nur kurzlebig), Pairing-Token oder Credential-Secret veröffentlichen. Keine Protokolle im Quellbaum; niemals Credentials kopieren. Release-Status: S3.2 weiterhin **unverified auf Hardware**.
+
+## S3.2 – Entwicklungs-Testinstallation und gespeicherte Serveradresse
+
+- Die nach einem Tizen-Run-Project-Test-Update verlorene Serveradresse erklärt sich aus dem von Samsung dokumentierten Uninstall vor dem Test-Build. Das gelöschte Web-Storage kann die App nicht rückwirkend rekonstruieren.
+- Neue Git-ignorierte Entwicklerdatei `app/device-local.js` kann mit `npm.cmd run configure:tv -- <HTTPS-Basisadresse>` auf dem **Laptop** erzeugt werden. Sie wird für neue `.wgt`-Testpakete mit in das App-Verzeichnis gelegt und beim Start **ohne Netzwerkzugriff** als Serverbasis in das Feld übernommen.
+- Eine auf dem TV gespeicherte gültige Basis hat Vorrang. Änderungen im Eingabefeld werden bei `blur` bzw. `change` lokal gespeichert.
+- `Kopplung starten` führt fehlende Public-v1-Discovery selbst durch. Ungültige/unerreichbare Server stoppen vor KeyManager- und Pairing-POST.
+- **Hardware-Retest offen:** tatsächliches Mitsignieren/-packen der lokalen Datei im Tizen-VS-Code-Build; Darstellung, KeyManager und authentifiziertes Pairing auf dem realen Samsung noch nicht abgenommen.

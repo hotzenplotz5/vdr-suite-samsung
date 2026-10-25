@@ -23,3 +23,6 @@ profiles.xml
 .env.*
 !.env.example
 
+
+# Per-developer TV server base (no credentials), excluded from Git.
+/app/device-local.js
