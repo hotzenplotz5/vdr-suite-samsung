@@ -111,3 +111,11 @@ Der Nutzer meldete einen WITs-`--watch`-Abbruch trotz erfolgreicher SDB-Verbindu
 
 Frontend-Slice: Den fest verdrahteten veralteten Footer `S3.3` durch `Samsung v<Manifest-/Paketversion> · S4.1 · b<12-stellige SHA-256-Quellkennung>` ersetzen. Das Label wird beim Offline-Boot aus der gebauten Runtime direkt auf **allen Seiten** und unter **Einstellungen** angezeigt; kein Server-/Credential-Zugriff, kein Git-Zugriff auf dem Fernseher. Der Build erzeugt deterministische Fingerprints aus produktiven JS-/HTML-/CSS-/Manifest-Inhalten und verhindert veraltete Pakete über bestehende Build-Checks. **Source/CI ist nicht reale Installation**. TV-Gate: sichtbare Kennung und erhaltene KeyManager-Anmeldung nach einem ausdrücklich freigegebenen, nachweislich datenbewahrenden Update.
 
+
+### S5.3 – Samsung 2020 Tizen 5.5: Medienwiedergabe-Vertragsdiagnose (Source, Hardware offen)
+
+Der reale GU43TU6979UXZG öffnet jetzt den bildschirmfüllenden Player, aber AVPlay.prepareAsync für MP4/TS scheitert. Samsung-Dokumentation bestätigt AVPlay-WebAPI-Bibliothek, 2020er Container-/Codec-Unterstützung, HLS-Grenzen und die Streaming-Eigenschaft COOKIE. Im Public-v1-Backend wird die separate Medienroute mit Secure/HttpOnly/SameSite=Strict MediaSession-Cookie geschützt; eine automatische Übergabe zwischen Web-XHR und dem nativen AVPlay-Netzwerkstack ist nicht nachgewiesen.
+
+Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-ErrorCodes/Names und prüft nach einem Wiedergabefehler die geschützte Medienroute ausschließlich über einen Header-only GET/Range-Request, **vor** dem Session-Stop. Zusätzlich existiert eine bewusst vom Nutzer wählbare alternative **HTML5-MP4-Probe** für vom Server gewählte progressive MP4-MediaSessions. Kein Credentials-/Token-in-URL, keine zweite Kopplung oder Installation, keine unbelegte Browser-/AVPlay-Cookieannahme. Vollständige Quelle-/Sicherheits-/TV-Gates: [Samsung-Playback-Kompatibilität](docs/samsung-playback-compatibility.md).
+
+**Hardware-PASS erst nach einem wirklich abspielbaren Bild/Ton, STOP/Cleanup und identischer bestehender Geräte-Kopplung.** Source-only- und CI-Abnahme genügt nicht.
