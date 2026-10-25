@@ -411,6 +411,13 @@ function boot() {
           "ist das Credential nicht wiederherstellbar; niemals alte Server-Geräte auf Verdacht löschen.");
         return;
       }
+      // Do not recover a credential for a different selected server.
+      var requestedBase = serverInput && normalizeSuiteBase(serverInput.value);
+      if (requestedBase && pairedCredential && requestedBase !== pairedCredential.base) {
+        pairMessage("Die Sitzung gehört zu einem anderen Server. Adresse prüfen; " +
+          "keine lokale Wiederherstellung, keine neue Kopplung.");
+        return;
+      }
       // Only in the running process can we possess a credential that was
       // demonstrably verified earlier. The explicit Verify click authorizes
       // a read-only server recheck and a guarded KeyManager re-save.
