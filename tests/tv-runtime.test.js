@@ -564,3 +564,49 @@ test("S4.1 on the packaged TV runtime reads 100 actual recording rows and remote
   assert.equal(sim.recordingList.children[0].isFocused,true);
   assert.ok(h.calls.every(x=>x.method==="GET"));
 });
+
+test("S4.1 revoked server Device is not described as paired; explicit double local reset only",()=>{
+  const h=liveTransport();
+  const stored=JSON.stringify({version:1,base:"https://example.test/vdr-suite",deviceId:"tv1",
+    actorId:"actor1",credentialId:"device-credential",credentialSecret:"secret_1234567890123456789"});
+  let present=true,removals=0;
+  const manager={
+    getData({name}) {if(name!=="vdr-suite-samsung-device-v1" || !present)
+      throw Object.assign(Error("not found"),{name:"NotFoundError"});return stored;},
+    saveData() {throw Error("no automatic pairing");},
+    removeData({name}) {assert.equal(name,"vdr-suite-samsung-device-v1");removals++;present=false;}
+  };
+  const sim=simulate({keymanager:manager,XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-settings"].click();
+  assert.match(sim.pairResult.textContent,/Server-Anmeldung UNGEPRÜFT/i);
+  sim.nodes["settings-pair-clear"].click();
+  assert.equal(removals,0);
+  sim.nodes["settings-pair-verify"].click();
+  assert.equal(h.calls.length,1);
+  assert.equal(h.calls[0].headers.Authorization,
+    "VDR-Suite-Device device-credential.secret_1234567890123456789");
+  h.reply(0,401,{code:"device_credential_revoked"});
+  assert.match(sim.pairResult.textContent,/ABGEWIESEN.*HTTP 401/i);
+  assert.match(sim.pairResult.textContent,/Device-ID: tv1/i);
+  sim.nodes["settings-pair-clear"].click();
+  assert.equal(removals,0);
+  assert.match(sim.pairResult.textContent,/NOCH EINMAL/i);
+  sim.nodes["settings-pair-clear"].click();
+  assert.equal(removals,1);
+  assert.equal(present,false);
+  assert.match(sim.pairResult.textContent,/lokal entfernt/i);
+  assert.equal(h.calls.length,1);
+});
+test("S4.1 HTTP 403 and network errors never allow local reset",()=>{
+ for(const status of [0,403]){
+  const h=liveTransport(),manager=savedDeviceManager();
+  const sim=simulate({keymanager:manager,XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-settings"].click();
+  sim.nodes["settings-pair-verify"].click();
+  if(status===0){h.calls[0].onerror();}else h.reply(0,status,{code:"forbidden"});
+  assert.doesNotMatch(sim.pairResult.textContent,/ABGEWIESEN.*HTTP 401/i);
+  sim.nodes["settings-pair-clear"].click();
+  assert.match(sim.pairResult.textContent,/nur nach.*HTTP-401/i);
+  assert.ok(manager.getData({name:"vdr-suite-samsung-device-v1"}));
+ }
+});
