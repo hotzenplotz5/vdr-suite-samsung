@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {spawnSync} from "node:child_process";
-import {inspectWgt, verifyUpdate, zipEntries, manifestDetails, crc32} from "../scripts/tv-update-preflight.mjs";
+import {inspectWgt, verifyUpdate, zipEntries, manifestDetails, crc32, releaseEvidence} from "../scripts/tv-update-preflight.mjs";
 
 const source={};
 for(const file of ["config.xml","index.html","styles.css","tv-runtime.js"])
@@ -131,4 +131,37 @@ test("S7.2 rejects conflicting local ZIP metadata and detects corrupted source b
   assert.throws(()=>inspectWgt(local),/Conflicting ZIP entry lengths or CRC/);
   const different=fixture({overrides:{"styles.css":"changed by an attacker"}});
   assert.match(verifyUpdate(different,fixture({version:"0.0.0"}),source).join(" "),/styles.css/);
+});
+
+test("S7.2 offline evidence is machine-readable, non-secret and NEVER an update approval",()=>{
+  const evidence=releaseEvidence(fixture(),fixture({version:"0.0.0"}),source);
+  assert.equal(evidence.schema,1);
+  assert.equal(evidence.package_id,"VDRSuiteTV");
+  assert.equal(evidence.application_id,"VDRSuiteTV.VDRSuite");
+  assert.equal(evidence.baseline_version,"0.0.0");
+  assert.equal(evidence.offline_preflight,"PASS");
+  assert.equal(evidence.approval_to_install,false);
+  assert.equal(evidence.baseline_confirmed_installed_on_tv,false);
+  assert.equal(evidence.data_preserving_tv_update_method_confirmed,false);
+  assert.equal(evidence.xml_signature_cryptographically_verified,false);
+  assert.equal(evidence.keymanager_persistence_on_hardware,"NOT_TESTED");
+  assert.match(evidence.candidate_wgt_sha256,/^[a-f0-9]{64}$/);
+  assert.match(evidence.author_certificate_sha256,/^[a-f0-9]{64}$/);
+  assert.doesNotMatch(JSON.stringify(evidence),/192\.168\.|password|token|deviceCredential/i);
+});
+
+test("S7.2 evidence refuses signer changes, downgrades and wrong dev package",()=>{
+  assert.throws(()=>releaseEvidence(fixture({signer:2}),fixture({version:"0.0.0"}),source),/Author certificate differs/);
+  assert.throws(()=>releaseEvidence(fixture(),fixture(),source),/must be newer/);
+  assert.throws(()=>releaseEvidence(fixture({ids:"VDRSuitDev"}),fixture({version:"0.0.0"}),source),/Candidate/);
+});
+
+test("S7.2 CLI JSON mode fails closed without baseline; no TV access",()=>{
+  const script=readFileSync(new URL("../scripts/tv-update-preflight.mjs",import.meta.url),"utf8");
+  assert.ok(script.includes('opts.json'));
+  const run=spawnSync(process.execPath,["scripts/tv-update-preflight.mjs","--candidate","candidate.wgt","--json"],{
+    cwd:new URL("..",import.meta.url),encoding:"utf8"
+  });
+  assert.notEqual(run.status,0);
+  assert.match(run.stderr,/--baseline/);
 });
