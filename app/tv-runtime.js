@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"9f224a53fbd2","label":"Samsung v0.1.0 · S5.1 · b9f224a53fbd2"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"13d6d8168d07","label":"Samsung v0.1.0 · S5.1 · b13d6d8168d07"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1141,6 +1141,66 @@
   }
   // END app/src/api/recording-playback.js
 
+  // BEGIN app/src/api/media-access-probe.js
+  // Read-only diagnostics for an already issued public v1 MediaSession.
+  // Avoid HEAD: MediaGatewayHttpServer allows GET only.
+  // Never read or log media bytes, cookies, device credentials or session URLs.
+  function probeMediaHttpHeaders(environment,mediaUrl,done) {
+    if (!environment || typeof environment.XMLHttpRequest !== "function" ||
+        typeof mediaUrl !== "string" ||
+        !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts))$/.test(mediaUrl)) {
+      done({kind:"not_supported"}); return;
+    }
+    var xhr = new environment.XMLHttpRequest();
+    var ended = false;
+    function finish(value) {
+      if (ended) return;
+      ended = true;
+      // Abort immediately after headers: never download a VDR recording.
+      try {xhr.abort();} catch (_) {}
+      done(value);
+    }
+    try {
+      xhr.open("GET",mediaUrl,true);
+      xhr.withCredentials = true; // only the browser cookie jar, no JS cookie access
+      xhr.timeout = 6000;
+      xhr.setRequestHeader("Range","bytes=0-0");
+      xhr.setRequestHeader("Cache-Control","no-store");
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState < 2 || ended) return;
+        // On the HEADERS_RECEIVED transition no response data is consumed.
+        if (xhr.status === 200 || xhr.status === 206)
+          finish({kind:"reachable",status:xhr.status});
+        else if (xhr.status === 401 || xhr.status === 403)
+          finish({kind:"denied",status:xhr.status});
+        else if (xhr.status === 404 || xhr.status === 416)
+          finish({kind:"unavailable",status:xhr.status});
+        else finish({kind:"unknown",status:Number(xhr.status)||0});
+      };
+      xhr.onerror = function () {finish({kind:"network_or_cors"});};
+      xhr.ontimeout = function () {finish({kind:"network_or_cors"});};
+      xhr.send(null);
+    } catch (_) {finish({kind:"network_or_cors"});}
+  }
+  
+  function describeMediaAccessProbe(result) {
+    if (!result) return "Medienzugriff nicht geprüft.";
+    if (result.kind === "reachable")
+      return "Browser-Medienzugriff HTTP " + result.status +
+        " – AVPlay-Zugriff/Decoder getrennt prüfen; Browser-Cookie gilt nicht automatisch für AVPlay.";
+    if (result.kind === "denied")
+      return "Geschützte Mediendatei im Browser HTTP " + result.status +
+        " – Cookie-/SameSite-/Proxy-Pfad prüfen. Keine Credentials in URL übergeben.";
+    if (result.kind === "unavailable")
+      return "Medienroute antwortet HTTP " + result.status +
+        " – aktiven MediaSession-Status/Range-Bereitstellung prüfen.";
+    if (result.kind === "network_or_cors")
+      return "Browser-Medienprüfung durch Netzwerk/TLS/CORS blockiert; " +
+        "kein Beweis für einen AVPlay-Decoderfehler.";
+    return "Medienzugriff unbekannt – AVPlay-/Backend-Logs erforderlich.";
+  }
+  // END app/src/api/media-access-probe.js
+
   // BEGIN app/src/platform/recording-player.js
   // Samsung AVPlay adapter: exactly one native playback owner. Tizen 5.5.
   function safeAvplayCode(value) {
@@ -1212,7 +1272,17 @@
             active = true;
             onState("playing");
           } catch (_) {onState("error",{stage:"play"});}
-        },function () {if (token === generation) onState("error",{stage:"prepare"});});
+        },function (error) {
+          if (token !== generation) return;
+          // Samsung Product WebAPI ErrorCallback receives a WebAPIError.
+          // Surface ONLY an allowlisted error name/code; NEVER log message,
+          // response URL, cookie, internal path or native exception object.
+          var reason = error && safeAvplayCode(error.name) !== "unbekannt"
+            ? safeAvplayCode(error.name) : error && safeAvplayCode(error.code);
+          onState("error",{
+            stage:"prepare",code:reason === "unbekannt" ? undefined : reason
+          });
+        });
         onState("preparing");
         return true;
       } catch (_) {
@@ -2138,9 +2208,19 @@
               recordingStatus("loading","Samsung AVPlay startet",rec.title +
                 " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
             } else if (state === "error" || state === "unsupported") {
-              stopRecordingPlayback("failure");
-              recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
-                samsungPlaybackDiagnosis(detail,transport));
+              // The media gateway permits GET, not HEAD. Probe only the response
+              // headers of the very same protected session while still active.
+              // This does NOT prove what cookies native AVPlay transmits.
+              var failedSession = recordingPlaybackSession;
+              var playerFailure = samsungPlaybackDiagnosis(detail,transport);
+              recordingStatus("loading","Prüfe Medienzugriff",
+                playerFailure + " · Diagnose ohne Video-Download …");
+              probeMediaHttpHeaders(window,result.mediaUrl,function (probe) {
+                if (recordingPlaybackSession !== failedSession || !failedSession) return;
+                stopRecordingPlayback("failure");
+                recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
+                  playerFailure + " " + describeMediaAccessProbe(probe));
+              });
             } else if (state === "finished") {
               stopRecordingPlayback("finished");
               recordingStatus("ready","Aufnahme beendet",rec.title);
