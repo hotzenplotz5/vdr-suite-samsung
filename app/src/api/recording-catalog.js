@@ -1,5 +1,5 @@
 // S4.1: read-only Public API v1 recordings; no media URLs or private routes.
-// One bounded keyset page per request, never a full-catalog download.
+// One bounded keyset page (up to 100), never a full-catalog download.
 export function createRecordingCatalog(environment) {
   var env = environment || {};
   var pending = null;
@@ -39,14 +39,14 @@ export function createRecordingCatalog(environment) {
   }
   function validPage(value, backendId, cursor) {
     if (!value || typeof value !== "object" || !Array.isArray(value.items) ||
-        value.items.length > 20 || !value.page || typeof value.page !== "object" ||
-        value.page.limit !== 20 || typeof value.page.hasMore !== "boolean" ||
+        value.items.length > 100 || !value.page || typeof value.page !== "object" ||
+        value.page.limit !== 100 || typeof value.page.hasMore !== "boolean" ||
         !value.meta || value.meta.partial !== false ||
         !value.items.every(function (item) { return validRow(item, backendId); }))
       return false;
     var next = value.page.nextCursor;
     if (value.page.hasMore) {
-      if (!validCursor(next) || next === cursor || value.items.length !== 20) return false;
+      if (!validCursor(next) || next === cursor || value.items.length !== 100) return false;
     } else if (next !== null) return false;
     var previousId = "";
     return value.items.every(function (item) {
@@ -75,7 +75,7 @@ export function createRecordingCatalog(environment) {
       done(value);
     }
     var path = "/api/v1/recordings?backendId=" + encodeURIComponent(backendId) +
-      "&limit=20&sort=recordingId&order=asc";
+      "&limit=100&sort=recordingId&order=asc";
     if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
     var url = credential.base.replace(/\/$/, "") + path;
     try {
