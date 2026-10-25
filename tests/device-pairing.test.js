@@ -80,7 +80,7 @@ function fakeVault() {
  const data={};
  const mgr={
    getDataAliasList(){return Object.keys(data).map(name=>({name}));},
-   getData({name}) {if(!(name in data))throw Error("not found");return data[name];},
+   getData({name}) {if(!(name in data))throw Object.assign(new Error("missing alias"),{name:"NotFoundError"});return data[name];},
    saveData(name,value,password,ok,fail) {data[name]=value;ok();},
    removeData({name}) {delete data[name];}
  };
@@ -97,6 +97,24 @@ test("S3.2 keymanager preflight and exact readback, without localStorage",()=>{
  assert.equal(v.vault.read().credential.base,base);
  let again;v.vault.preflight(x=>again=x);
  assert.equal(again.credential.credentialId,"c");
+});
+test("S3.2 exact KeyManager read survives incomplete enumeration, storage errors cannot erase state",()=>{
+ const v=fakeVault();
+ const secret={base,actorId:"a",deviceId:"d",credentialId:"c",credentialSecret:"secret"};
+ let saved;v.vault.store(secret,x=>saved=x);
+ assert.equal(saved.ok,true);
+ v.mgr.getDataAliasList=()=>[];
+ assert.equal(v.vault.read().credential.credentialId,"c");
+ const original=v.mgr.getData;
+ v.mgr.getData=()=>{throw Object.assign(new Error("temporarily locked"),{name:"UnknownError"});};
+ const unavailable=v.vault.read();
+ assert.equal(unavailable.ok,false);
+ assert.equal(unavailable.kind,"storage");
+ let checked;v.vault.preflight(x=>checked=x);
+ assert.equal(checked.ok,false);
+ v.mgr.getData=original;
+ assert.equal(v.vault.read().credential.credentialId,"c");
+ assert.equal(Object.keys(v.data).length,1);
 });
 test("S3.2 missing/failing keymanager fails closed before credential issuance",()=>{
  const absent=createDeviceVault({});

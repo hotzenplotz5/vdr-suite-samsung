@@ -6,19 +6,15 @@ export function createDeviceVault(environment) {
   var probeAlias = {name:"vdr-suite-samsung-vault-check"};
   function supported() {
     return !!(manager && typeof manager.getData === "function" &&
-      typeof manager.getDataAliasList === "function" &&
       typeof manager.saveData === "function" &&
       typeof manager.removeData === "function");
   }
   function read() {
     if (!supported()) return {ok:false,kind:"unsupported"};
     try {
-      var aliases=manager.getDataAliasList();
-      var found=false;
-      for (var i=0;i<aliases.length;i+=1) {
-        if (aliases[i] && aliases[i].name===alias.name) {found=true;break;}
-      }
-      if (!found) return {ok:true,credential:null};
+      // Read the exact owned alias. Enumerating accessible aliases first
+      // introduces a second, unnecessary failure/empty-list condition.
+      // A transient alias-list issue must never masquerade as lost pairing.
       var data=JSON.parse(manager.getData(alias));
       if (!data || data.version!==1 ||
           typeof data.base!=="string" || typeof data.deviceId!=="string" ||
@@ -27,7 +23,12 @@ export function createDeviceVault(environment) {
         return {ok:false,kind:"corrupt"};
       }
       return {ok:true,credential:data};
-    } catch (_) {return {ok:false,kind:"storage"};}
+    } catch (error) {
+      // Tizen explicitly uses NotFoundError for a genuinely absent alias.
+      // A locked/unavailable store must not authorize a fresh pairing.
+      return error && error.name==="NotFoundError"
+        ? {ok:true,credential:null} : {ok:false,kind:"storage"};
+    }
   }
   function preflight(done) {
     var prior=read();

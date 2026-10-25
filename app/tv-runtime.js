@@ -378,19 +378,15 @@
     var probeAlias = {name:"vdr-suite-samsung-vault-check"};
     function supported() {
       return !!(manager && typeof manager.getData === "function" &&
-        typeof manager.getDataAliasList === "function" &&
         typeof manager.saveData === "function" &&
         typeof manager.removeData === "function");
     }
     function read() {
       if (!supported()) return {ok:false,kind:"unsupported"};
       try {
-        var aliases=manager.getDataAliasList();
-        var found=false;
-        for (var i=0;i<aliases.length;i+=1) {
-          if (aliases[i] && aliases[i].name===alias.name) {found=true;break;}
-        }
-        if (!found) return {ok:true,credential:null};
+        // Read the exact owned alias. Enumerating accessible aliases first
+        // introduces a second, unnecessary failure/empty-list condition.
+        // A transient alias-list issue must never masquerade as lost pairing.
         var data=JSON.parse(manager.getData(alias));
         if (!data || data.version!==1 ||
             typeof data.base!=="string" || typeof data.deviceId!=="string" ||
@@ -399,7 +395,12 @@
           return {ok:false,kind:"corrupt"};
         }
         return {ok:true,credential:data};
-      } catch (_) {return {ok:false,kind:"storage"};}
+      } catch (error) {
+        // Tizen explicitly uses NotFoundError for a genuinely absent alias.
+        // A locked/unavailable store must not authorize a fresh pairing.
+        return error && error.name==="NotFoundError"
+          ? {ok:true,credential:null} : {ok:false,kind:"storage"};
+      }
     }
     function preflight(done) {
       var prior=read();
@@ -975,11 +976,12 @@
       if (connectionResult) {
         connectionResult.setAttribute("data-connection-state", "success");
         connectionResult.textContent = "Public API v1 erreichbar. " +
-          result.capabilityCount + " Fähigkeiten gemeldet; noch nicht angemeldet oder freigegeben.";
+          result.capabilityCount + " Fähigkeiten gemeldet. " +
+          "Geräteanmeldung hier nicht geprüft – dafür „Anmeldung prüfen“ wählen.";
       }
-      if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung offen";
+      if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung ungeprüft";
       if (topbarServerState) topbarServerState.textContent = "API v1 erreichbar";
-      message.textContent = "Einstellungen · Public API v1 erreichbar · noch kein Device-Grant";
+      message.textContent = "Einstellungen · Server erreichbar · Geräteanmeldung ungeprüft";
     }
   
     function saveServerBase() {
@@ -1031,9 +1033,12 @@
       var saved = vault.read();
       if (saved.ok && saved.credential) {
         pairedCredential = saved.credential;
-        pairMessage("Gerät gespeichert. Anmeldung prüfen; Backend-Berechtigungen sind separat zu vergeben.");
+        pairMessage("Gerät gespeichert (Device-ID: " + saved.credential.deviceId +
+          "). Anmeldung prüfen; Backend-Berechtigungen sind separat zu vergeben.");
       } else if (!saved.ok) {
-        pairMessage("Sichere Geräteablage nicht verfügbar. Kopplung gesperrt (kein unsicherer Ersatz).");
+        pairMessage("Sichere Geräteablage nicht lesbar. Anmeldung später erneut prüfen; nicht neu koppeln.");
+      } else {
+        pairMessage("Kein gespeichertes Device-Credential gefunden. Nicht automatisch neu koppeln.");
       }
     }
     function pairStart() {
@@ -1149,7 +1154,14 @@
     function pairVerify() {
       if (pairingBusy || pendingCredential) {pairMessage("Bitte zuerst Speicherung abschließen.");return;}
       var saved=vault.read();
-      if (!saved.ok || !saved.credential) {pairMessage("Kein gespeichertes Device-Credential.");return;}
+      if (!saved.ok) {
+        pairMessage("KeyManager nicht lesbar. Credential-Status unbekannt; später erneut prüfen, nicht neu koppeln.");
+        return;
+      }
+      if (!saved.credential) {
+        pairMessage("Kein gespeichertes Device-Credential gefunden. Prüfe zuerst den App-/Installationsstatus.");
+        return;
+      }
       pairedCredential=saved.credential;
       pairingBusy = true;
       pairMessage("Prüfe Geräteanmeldung über Public API v1 …");
@@ -1160,7 +1172,8 @@
           if (homeServerState) homeServerState.textContent = "Device verbunden · Grants offen";
           if (topbarServerState) topbarServerState.textContent = "Gerät angemeldet";
           message.textContent = "Device authentifiziert · Berechtigungen werden separat vergeben";
-          pairMessage("Device-Authentifizierung erfolgreich. Sender/Aufnahmen benötigen Admin-Grants.");
+          pairMessage("Device-Authentifizierung erfolgreich (Device-ID: " +
+            pairedCredential.deviceId + "). Sender/Aufnahmen benötigen Admin-Grants.");
         } else pairMessage("Geräteanmeldung nicht bestätigt: "+pairingError(result.kind,result.status)+
           " Credential bleibt sicher gespeichert.");
       });
@@ -1319,7 +1332,12 @@
       // Always re-read the persisted Tizen KeyManager after restart. No login
       // secret is ever stored in localStorage, or copied into UI/error messages.
       var saved = vault.read();
-      if (!saved.ok || !saved.credential) {
+      if (!saved.ok) {
+        liveStatus("error", "Sicherer Gerätespeicher nicht lesbar",
+          "KeyManager-Zugriff vorübergehend fehlgeschlagen. Anmeldung erneut prüfen; nicht neu koppeln.");
+        return;
+      }
+      if (!saved.credential) {
         showLiveError({kind:"invalid_credential"});
         return;
       }
@@ -1512,7 +1530,12 @@
       }
       // Credentials remain in Tizen KeyManager; no localStorage or automatic pairing.
       var saved = vault.read();
-      if (!saved.ok || !saved.credential) {
+      if (!saved.ok) {
+        recordingStatus("error", "Sicherer Gerätespeicher nicht lesbar",
+          "KeyManager-Zugriff fehlgeschlagen. Anmeldung erneut prüfen; nicht neu koppeln.");
+        return;
+      }
+      if (!saved.credential) {
         showRecordingError({kind:"invalid_credential"}); return;
       }
       var selectedBase = serverInput && normalizeSuiteBase(serverInput.value);

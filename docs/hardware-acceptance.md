@@ -100,6 +100,9 @@ Der Samsung-TV selbst muss TLS, Proxy-Pfad und CORS erfolgreich nutzen können. 
 - [ ] Einmaliges Credential-POST nur nach KeyManager-Preflight; Readback exakt erfolgreich.
 - [ ] GET `/api/v1` mit Device-Schema ergibt authentifizierten Actor ohne automatische Grants.
 - [ ] App-Neustart findet gespeichertes Credential wieder; Login erneut prüfen.
+- **Neuer ungeklärter REAL-TV-Befund vom 25.10.2026:** Der Betreiber berichtet, dass eine vorher erfolgreich gekoppelte Samsung-App auch **ohne erneutes Installieren** die Verbindung verliert. Ein Screenshot zeigte getrennt davon einen Acht-Sekunden-Timeout beim Aufnahmenabruf. Dieser Timeout beweist *keinen* verlorenen KeyManager-Eintrag. **Nicht bestanden und nicht als Ursache aufgeklärt.**
+- **Diagnose-Fix im Quellkandidaten:** Device-Credential anhand der exakten eigenen Alias direkt mit `tizen.keymanager.getData` lesen; nur echtes `NotFoundError` als fehlenden Eintrag behandeln. Sonstige KeyManager-Ausfälle dürfen keine neue Kopplung vortäuschen. Die Samsung-Einstellungen zeigen die nicht geheime Device-ID und unterscheiden fehlendes Credential, nicht lesbaren KeyManager und fehlgeschlagene Netzwerk-Authentifizierung. Auch dies ist **noch kein Hardware-PASS**.
+- [ ] Auf **demselben installierten TV-App-Paket ohne VS-Code Run Project/WITs Start**: `Einstellungen → Anmeldung prüfen`, App ganz normal beenden/neustarten, erneut `Anmeldung prüfen`, Device-ID gegen die tatsächlich aktive Admin-Device-ID abgleichen, Server/VDR offline/online und normalen TV-Standby separat prüfen. Nur eine gültige gespeicherte Kopplung weiterverwenden. Keinesfalls wiederholt neu koppeln; keine Secrets in Fotos/Logs.
 - [ ] Negative Gates: fehlender KeyManager, abgelehnter/abgelaufener Code, HTTP 401/409/410/503, Netzwerkfehler.
 - [ ] Server-Grants werden nicht als durch Pairing erteilt angezeigt.
 

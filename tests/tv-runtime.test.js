@@ -416,11 +416,46 @@ function channelPage(cursor=null) {
     page:{limit:20,hasMore:!!cursor,nextCursor:cursor},
     meta:{partial:false,sources:[{backendId:"home",state:"ok"}]}};
 }
+test("S3.2 temporarily unreadable KeyManager is not reported as lost pairing",()=>{
+  const manager = savedDeviceManager();
+  manager.getData = function() {
+    throw Object.assign(new Error("vault temporarily busy"),{name:"UnknownError"});
+  };
+  const sim = simulate({keymanager:manager});
+  sim.video.finish();
+  assert.match(sim.pairResult.textContent,/nicht lesbar/i);
+  assert.doesNotMatch(sim.pairResult.textContent,/Kein gespeichertes Device-Credential/i);
+});
+
+test("S3.1 anonymous server discovery never claims the Device is logged out",()=>{
+  const transport = liveTransport();
+  const sim = simulate({keymanager:savedDeviceManager(),XMLHttpRequest:transport.XHR,
+    localBase:"https://example.test/vdr-suite"});
+  sim.video.finish();
+  sim.nodes["nav-settings"].click();
+  sim.nodes["settings-test"].click();
+  assert.equal(transport.calls.length,1);
+  transport.reply(0,200,{
+    apiVersion:"v1",supportedApiMajors:["v1"],
+    links:{capabilities:"/api/v1/capabilities"},compatibilityPolicy:{},
+    authentication:{authenticated:false}
+  });
+  assert.equal(transport.calls.length,2);
+  transport.reply(1,200,{
+    apiVersion:"v1",capabilities:["channels.read"],
+    compatibility:{},links:{root:"/api/v1"}
+  });
+  assert.match(sim.serverStatus.textContent,/Geräteanmeldung hier nicht geprüft/i);
+  assert.doesNotMatch(sim.serverStatus.textContent,/noch nicht angemeldet/i);
+  assert.match(sim.pairResult.textContent,/Device-ID: tv1/i);
+});
+
 test("S3.3 restart reads KeyManager, explicit Live click verifies and displays real channels",()=>{
   const h=liveTransport();
   const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
   sim.video.finish();
   assert.match(sim.pairResult.textContent,/gespeichert/);
+  assert.match(sim.pairResult.textContent,/Device-ID: tv1/);
   assert.equal(h.calls.length,0); // never contact server during app boot
   sim.nodes["nav-live"].click();
   assert.equal(h.calls.length,0); // no implicit request on tab activation
