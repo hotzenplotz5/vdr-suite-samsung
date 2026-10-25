@@ -76,6 +76,34 @@ brauchen wir realen Netzwerk-/Backend-Nachweis, ob native AVPlay-GETs
 `vdr_suite_media` überhaupt senden. Die Client-Anzeige allein liefert
 diesen Beweis nicht.
 
+## Zweiter, ausdrücklich gewählter Wiedergabeweg: HTML5 MP4
+
+Die Aufnahmeliste bietet zusätzlich **`HTML5 MP4 testen`**. Das ist kein
+automatischer Fallback und kein zweiter Player, der parallel zu AVPlay läuft.
+Nur der benutzerseitig ausgewählte Player erhält die MediaSession.
+
+Für den HTML5-Test meldet die App **nur**
+`protocols: ["progressive"]` und `containers: ["mp4","fmp4"]` sowie die
+tatsächlich konservativ geprüften H.264/AAC-Fähigkeiten. Liefert das Backend
+keinen progressiven `/recording/stream.mp4`-Pfad, wird die Sitzung beendet
+und ohne Wiedergabe abgebrochen. Keine HLS-/MPEG-TS-Zusage durch den Browser.
+
+Der HTML5-`video`-Pfad nutzt den normalen Browser-Cookiekontext statt des
+nativen AVPlay-Netzwerkstacks; `HttpOnly` wird weder ausgelesen noch in
+einen Link umgewandelt. **Ob** der Tizen-Packaged-App-Ursprung (`file://`)
+ein serverseitiges `SameSite=Strict`-Cookie für die MediaSession mitsendet,
+ist Hardware-/Netzwerk-Gate, kein Quellbeweis.
+
+Für einen aussagekräftigen Test mit derselben Aufnahme:
+1. Native **Wiedergabe testen** wählen und die AVPlay-Fehlerklasse,
+   Range-Headerdiagnose sowie Profil HLS/TS/MP4 ablesen.
+2. Nach STOP/Cleanup **HTML5 MP4 testen** wählen. Nur wenn der Server
+   tatsächlich MP4 bereitstellt, wird das Videotag gestartet.
+3. Bei Erfolg Bild/Ton, PLAY/PAUSE, STOP/BACK prüfen. Bei Misserfolg
+   den kurzen MediaError-Code und den Browser-Medienzugriff vergleichen.
+4. Niemals wegen eines 401 eine andere Medien-URL, einen Cookiewert
+   oder ein Device-Secret manuell einsetzen.
+
 ## Abnahme auf dem echten Samsung
 
 1. **Keine Neuinstallation allein wegen eines CI-Fixes.** Die vorhandene
