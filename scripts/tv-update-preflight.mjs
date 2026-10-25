@@ -176,18 +176,48 @@ export function verifyUpdate(candidateBuffer,baselineBuffer,sourceFiles) {
   return problems;
 }
 
+// Machine-readable, non-secret release evidence. This is NEVER deployment approval.
+export function releaseEvidence(candidateBuffer,baselineBuffer,sourceFiles) {
+  const issues=verifyUpdate(candidateBuffer,baselineBuffer,sourceFiles);
+  if(issues.length) fail(issues.join("; "));
+  const candidate=inspectWgt(candidateBuffer),baseline=inspectWgt(baselineBuffer);
+  const sha256=bytes=>createHash("sha256").update(bytes).digest("hex");
+  return Object.freeze({
+    schema:1,
+    release_type:"samsung-production-wgt",
+    application_id:candidate.identity.id,
+    package_id:candidate.identity.packageId,
+    baseline_version:baseline.identity.version,
+    candidate_version:candidate.identity.version,
+    baseline_wgt_sha256:sha256(baselineBuffer),
+    candidate_wgt_sha256:sha256(candidateBuffer),
+    author_certificate_sha256:candidate.fingerprint,
+    offline_preflight:"PASS",
+    xml_signature_cryptographically_verified:false,
+    baseline_confirmed_installed_on_tv:false,
+    data_preserving_tv_update_method_confirmed:false,
+    keymanager_persistence_on_hardware:"NOT_TESTED",
+    approval_to_install:false
+  });
+}
+
 function usage() {
-  fail("Usage: node scripts/tv-update-preflight.mjs --inspect FILE.wgt | --candidate NEW.wgt --baseline LAST_CONFIRMED_INSTALLED.wgt");
+  fail("Usage: node scripts/tv-update-preflight.mjs --inspect FILE.wgt | --candidate NEW.wgt --baseline LAST_CONFIRMED_INSTALLED.wgt [--json]");
 }
 
 function main(argv) {
   const opts={};
-  for(let i=0;i<argv.length;i+=2) {
-    if(!["--inspect","--candidate","--baseline"].includes(argv[i])||!argv[i+1]||opts[argv[i]])
-      usage();
-    opts[argv[i]]=argv[i+1];
+  for(let i=0;i<argv.length;i++) {
+    const flag=argv[i];
+    if(flag==="--json") {
+      if(opts.json) usage();
+      opts.json=true;
+    } else if(["--inspect","--candidate","--baseline"].includes(flag)) {
+      if(!argv[i+1]||argv[i+1].startsWith("--")||opts[flag]) usage();
+      opts[flag]=argv[++i];
+    } else usage();
   }
-  if(opts["--inspect"]&&Object.keys(opts).length===1) {
+  if(opts["--inspect"]&&!opts.json&&Object.keys(opts).length===1) {
     const inspected=inspectWgt(readFileSync(opts["--inspect"]));
     console.log("Signed-WGT inspection (offline; XML signatures NOT cryptographically verified):");
     console.log("Package: "+inspected.identity.packageId+" | app: "+inspected.identity.id+
@@ -196,13 +226,18 @@ function main(argv) {
     console.log("No device contact; no installation.");
     return;
   }
-  if(!opts["--candidate"]||!opts["--baseline"]||Object.keys(opts).length!==2) usage();
+  if(!opts["--candidate"]||!opts["--baseline"]||Object.keys(opts).length!==(opts.json?3:2)) usage();
   if(resolve(opts["--candidate"])===resolve(opts["--baseline"]))
     fail("Candidate and baseline must be different files");
   const src={};
   for(const name of ["config.xml","index.html","styles.css","tv-runtime.js"])
     src[name]=readFileSync(join(root,"app",name),"utf8");
-  const issues=verifyUpdate(readFileSync(opts["--candidate"]),readFileSync(opts["--baseline"]),src);
+  const candidateBytes=readFileSync(opts["--candidate"]),baselineBytes=readFileSync(opts["--baseline"]);
+  if(opts.json) {
+    console.log(JSON.stringify(releaseEvidence(candidateBytes,baselineBytes,src),null,2));
+    return;
+  }
+  const issues=verifyUpdate(candidateBytes,baselineBytes,src);
   if(issues.length) fail(issues.join("; "));
   console.log("S7.2 WGT offline preflight PASS: production IDs, higher version, source contents and author certificate match.");
   console.log("NO hardware/data-persistence PASS. Baseline must be the WGT actually installed on the TV.");
