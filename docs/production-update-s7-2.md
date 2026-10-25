@@ -42,10 +42,12 @@ Die Prüfung liest ZIP-/WGT-Dateien *ohne sie zu extrahieren* und kontrolliert:
 5. `config.xml`, `index.html`, `styles.css` und `tv-runtime.js` im Kandidaten-WGT
    stimmen mit dem aktuellen, geprüften Quellstand überein.
 6. Offensichtliche lokale Signatur-/Entwicklungsgeheimnisse und unsichere ZIP-
-   Einträge werden abgewiesen.
+   Einträge werden abgewiesen; zusätzlich werden **ZIP-CRC32 und Header-Konsistenz**
+   der tatsächlich gelesenen WGT-Einträge geprüft.
 
-**Dies ist eine Identitäts-/Plausibilitätsprüfung, keine kryptographische
-XMLDSig-Validierung.** Gültige Zertifikatskette, Samsung-Signaturprüfung und
+**CRC32 schützt hier nur gegen einfache Beschädigung oder widersprüchliche
+ZIP-Metadaten; es ist keine kryptographische Signatur.** Dies ist eine
+Identitäts-/Plausibilitätsprüfung, **keine kryptographische XMLDSig-Validierung.** Gültige Zertifikatskette, Samsung-Signaturprüfung und
 tatsächliche Update-Datenpersistenz sind separate Gates.
 
 ### Der sichere Ablauf im bestehenden Windows-/VS-Code-Projekt
@@ -115,3 +117,24 @@ Repository/Quelle: zum vorigen signierten, bekannten Quellstand zurückwechseln.
 **Nicht** als vermeintlich sicheren TV-Rollback das alte WGT installieren:
 eine Downgrade-/Testinstallationsoperation kann erneut deinstallieren und
 Credentials entfernen. TV erst nach eigenem Verfahren und Hardware-Gate ändern.
+
+## Herstellerabgleich: Warum wir Testinstallation und Store-Update trennen
+
+Die Samsung-FAQ zu App-Daten sagt ausdrücklich: **App-Daten bleiben bei
+regulären Updates erhalten, werden bei Uninstall entfernt.** Für
+Tizen-Studio-**Testbuild-Updates** beschreibt Samsung hingegen ein Uninstall
+vor dem neuen Installieren und damit gelöschten lokalen Speicher:
+https://developer.samsung.com/smarttv/develop/faq/data-and-file-handling.html
+
+Die Samsung-Dokumentation zum VS-Code-Device-Workflow formuliert zusätzlich,
+dass bei Installation einer neuen Version die vorherige Version automatisch
+uninstalliert wird:
+https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/connecting-to-tv-device.html
+
+Diese unterschiedlichen Aussagen darf man **nicht** in einen sicheren
+SDB-/VS-Code-Updatebefehl umdeuten. Die sichere, durch den Hersteller
+beschriebene veröffentlichte Aktualisierung ist der Store-/Seller-Office-
+Release-Pfad; **für unser bisheriges lokal per Developer-Tools installiertes
+Paket ist der Erhalt der KeyManager-Kopplung dadurch nicht nachgewiesen.**
+Eine Shop-Veröffentlichung oder ein TV-Update wird von diesem Repository
+nicht automatisch ausgelöst.
