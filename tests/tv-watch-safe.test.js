@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync, copyFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync} from "node:fs";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
 import {preflight} from "../scripts/tv-watch-safe.mjs";
 
@@ -48,10 +50,22 @@ test("Safe Watch code invokes only WITs --watch; no Start, install or secret exp
   assert.doesNotMatch(script,/credentialSecret|localStorage|exportSecret|saveData/);
 });
 test("Safe Watch fails closed on an unconfigured checkout, no target/network required",()=>{
-  const result=spawnSync(process.execPath,["scripts/tv-watch-safe.mjs","--preflight"],{
-    cwd:new URL("..",import.meta.url),encoding:"utf8"
-  });
-  assert.notEqual(result.status,0);
-  assert.match(result.stderr,/TV-Watch abgebrochen/);
-  assert.match(result.stderr,/Keine Installation/);
+  const root=mkdtempSync(join(tmpdir(),"samsung-tv-watch-test-"));
+  try {
+    mkdirSync(join(root,"app"),{recursive:true});
+    mkdirSync(join(root,"scripts"),{recursive:true});
+    copyFileSync(new URL("../scripts/tv-watch-safe.mjs",import.meta.url),
+      join(root,"scripts","tv-watch-safe.mjs"));
+    writeFileSync(join(root,"package.json"),'{"type":"module"}');
+    writeFileSync(join(root,"app",".witsignore"),requiredIgnore.join("\\n"));
+    writeFileSync(join(root,"app","config.xml"),manifest);
+    const result=spawnSync(process.execPath,["scripts/tv-watch-safe.mjs","--preflight"],{
+      cwd:root,encoding:"utf8"
+    });
+    assert.notEqual(result.status,0);
+    assert.match(result.stderr,/TV-Watch abgebrochen/);
+    assert.match(result.stderr,/Keine Installation/);
+  } finally {
+    rmSync(root,{recursive:true,force:true});
+  }
 });
