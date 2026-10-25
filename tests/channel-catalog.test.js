@@ -53,7 +53,7 @@ test("S3.3 channel pages use explicit backend, opaque cursor and limit=20",()=>{
   assert.equal(result.ok,true);
   assert.equal(result.value.page.nextCursor,"ch2_next");
   c.listChannels(credential,"home","ch2_next",r=>result=r);
-  assert.match(h.calls[1].url,/cursor=ch1_next$/);
+  assert.match(h.calls[1].url,/cursor=ch2_next$/);
   h.reply(1,200,envelope([]));
   assert.equal(result.ok,true);
   assert.equal(result.value.page.hasMore,false);
@@ -91,7 +91,7 @@ test("S3.3 denied grant, revoked credential, cursor expiry and network are expli
 });
 
 test("S3.4 older server rejects new native channel order without silent ID-sort fallback",()=>{
-  const h=new Harness(); const client=createChannelCatalog(h.env);
+  const h=transport(); const client=createChannelCatalog(h.env);
   let result;
   client.listChannels(credential,"home",null,r=>result=r);
   assert.match(h.calls[0].url,/sort=backendId,channelNumber,channelId/);
