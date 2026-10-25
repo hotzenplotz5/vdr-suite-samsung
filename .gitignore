@@ -39,3 +39,6 @@ profiles.xml
 /app/.witsconfig.json
 /app/.wits/
 /app/.wits-cache/
+
+# Isolated, locally generated WITs DEV project; keep its config and certificates out of Git.
+/.tizen-wits-dev/
