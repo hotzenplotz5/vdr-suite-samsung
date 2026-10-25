@@ -75,7 +75,7 @@ test("S3.2 Verify action alone can recover; Pair Start blocks duplicate server d
   assert.match(code,/function pairStart\(\)[\s\S]+?Keine neue Kopplung gestartet/);
   assert.match(code,/Keine neue Kopplung, kein neues Server-Gerät/);
   assert.match(code,/requestedBase !== pairedCredential\.base/);
-  assert.match(code,/Adresse prüfen;.*keine lokale Wiederherstellung/);
+  assert.match(code,/Adresse prüfen;[\\s\\S]*keine lokale Wiederherstellung/);
   const helper=readFileSync(new URL("../app/src/platform/device-recovery.js",import.meta.url),"utf8");
   assert.doesNotMatch(helper,/localStorage|fetch\(|POST|issue\(|create\(|removeData|console\.log/);
 });
