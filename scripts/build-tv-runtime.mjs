@@ -16,6 +16,7 @@ const inputs = [
   "app/src/views/view-state.js",
   "app/src/api/public-discovery.js",
   "app/src/platform/device-vault.js",
+  "app/src/platform/device-recovery.js",
   "app/src/api/device-pairing.js",
   "app/src/api/channel-catalog.js",
   "app/src/api/recording-catalog.js",
