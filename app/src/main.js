@@ -12,6 +12,7 @@ import { restoreVerifiedSessionCredential } from "./platform/device-recovery.js"
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
+import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
 import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis } from "./platform/recording-player.js";
 
 // Every control is in exactly one row per visible route. Navigation never
@@ -865,9 +866,19 @@ function boot() {
             recordingStatus("loading","Samsung AVPlay startet",rec.title +
               " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
           } else if (state === "error" || state === "unsupported") {
-            stopRecordingPlayback("failure");
-            recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
-              samsungPlaybackDiagnosis(detail,transport));
+            // The media gateway permits GET, not HEAD. Probe only the response
+            // headers of the very same protected session while still active.
+            // This does NOT prove what cookies native AVPlay transmits.
+            var failedSession = recordingPlaybackSession;
+            var playerFailure = samsungPlaybackDiagnosis(detail,transport);
+            recordingStatus("loading","Prüfe Medienzugriff",
+              playerFailure + " · Diagnose ohne Video-Download …");
+            probeMediaHttpHeaders(window,result.mediaUrl,function (probe) {
+              if (recordingPlaybackSession !== failedSession || !failedSession) return;
+              stopRecordingPlayback("failure");
+              recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
+                playerFailure + " " + describeMediaAccessProbe(probe));
+            });
           } else if (state === "finished") {
             stopRecordingPlayback("finished");
             recordingStatus("ready","Aufnahme beendet",rec.title);
