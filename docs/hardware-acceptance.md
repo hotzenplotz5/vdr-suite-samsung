@@ -144,3 +144,13 @@ https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/conn
 https://developer.samsung.com/smarttv/develop/faq/application-installation.html
 
 Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs Watch ermöglicht auf unterstützten Samsung-TV-Modellen Live-Reload ohne erneute Installation, verlangt jedoch ein eigenes geprüftes Setup und ist hier NICHT als sicherer Erhalt des bestehenden KeyManager-Zustands bestätigt. Kein Secret exportieren und keine automatisch wiederholte Kopplung als Workaround.
+
+## S3.4 – Native channels.conf-Sortierung (Quellcode, Hardware offen)
+
+Neuer Samsung-Client-Stand fordert `sort=backendId,channelNumber,channelId&order=asc` und lässt den Server **vor** dem 20-Sender-Limit in VDR-`channels.conf`-Reihenfolge sortieren. Der Folgecursor ist opak und besitzt im neuen Serververtrag `ch2_` statt bisher `ch1_`; der Client übergibt ihn unverändert. Ein bisheriger installierter Server, der die neue Sortierung ablehnt, erzeugt eine **sichtbare HTTP-400-Meldung**, keinen stillen Rückfall auf die falsche ID-Sortierung. Diese Änderung ist ein Source-Slice, **noch kein Hardware-PASS**.
+
+**Notwendige Abhängigkeit:** VDR-Suite Backend API-v1 PR #542 (neuer Handler/Daemon-Build) muss auf dem tatsächlichen yaVDR installiert und anhand seiner Identität überprüft sein, **bevor** ein S3.4-Paket mit VS Code/Tizen auf den Samsung gespielt wird. Testinstallationen haben die bereits gekoppelte KeyManager-Identität früher gelöscht. Kein erneutes Pairing, keine neue Grant-Vergabe und kein weiterer `Run Project` allein für eine Quellcodeprobe.
+
+**Gezielter offener Geräte-Nachweis:** Nach abgesichertem Update sind Sender 1 bis 20 und „Mehr Sender“ (nächste 20) mit der **tatsächlichen** VDR-Kanalreihenfolge zu vergleichen, einschließlich nichtalphabetischer IDs, Sendernummern und Übergang an Seite 1/2; Back/Fokus weiter nutzbar. Dies überprüft nur die neue Sortierung; die bereits bestandenen 20 echten Sender, HTTPS-Discovery, Pairing und Grant-Isolation werden nicht wiederholt. [Zentrale API-v1-Matrix](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md).
+
+**P1 ausdrücklich weiterhin offen:** Die S3.3-/S3.4-Samsung-App hat noch keine echte Recording MediaSession/AVPlay-Wiedergabe. Fortschritt-POST, Continue Watching, Wiedereinstieg per HLS-`startPositionSeconds`, Browser-/Device-CAS, passende Device/Human-Grants und optionales Admin-Linking können auf diesem Client **noch nicht** als Funktionstest abgenommen werden. Sie sind in S5.4/S5.5 vorgemerkt; bereits historische P1-Backend-GET-Hardwaretests nicht wiederholen.
