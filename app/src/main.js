@@ -113,11 +113,12 @@ function boot() {
     if (connectionResult) {
       connectionResult.setAttribute("data-connection-state", "success");
       connectionResult.textContent = "Public API v1 erreichbar. " +
-        result.capabilityCount + " Fähigkeiten gemeldet; noch nicht angemeldet oder freigegeben.";
+        result.capabilityCount + " Fähigkeiten gemeldet. " +
+        "Geräteanmeldung hier nicht geprüft – dafür „Anmeldung prüfen“ wählen.";
     }
-    if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung offen";
+    if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung ungeprüft";
     if (topbarServerState) topbarServerState.textContent = "API v1 erreichbar";
-    message.textContent = "Einstellungen · Public API v1 erreichbar · noch kein Device-Grant";
+    message.textContent = "Einstellungen · Server erreichbar · Geräteanmeldung ungeprüft";
   }
 
   function saveServerBase() {
