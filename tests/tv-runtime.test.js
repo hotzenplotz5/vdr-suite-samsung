@@ -77,7 +77,9 @@ function simulate(options = {}) {
   const serverStatus = {textContent:"", setAttribute(name,value) { if(name==="data-connection-state") this.state=value; }};
   const versionFooter = {textContent:""};
   const versionSettings = {textContent:""};
-  const pairResult = {textContent:""};
+  const pairResult = {textContent:"", attributes:{},
+    setAttribute(name,value){this.attributes[name]=value;},
+    getAttribute(name){return this.attributes[name] ?? null;}};
   const pairCode = {textContent:""};
   const playerSurface = {hidden:true};
   const serverInput = nodes["settings-base-input"];
@@ -580,7 +582,8 @@ test("S4.1 revoked server Device is not described as paired; explicit double loc
   };
   const sim=simulate({keymanager:manager,XMLHttpRequest:h.XHR});
   sim.video.finish();sim.nodes["nav-settings"].click();
-  assert.match(sim.pairResult.textContent,/Server-Anmeldung UNGEPRÜFT/i);
+  assert.match(sim.pairResult.textContent,/Server-Anmeldung noch nicht geprüft/i);
+  assert.equal(sim.pairResult.getAttribute("data-pair-state"),"local");
   sim.nodes["settings-pair-clear"].click();
   assert.equal(removals,0);
   sim.nodes["settings-pair-verify"].click();
