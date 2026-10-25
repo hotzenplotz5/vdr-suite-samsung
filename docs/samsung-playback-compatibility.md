@@ -104,6 +104,53 @@ Für einen aussagekräftigen Test mit derselben Aufnahme:
 4. Niemals wegen eines 401 eine andere Medien-URL, einen Cookiewert
    oder ein Device-Secret manuell einsetzen.
 
+## Zusätzliche präzise Ursache: SameSite=Strict und ein lokaler App-Ursprung
+
+Die paketierte TV-App wird aus ihrem lokalen Tizen-App-Kontext geladen,
+während das Backend unter `https://…` liegt. Laut
+[MDN Set-Cookie / SameSite](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie)
+wird ein Cookie mit `SameSite=Strict` **nicht für Cross-Site-Requests**
+mitgesendet; `withCredentials=true` erzwingt keine Ausnahme von dieser
+Cookie-Richtlinie. Der Gateway setzt für die Device-MediaSession bewusst
+`Secure; HttpOnly; SameSite=Strict`, weshalb **beide** Wege gefährdet sein
+können:
+
+- **HTML5 <video>:** Nutzt den Webengine-Cookiekontext. Falls das Tizen
+  App-Origin aus Sicht des Browsers gegenüber HTTPS cross-site ist, muss
+  die GET-Anfrage trotz zuvor erfolgreichem Device-CREATE an der
+  Cookie-Prüfung scheitern. Welches Origin/Site die reale TV-Engine für
+  das Paket tatsächlich verwendet, ist noch zu messen.
+- **AVPlay:** Verwendet einen nativen, separat dokumentierten
+  Streaming-Stack. Selbst wenn die Webengine ein Cookie besitzt, ist
+  dessen Weitergabe an AVPlay keinesfalls belegt.
+  `setStreamingProperty("COOKIE",…)` ist zwar dokumentiert; wegen
+  `HttpOnly` darf JavaScript den geheimen Cookie-Wert nicht auslesen.
+
+Dies ist eine **konkrete, aus dem Sicherheitsvertrag abgeleitete
+Fehlerhypothese, kein gemessener 401-Befund**. Ein HTTP-401/403 beim
+neuen Header-Test bestätigt eine Medienzugriffsblockade *in der Webengine*;
+ein HTTP-200/206 schließt eine Blockade *in AVPlay* nicht aus.
+`SameSite=None`, Token-in-URL, Header-/Cookie-Exporte oder offene
+Medienrouten dürfen nicht ohne eigene Backend-/Security-Entscheidung
+eingeführt werden.
+
+## HLS-Profil gegen Tizen-5.5-Spezifikation
+
+Die [Samsung General Specifications](https://developer.samsung.com/smarttv/develop/specifications/general-specifications.html)
+führen für Tizen 5.5 unter anderem `#EXT-X-INDEPENDENT-SEGMENTS`
+als nicht unterstützt. Das VDR-Suite-Backend setzt
+für *transkodierte* HLS-Ausgaben in
+`core/media/src/FfmpegHlsCommandBuilder.cpp` derzeit die FFmpeg-Flags
+`delete_segments+independent_segments+temp_file`.
+Bei *kopiertem* HLS wird hingegen
+`delete_segments+split_by_time+temp_file` benutzt.
+
+Dieser mögliche Playlist-Vertragskonflikt ist für HLS konkret zu
+prüfen, aber **nicht** als Ursache der bereits beobachteten Fehler
+belegt; insbesondere erklärt ein HLS-Tag keinen `prepareAsync`-Fehler
+bei `recording/stream.mp4`. Nicht auf Verdacht die bereits
+eingesetzten FFmpeg-Profile global ändern.
+
 ## Abnahme auf dem echten Samsung
 
 1. **Keine Neuinstallation allein wegen eines CI-Fixes.** Die vorhandene
