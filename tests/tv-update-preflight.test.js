@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync, writeFileSync, mkdtempSync, rmSync} from "node:fs";
 import {join} from "node:path";
+import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
 import {inspectWgt, verifyUpdate, zipEntries, manifestDetails, crc32, releaseEvidence} from "../scripts/tv-update-preflight.mjs";
 
@@ -164,4 +165,23 @@ test("S7.2 CLI JSON mode fails closed without baseline; no TV access",()=>{
   });
   assert.notEqual(run.status,0);
   assert.match(run.stderr,/--baseline/);
+});
+
+test("S7.2 --json produces evidence from real CLI args without claiming TV safety",()=>{
+  const temp=mkdtempSync(join(tmpdir(),"samsung-release-evidence-"));
+  try {
+    const current=join(temp,"candidate.wgt"),previous=join(temp,"installed-baseline.wgt");
+    writeFileSync(current,fixture());
+    writeFileSync(previous,fixture({version:"0.0.0"}));
+    const run=spawnSync(process.execPath,["scripts/tv-update-preflight.mjs",
+      "--candidate",current,"--baseline",previous,"--json"],{
+      cwd:new URL("..",import.meta.url),encoding:"utf8"
+    });
+    assert.equal(run.status,0,run.stderr);
+    const report=JSON.parse(run.stdout);
+    assert.equal(report.offline_preflight,"PASS");
+    assert.equal(report.approval_to_install,false);
+    assert.equal(report.keymanager_persistence_on_hardware,"NOT_TESTED");
+    assert.doesNotMatch(run.stdout,/samsung-release-evidence-|install approved/i);
+  } finally {rmSync(temp,{recursive:true,force:true});}
 });
