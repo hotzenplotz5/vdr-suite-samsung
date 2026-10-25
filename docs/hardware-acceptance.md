@@ -228,3 +228,24 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 **Weiterhin nicht als PASS belegt:** tatsächliches Abspielen/AVPlay, vollständige Prüfung der Metadatenfelder, gezielte HTTP-401/403/409/503-Fehlerpfade, Neustart-Persistenz im einzelnen Abnahmeschritt. Die Senderliste lädt zwar erfolgreich, ist jedoch derzeit weder in `channels.conf`-Reihenfolge noch per D-Pad anwählbar (eigene offene Bugs). Aufnahme-PASS nicht auf Sendernavigation oder Wiedergabe übertragen.
 
 **Keine zusätzliche Installation erforderlich.** Der Nachweis gilt für den bereits laufenden Samsung-Build; dieser Doku-Commit verändert weder Runtime noch Backend.
+
+
+## S4.2/S5.1 – VDR-Verzeichnisse und erster Samsung-Aufnahme-Playback-Test (SOURCE, HARDWARE OPEN)
+
+**Benutzerentscheidung 25.10.2026:** Aufnahmen ab sofort **nach tatsächlichen VDR-Verzeichnissen** browsen; Genre-Verzeichnisse ausdrücklich erst später. Nach positivem S4.1-Hardwaretest (100+100 Aufnahmen, D-Pad und Vorherige Seite bestätigt) soll **eine echte Aufnahme am Samsung abgespielt** werden.
+
+### S4.2 VDR-Ordner-Test
+- [ ] In der neuen Samsung-Buildkennung `S5.1` kontrollieren, dass **VDR-Verzeichnisse laden** echte VDR-Ordner über `GET /api/v1/recordings?view=folders` zeigt; keine Genres aus Metadaten.
+- [ ] Mit OK einen Ordner öffnen, ggf. Unterordner öffnen, `Ordner hoch` und Fernbedienung-Zurück zur jeweils echten Elternansicht; nach 100 Einträgen folgeseitig per `offset` blättern.
+- [ ] Prüfen, dass Einzelaufnahmen als Recording-Blätter und nicht als erfundene Zusatzordner erscheinen; Quelle bleibt opake `fld1_`-/`rec_`-Identität statt native Dateipfade.
+- [ ] `Alle Aufnahmen` öffnet weiterhin den zuvor hardwarebestätigten flachen `rc1_`-Katalog mit 100er-Vorwärts-/Rückwärtsseiten. Änderungen im Ordner dürfen Aufnahmen weder verschieben noch umbenennen.
+
+### S5.1/S5.2 Aufnahme-Wiedergabe auf Tizen 5.5
+- [ ] Im VDR-Suite-Webfrontend für die **aktuelle Samsung Device-ID** und den Zielbackend ausdrücklich `media.recording.play@backend` erteilen; `recordings.view` allein reicht nicht. **Nicht** neu koppeln oder ein bestehendes gültiges Credential widerrufen.
+- [ ] Eine **abgeschlossene, bekannte H.264/AAC-Aufnahme** auswählen (keine laufende Aufnahme, keine exotischen Codecs für die erste Probe). Nach OK auf der Aufnahme wird die Schaltfläche `Wiedergabe testen` fokussiert; zweites OK erstellt explizit die Device-owned MediaSession.
+- [ ] **Erwartet:** Session-POST erhält `201`, wird über `mediaSession.mediaPath` auf denselben HTTPS-VDR-Suite-Host beschränkt und Samsung `webapis.avplay` führt `open → prepareAsync → play` aus. Bild und Ton müssen **tatsächlich** beobachtet werden; ein erfolgreicher POST ist ausdrücklich noch kein Playback-PASS.
+- [ ] PLAY/PAUSE, STOP und BACK prüfen; STOP/BACK müssen AVPlay schließen und `POST .../stop` versuchen. Kein ungefragter erneuter POST beim Navigieren, kein Codec- oder Medien-Token in der Anzeige oder in Logs.
+- [ ] Fehlschläge getrennt notieren: `403` → `media.recording.play` fehlt; `409/422` → Profil/Index nicht bereit; `401` → Device-Anmeldung; Netzwerk/CORS/cookie → Media-/Proxyzugriff; AVPlay-Fehler → Tizen Decoder/Format oder Cookie-Übernahme. **Samsung AVPlay hat ggf. einen von Web-XHR getrennten Cookie-Store; HttpOnly-Sitzungscookies dürfen nicht durch Export in JS oder URL umgangen werden.** Der Code ist nur ein erster Hardware-Experimentpfad.
+- [ ] Die auf dem TV sichtbare Buildkennung, Statusausgaben, Beobachtung von Bild/Ton, Pausen-/STOP-/BACK-Verhalten festhalten. Keine privaten URLs/Token/Identitäten protokollieren.
+
+**Sicherheit/Release-Gate:** CI-Grün bedeutet ausschließlich Source-/Simulator-PASS. Der aktuell laufende TV bleibt unverändert, bis der Nutzer bewusst das signierte WGT paketiert. Das in [Windows-Update-Workflow](windows-update-workflow.md) festgehaltene selektive Runtime-Sicherungsverfahren gilt; **kein `Run Project`, `git clean` oder automatischer Device-Reset**. Bei notwendigem Server-Upgrade ausschließlich die getrennten, abgesicherten Backend-Deployment-Gates verwenden.
