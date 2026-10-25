@@ -39,3 +39,11 @@
 - Ist `npm.cmd run check` bereits erfolgreich und der Buildfingerprint korrekt, **nicht erneut Git-Pull/Build verlangen**, sondern zum separaten Paketierungs-/TV-Hardware-Gate übergehen.
 
 
+
+## S7.2 Produktions-Update (zusätzlich verbindlich)
+
+- [docs/production-update-s7-2.md](docs/production-update-s7-2.md) ist der verbindliche Preflight für ein **signiertes** Produktions-WGT. Vor realem Update Original-Package `VDRSuiteTV`, App-ID `VDRSuiteTV.VDRSuite`, **höhere Version** und identische Author-Zertifikat-Identität gegenüber einem tatsächlich installierten Basis-WGT nachweisen.
+- `node scripts/tv-update-preflight.mjs --candidate ... --baseline ...` ist **offline und read-only**; niemals eine TV-Installation daraus ableiten. Eine alte/andere Debug-WGT ist kein Beweis, dass sie wirklich installiert wurde. Keine Signing-Dateien/Credentials ins Repo übertragen.
+- Samsung Tizen-Studio-Testinstallationen können zuerst deinstallieren: **`Run Project` ist kein sicherer Updatepfad.** Gleichnamiges Paket allein sichert keine KeyManager-Persistenz. Kein ungeprüftes `sdb install`, `vd_appinstall`, WITs Start oder anderer Ersatz. Kein automatisches Re-Pairing/Secret-Export.
+- `package.json` / `app/config.xml` nur bei einer bewusst vorbereiteten neuen Release-Version zusammen hochsetzen; das generierte `app/tv-runtime.js` anschließend neu generieren und committen. Keine künstliche Versionsanhebung im reinen S7.2-Infrastruktur-Slice.
+- S7.2-Hardware-PASS verlangt beobachtete unveränderte Device-ID und Authentifizierung nach datenbewahrendem TV-Update **und** Neustart. CI-GRÜN beweist dies nicht.
