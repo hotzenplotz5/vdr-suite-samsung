@@ -78,3 +78,13 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 **Risiken:** TV-KeyManager nach Test-Update eventuell gelöscht; Server-Deployment-Stand unbekannt; 30-Backend-Vorschauseite begrenzt.
 **Nichtziele:** automatische Pairing-Wiederholung, Admin-Grants, Aufnahmen, EPG, Wiedergabe, AVPlay.
 **Rollback:** Samsung-Client auf vorherigen main-Stand zurücksetzen; keine Serveränderung. Tizen-Test-Installationen können lokale App-Daten löschen.
+
+### Achtung: Update kann Device-Identität löschen (Tizen 5.5)
+
+Vor einem neuen Run Project oder Installieren den aktuellen TV-App-Stand nur beenden und neu starten, dann unter Einstellungen einmal Anmeldung prüfen wählen. Damit wird zuerst die Persistenz der bereits erfolgten Kopplung geprüft, ohne die App zu ersetzen.
+
+Samsung dokumentiert, dass beim Installieren einer neuen App-Version die bisherige App automatisch deinstalliert wird und bei Uninstall Anwendungsdaten verloren gehen können:
+https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/connecting-to-tv-device.html
+https://developer.samsung.com/smarttv/develop/faq/application-installation.html
+
+Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs Watch ermöglicht auf unterstützten Samsung-TV-Modellen Live-Reload ohne erneute Installation, verlangt jedoch ein eigenes geprüftes Setup und ist hier NICHT als sicherer Erhalt des bestehenden KeyManager-Zustands bestätigt. Kein Secret exportieren und keine automatisch wiederholte Kopplung als Workaround.
