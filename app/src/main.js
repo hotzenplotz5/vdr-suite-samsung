@@ -12,7 +12,9 @@ import { restoreVerifiedSessionCredential } from "./platform/device-recovery.js"
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
+import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
 import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis } from "./platform/recording-player.js";
+import { createHtml5RecordingPlayer } from "./platform/html5-recording-player.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -52,6 +54,10 @@ function boot() {
   var recordingTeardownBusy = false;
   var recordingPlaybackSession = null;
   var recordingPlayerSurface = document.getElementById("recording-player-surface");
+  var recordingHtml5Video = document.getElementById("recording-html5-video");
+  var recordingAvplayObject = document.getElementById("recording-avplay-object");
+  var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
+  var recordingPlayerMode = "avplay";
   // Samsung native AVPlay requires a viewport-level object, not one clipped by
   // .detail-page / .recording-catalog scrolling containers.
   if (recordingPlayerSurface && document.body)
@@ -126,7 +132,8 @@ function boot() {
       var rows = [NAV_ROW,
         ["detail-recordings-home", "detail-recordings-load",
          "detail-recordings-backend", "detail-recordings-up",
-         "detail-recordings-all", "detail-recordings-play", "detail-recordings-previous"]];
+         "detail-recordings-all", "detail-recordings-play",
+         "detail-recordings-html5", "detail-recordings-previous"]];
       recordingFocusIds.forEach(function (id) { rows.push([id]); });
       rows.push(["detail-recordings-next"]);
       return rows;
@@ -778,6 +785,10 @@ function boot() {
     if (recordingTeardownBusy) return;
     recordingPlaybackClient.cancel();
     recordingPlayer.stop();
+    recordingHtml5Player.stop();
+    recordingPlayerMode = "avplay";
+    if (recordingHtml5Video) recordingHtml5Video.hidden = true;
+    if (recordingAvplayObject) recordingAvplayObject.hidden = false;
     if (recordingPlayerSurface) recordingPlayerSurface.hidden = true;
     document.documentElement.classList.remove("recording-avplay-active");
     var session = recordingPlaybackSession;
@@ -798,7 +809,8 @@ function boot() {
     if (reason === "user") recordingStatus("ready","Wiedergabe beendet",
       "Samsung AVPlay lokal gestoppt; Server-Stop angefordert.");
   }
-  function startSelectedRecording() {
+  function startSelectedRecording(mode) {
+    mode = mode === "html5" ? "html5" : "avplay";
     if (recordingPlayBusy || recordingPlaybackSession) return;
     if (recordingTeardownBusy) {
       recordingStatus("loading","Vorige MediaSession wird beendet",
@@ -810,9 +822,14 @@ function boot() {
         "Zuerst eine Aufnahme per OK markieren, dann „Wiedergabe testen“ wählen.");
       return;
     }
-    if (!recordingPlayer.available()) {
+    if (mode === "avplay" && !recordingPlayer.available()) {
       recordingStatus("error","AVPlay nicht verfügbar",
         "Samsung AVPlay API fehlt. Gerät/Runtime prüfen.");
+      return;
+    }
+    if (mode === "html5" && !recordingHtml5Player.available()) {
+      recordingStatus("error","HTML5-Video nicht verfügbar",
+        "Browser-Videoelement fehlt; keine neue MediaSession gestartet.");
       return;
     }
     var caps = conservativeSamsungCapabilities({document:document});
@@ -820,6 +837,12 @@ function boot() {
       recordingStatus("error","Decoderprobe unklar",
         "H.264/AAC-Unterstützung nicht nachgewiesen; keine Fähigkeiten erfinden.");
       return;
+    }
+    if (mode === "html5") {
+      // Only direct progressive MP4 is a candidate for the HTML5 <video>.
+      // Never claim the browser supports native MPEG-TS or HLS here.
+      caps.protocols = ["progressive"];
+      caps.containers = ["mp4","fmp4"];
     }
     var safe = vault.read();
     if (!safe.ok || !safe.credential ||
@@ -849,6 +872,16 @@ function boot() {
         recordingPlaybackSession = {
           credential:safe.credential,backendId:backendId,sessionId:result.sessionId
         };
+        if (mode === "html5" &&
+            !/\/recording\/stream\.mp4$/.test(result.mediaUrl)) {
+          stopRecordingPlayback("failure");
+          recordingStatus("error","HTML5-Test benötigt MP4",
+            "Der Server hat kein progressives MP4 ausgewählt. Bitte eine passende Aufnahme wählen.");
+          return;
+        }
+        recordingPlayerMode = mode;
+        if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
+        if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
         if (recordingPlayerSurface) {
           // Show the full-screen AVPlay object and uncover the native video plane.
           recordingPlayerSurface.hidden = false;
@@ -857,17 +890,30 @@ function boot() {
         var transport = /\/hls\/master\.m3u8$/.test(result.mediaUrl) ? "HLS" :
           /\/recording\/stream\.ts$/.test(result.mediaUrl) ? "TS" :
           /\/recording\/stream\.mp4$/.test(result.mediaUrl) ? "MP4" : "unbekannt";
-        var started = recordingPlayer.start(result.mediaUrl,function (state,detail) {
+        var player = mode === "html5" ? recordingHtml5Player : recordingPlayer;
+        var started = player.start(result.mediaUrl,function (state,detail) {
           if (state === "playing") {
-            recordingStatus("ready","AVPlay-Play ausgelöst",rec.title +
+            recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
               " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
           } else if (state === "preparing" || state === "buffering") {
-            recordingStatus("loading","Samsung AVPlay startet",rec.title +
+            recordingStatus("loading",mode === "html5" ? "HTML5-Video startet" : "Samsung AVPlay startet",rec.title +
               " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
           } else if (state === "error" || state === "unsupported") {
-            stopRecordingPlayback("failure");
-            recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
-              samsungPlaybackDiagnosis(detail,transport));
+            // The media gateway permits GET, not HEAD. Probe only the response
+            // headers of the very same protected session while still active.
+            // This does NOT prove what cookies native AVPlay transmits.
+            var failedSession = recordingPlaybackSession;
+            var playerFailure = mode === "html5"
+              ? "HTML5-Video " + (detail && detail.code ? "Fehlercode " + detail.code : "nicht abspielbar")
+              : samsungPlaybackDiagnosis(detail,transport);
+            recordingStatus("loading","Prüfe Medienzugriff",
+              playerFailure + " · Diagnose ohne Video-Download …");
+            probeMediaHttpHeaders(window,result.mediaUrl,function (probe) {
+              if (recordingPlaybackSession !== failedSession || !failedSession) return;
+              stopRecordingPlayback("failure");
+              recordingStatus("error",mode === "html5" ? "HTML5-Wiedergabe fehlgeschlagen" : "AVPlay-Wiedergabe fehlgeschlagen",
+                playerFailure + " " + describeMediaAccessProbe(probe));
+            });
           } else if (state === "finished") {
             stopRecordingPlayback("finished");
             recordingStatus("ready","Aufnahme beendet",rec.title);
@@ -968,7 +1014,7 @@ function boot() {
 
   function loadRecordings(action) {
     if (recordingBusy || recordingPlayBusy || recordingPlaybackSession) return;
-    if (action === "play") {startSelectedRecording();return;}
+    if (action === "play" || action === "html5") {startSelectedRecording(action);return;}
     if (action === "up") {
       if (!recordingFolderUp())
         recordingStatus("ready","Oberstes Verzeichnis","Kein übergeordneter VDR-Ordner.");
@@ -1342,7 +1388,7 @@ function boot() {
         stopRecordingPlayback("user"); return;
       }
       if (key === "PLAY" || key === "PAUSE") {
-        var playbackState = recordingPlayer.pauseOrResume();
+        var playbackState = (recordingPlayerMode === "html5" ? recordingHtml5Player : recordingPlayer).pauseOrResume();
         if (playbackState === "paused")
           recordingStatus("ready","Wiedergabe pausiert","PLAY setzt fort.");
         else if (playbackState === "playing")

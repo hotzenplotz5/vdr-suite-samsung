@@ -68,7 +68,18 @@ export function createSamsungRecordingPlayer(environment) {
           active = true;
           onState("playing");
         } catch (_) {onState("error",{stage:"play"});}
-      },function () {if (token === generation) onState("error",{stage:"prepare"});});
+      },function (error) {
+        if (token !== generation) return;
+        // Samsung Product WebAPI ErrorCallback receives a WebAPIError.
+        // Surface ONLY an allowlisted error name/code; NEVER log message,
+        // response URL, cookie, internal path or native exception object.
+        var allowed=["NotSupportedError","InvalidValuesError","InvalidAccessError",
+          "InvalidStateError","UnknownError","TypeMismatchError"];
+        var reason = error && allowed.indexOf(error.name) >= 0 ? error.name :
+          error && typeof error.code === "number" ? safeAvplayCode(error.code) : null;
+        onState("error",reason && reason !== "unbekannt"
+          ? {stage:"prepare",code:reason} : {stage:"prepare"});
+      });
       onState("preparing");
       return true;
     } catch (_) {

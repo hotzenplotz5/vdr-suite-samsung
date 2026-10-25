@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>VDR-Suite · Samsung</title>
+  <!-- Samsung Product API: required for the Tizen 5.5 native AVPlay engine. -->
+  <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -155,6 +157,7 @@
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-up" data-recordings-action="up">Ordner hoch</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-all" data-recordings-action="all">Alle Aufnahmen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-play" data-recordings-action="play">Wiedergabe testen</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-html5" data-recordings-action="html5">HTML5 MP4 testen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-previous" data-recordings-action="previous">Vorherige Seite</button>
         </div>
         <div class="recording-catalog" aria-label="Echte Aufnahmen, in Seiten von bis zu 100 pro Serveranfrage">
@@ -163,6 +166,7 @@
           <div id="recording-player-surface" class="recording-player-surface" hidden
                aria-label="Samsung AVPlay Wiedergabetest">
             <object id="recording-avplay-object" type="application/avplayer" width="100%" height="100%"></object>
+            <video id="recording-html5-video" class="recording-html5-video" playsinline preload="none" tabindex="-1" hidden></video>
             <p class="recording-player-hint">Samsung AVPlay · Zurück oder STOP beendet · PLAY/PAUSE pausiert</p>
           </div>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-next" data-recordings-action="next">Weitere Aufnahmen</button>

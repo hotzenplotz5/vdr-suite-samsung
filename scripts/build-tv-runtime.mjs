@@ -21,7 +21,9 @@ const inputs = [
   "app/src/api/channel-catalog.js",
   "app/src/api/recording-catalog.js",
   "app/src/api/recording-playback.js",
+  "app/src/api/media-access-probe.js",
   "app/src/platform/recording-player.js",
+  "app/src/platform/html5-recording-player.js",
   "app/src/views/device-auth-status.js",
   "app/src/main.js"
 ];

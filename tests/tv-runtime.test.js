@@ -82,6 +82,14 @@ function simulate(options = {}) {
     getAttribute(name){return this.attributes[name] ?? null;}};
   const pairCode = {textContent:""};
   const playerSurface = {hidden:true};
+  const nativeAvplayObject = {hidden:false};
+  const recordingHtml5Video = {
+    hidden:true,paused:true,src:"",error:null,
+    play(){this.paused=false;return Promise.resolve();},
+    pause(){this.paused=true;},
+    load(){},
+    removeAttribute(name){if(name==="src")this.src="";}
+  };
   const serverInput = nodes["settings-base-input"];
   const serverTestButton = nodes["settings-test"];
   const overlay = { hidden: true };
@@ -110,6 +118,8 @@ function simulate(options = {}) {
       if (id === "live-backend-name") return liveBackendName;
       if (id === "recording-list") return recordingList;
       if (id === "recording-player-surface") return playerSurface;
+      if (id === "recording-html5-video") return recordingHtml5Video;
+      if (id === "recording-avplay-object") return nativeAvplayObject;
       if (id === "recording-backend-name") return recordingBackendName;
       if (!textNodes[id]) throw Error("Missing test node " + id);
       return textNodes[id];
