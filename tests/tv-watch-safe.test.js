@@ -1,71 +1,77 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {readFileSync, copyFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync} from "node:fs";
+import {readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
+import {devManifest, manifestIdentity, identity, production, verifyStaging} from "../scripts/tv-wits-isolated.mjs";
 import {preflight} from "../scripts/tv-watch-safe.mjs";
 
-const requiredIgnore=[
-  ".witsconfig.json","Debug",".tizen-rds","*.p12"
-];
-const manifest='<widget><tizen:application package="VDRSuiteTV" id="VDRSuiteTV.VDRSuite"/></widget>';
-function fixture({hasConfig=true,config={connectionInfo:{deviceIp:"example"},profileInfo:{path:"local"}},ignore=requiredIgnore.join("\n"),xml=manifest}={}) {
-  return {
-    exists(path) {
-      if (path.endsWith(".witsconfig.json")) return hasConfig;
-      if (path.endsWith(".witsignore")) return true;
-      return false;
-    },
-    read(path) {
-      if (path.endsWith(".witsconfig.json")) return JSON.stringify(config);
-      if (path.endsWith(".witsignore")) return ignore;
-      if (path.endsWith("config.xml")) return xml;
-      throw Error("Unexpected file");
-    }
-  };
+const original=readFileSync(join(production,"config.xml"),"utf8");
+const generated=devManifest(original);
+
+test("WITs always uses a distinct ten-character package ID, not only another application ID",()=>{
+  assert.deepEqual(manifestIdentity(original),{app:identity.productionApp,package:identity.productionPackage});
+  assert.deepEqual(manifestIdentity(generated),{app:identity.devApp,package:identity.devPackage});
+  assert.match(identity.devPackage,/^[A-Za-z0-9]{10}$/);
+  assert.notEqual(identity.devPackage,identity.productionPackage);
+  assert.equal(identity.witsApp,identity.devApp+"WITs");
+  assert.ok(identity.witsApp.startsWith(identity.devPackage+"."));
+  assert.match(generated,/<name>VDR-Suite DEV<\/name>/);
+  assert.match(generated,/required_version="5\.5"/);
+  assert.ok(!generated.includes('package="'+identity.productionPackage+'"'));
+});
+
+test("Unknown production package/app changes fail closed instead of clobbering TV identity",()=>{
+  assert.throws(()=>devManifest(original.replace('package="VDRSuiteTV"','package="Different1"')),/Unexpected production/);
+  assert.throws(()=>devManifest(original.replace('id="VDRSuiteTV.VDRSuite"','id="Other.App"')),/Unexpected production/);
+  assert.throws(()=>manifestIdentity("<widget></widget>"),/missing/);
+});
+
+function fixture() {
+  const base=mkdtempSync(join(tmpdir(),"samsung-wits-isolation-"));
+  const source=join(base,"source");
+  const target=join(base,"dev");
+  mkdirSync(source);mkdirSync(target);
+  writeFileSync(join(source,"config.xml"),original);
+  writeFileSync(join(target,"config.xml"),generated);
+  for(const name of ["index.html","styles.css","tv-runtime.js"]) {
+    writeFileSync(join(source,name),"source "+name);
+    writeFileSync(join(target,name),"source "+name);
+  }
+  writeFileSync(join(target,".witsignore"),".witsconfig.json\nDebug\n*.p12\ndevice-local.js\n");
+  const config={connectionInfo:{baseAppPath:".",deviceIp:"192.0.2.1"},profileInfo:{path:"profile-only-placeholder"}};
+  const putConfig=(next)=>writeFileSync(join(target,".witsconfig.json"),JSON.stringify(next));
+  putConfig(config);
+  return {base,source,target,config,putConfig,inspect:()=>verifyStaging({source,target})};
 }
-test("Safe Samsung update Watch accepts a configured Tizen 5.5 developer project",()=>{
-  assert.deepEqual(preflight(fixture()),[]);
+test("Isolated WITs staging checks identity, source sync and local config without contacting a TV",()=>{
+  const f=fixture();
+  try {
+    assert.deepEqual(f.inspect(),[]);
+    f.putConfig({...f.config,connectionInfo:{...f.config.connectionInfo,baseAppPath:"../source"}});
+    assert.match(f.inspect().join(" "),/MUST point to isolated/);
+    f.putConfig(f.config);
+    writeFileSync(join(f.target,"tv-runtime.js"),"old version");
+    assert.match(f.inspect().join(" "),/not current/);
+    writeFileSync(join(f.target,"tv-runtime.js"),"source tv-runtime.js");
+    writeFileSync(join(f.target,"device-local.js"),"should never be copied");
+    assert.match(f.inspect().join(" "),/Unknown file/);
+  } finally {rmSync(f.base,{recursive:true,force:true});}
 });
-test("Safe Watch rejects absent WITs init; never silently installs the app",()=>{
-  const result=preflight(fixture({hasConfig:false}));
-  assert.ok(result.some(x=>x.includes("WITs -i")));
-});
-test("Safe Watch requires ignored developer files and stable package identity",()=>{
-  assert.ok(preflight(fixture({ignore:".witsconfig.json"})).some(x=>x.includes("Debug")));
-  assert.ok(preflight(fixture({xml:manifest.replace("VDRSuiteTV.VDRSuite","different.app")})).some(x=>x.includes("Paketidentität")));
-  assert.ok(preflight(fixture({config:{}})).some(x=>x.includes("unvollständig")));
-});
-test("Safe Watch code invokes only WITs --watch; no Start, install or secret export",()=>{
+test("Production watch without isolated WITs init is blocked (never falls back to installation)",()=>{
+  assert.ok(preflight().length>0); // CI has no local DEV WITs credentials/config
   const script=readFileSync(new URL("../scripts/tv-watch-safe.mjs",import.meta.url),"utf8");
   const npm=JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8"));
-  const ignore=readFileSync(new URL("../app/.witsignore",import.meta.url),"utf8");
-  assert.match(script,/spawn\(windows\?"wits\.cmd":"wits",\["--watch"\]/);
-  assert.doesNotMatch(script,/spawn\([^\n]+\["(?:--start|-s|install|uninstall)"\]/);
-  assert.match(npm.scripts["tv:watch"],/scripts\/tv-watch-safe\.mjs/);
-  assert.match(npm.scripts["tv:watch:check"],/--preflight/);
-  assert.match(readFileSync(new URL("../.gitignore",import.meta.url),"utf8"),/\/app\/\.witsconfig\.json/);
-  for (const needle of requiredIgnore) assert.ok(ignore.includes(needle));
-  assert.doesNotMatch(script,/credentialSecret|localStorage|exportSecret|saveData/);
-});
-test("Safe Watch fails closed on an unconfigured checkout, no target/network required",()=>{
-  const root=mkdtempSync(join(tmpdir(),"samsung-tv-watch-test-"));
-  try {
-    mkdirSync(join(root,"app"),{recursive:true});
-    mkdirSync(join(root,"scripts"),{recursive:true});
-    copyFileSync(new URL("../scripts/tv-watch-safe.mjs",import.meta.url),
-      join(root,"scripts","tv-watch-safe.mjs"));
-    writeFileSync(join(root,"package.json"),'{"type":"module"}');
-    writeFileSync(join(root,"app",".witsignore"),requiredIgnore.join("\\n"));
-    writeFileSync(join(root,"app","config.xml"),manifest);
-    const result=spawnSync(process.execPath,["scripts/tv-watch-safe.mjs","--preflight"],{
-      cwd:root,encoding:"utf8"
-    });
-    assert.notEqual(result.status,0);
-    assert.match(result.stderr,/TV-Watch abgebrochen/);
-    assert.match(result.stderr,/Keine Installation/);
-  } finally {
-    rmSync(root,{recursive:true,force:true});
-  }
+  assert.match(script,/cwd:staging/);
+  assert.match(script,/\["--watch"\]/);
+  assert.doesNotMatch(script,/\["--start"\]|\["-s"\]|vd_appinstall|vd_appuninstall|Run Project/);
+  assert.match(npm.scripts["tv:dev:prepare"],/tv-wits-isolated\.mjs --prepare/);
+  assert.match(npm.scripts["tv:dev:identity"],/tv-wits-isolated\.mjs --identity/);
+  const result=spawnSync(process.execPath,["scripts/tv-watch-safe.mjs","--preflight"],{
+    cwd:new URL("..",import.meta.url),encoding:"utf8"
+  });
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/WITs Watch blocked/);
+  assert.match(result.stderr,/No device contact/);
 });
