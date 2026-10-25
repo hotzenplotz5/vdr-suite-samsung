@@ -159,3 +159,20 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - [ ] Nach erneutem Öffnen kein ungefragter Backend-/Recording-Fetch durch bloßes Menü-Fokussieren; OK löst den Lesevorgang aus; kein Medien-Cookie oder secret in UI/Logs.
 
 **Upstream Hardware-Matrix:** [API-v1 kumulative REAL-VDR-/Client-Gates](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md). S4.1 zeigt nur Metadaten; S4.2 Ordnernavigation, S5 AVPlay/MediaSession und S5.3 P1-Resume folgen. Bereits akzeptierte Backend-Recording-READ-/WRITE-Proben werden nicht allein wegen dieses Samsung-Clients erneut ausgeführt.
+
+
+## S7.1 – Datenbewahrendes Samsung-Entwicklungsupdate per WITs Watch (offen)
+
+**Source/Offline-Teststand:** Der neue Befehl `npm.cmd run tv:watch` verwendet ausschließlich `wits --watch`; vor dem Start werden die lokale WITs-Konfiguration, der Ausschluss von Zertifikatsdateien/Debug-Artefakten, die unveränderte Paketidentität, der synchronisierte `tv-runtime.js`-Build und Offline-Tests geprüft. Der Befehl enthält **keinen** Installations-/Deinstallationsfallback. WITs Watch ist laut Samsung für 2020 / Tizen 5.5 unterstützt. **Hardware-PASS noch nicht erteilt.**
+
+**Real-TV-Test ohne Secrets oder Verlust eines weiteren Device-Accounts:**
+
+- [ ] Einmalige WITs-Einrichtung auf dem Windows-Entwicklungsrechner mit der vorhandenen Samsung-Zertifikatkette. Der allererste WITs Start **kann** eine neue App-Installation bedeuten und ist **kein** sicherer Update-Test. Mit existierender Kopplung nicht ungefragt starten.
+- [ ] Vor erstem Watch: vorhandene App mit demselben `VDRSuiteTV.VDRSuite`-Paket auf dem TV öffnen. Falls das KeyManager-Credential nach früherem `Run Project` bereits verloren ist, ist eine einmalige bewusste Neu-Kopplung nach Abschluss des Bootstrap erforderlich; keine automatische Migration alter Device-Rechte.
+- [ ] Unter Einstellungen `Anmeldung prüfen` -> Erfolg; Backend/Grants der **aktiven** Device-Identität vor Watch überprüfen; keine secret-Werte oder private URLs protokollieren.
+- [ ] Nur `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:watch`; am vorhandenen App-Paket **eine harmlose Text-/UI-Änderung** synchronisieren. Vorhandene App muss neu laden ohne Deinstallation oder unerwartete Paket-ID-/Signaturänderung.
+- [ ] Nach Watch: `Anmeldung prüfen` weiter erfolgreich; `Sender laden` zeigt weiterhin freigegebene echte Sender, `Aufnahmen laden` bei gesondertem `recordings.view` dieselbe berechtigte Mediathek. **Kein** neuer Server-Device-Eintrag, **kein** erneutes Pairing und **keine** erneute Grant-Vergabe nötig.
+- [ ] Normales App-Beenden/Relaunch wiederholt obige Login-Prüfung; Watch-Abbruch/Missing Config führt **nicht** zu `Run Project`-/Install-Fallback.
+- [ ] WITs Watch kann `config.xml`, Store-/Release-Updates und nicht vorbereitete bestehende Pakete **nicht** als harmloses Update garantieren. Einmalige produktive Paket-/Signaturaktualisierung erhält erst mit eigener TV-Testmatrix den Status PASS.
+
+**Abgrenzung:** Die tatsächlich bereits verlorenen Tizen-KeyManager-Bytes lassen sich nicht aus dem Server-Device-Eintrag rekonstruieren. Nie Credential in JS-Konfiguration, PC-Dateien, Web-Storage, Logs oder ungeschützte Remote-Kanäle übertragen. Die API-v1-Gerätekopplung und per-Device-Grants bleiben serverseitig autorisiert und werden durch diesen Entwicklungspfad nicht verändert.
