@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"d9fbb64bdcbf","label":"Samsung v0.1.0 · S5.1 · bd9fbb64bdcbf"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"b376b6e2b281","label":"Samsung v0.1.0 · S5.1 · bb376b6e2b281"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1277,11 +1277,12 @@
           // Samsung Product WebAPI ErrorCallback receives a WebAPIError.
           // Surface ONLY an allowlisted error name/code; NEVER log message,
           // response URL, cookie, internal path or native exception object.
-          var reason = error && safeAvplayCode(error.name) !== "unbekannt"
-            ? safeAvplayCode(error.name) : error && safeAvplayCode(error.code);
-          onState("error",{
-            stage:"prepare",code:reason === "unbekannt" ? undefined : reason
-          });
+          var allowed=["NotSupportedError","InvalidValuesError","InvalidAccessError",
+            "InvalidStateError","UnknownError","TypeMismatchError"];
+          var reason = error && allowed.indexOf(error.name) >= 0 ? error.name :
+            error && typeof error.code === "number" ? safeAvplayCode(error.code) : null;
+          onState("error",reason && reason !== "unbekannt"
+            ? {stage:"prepare",code:reason} : {stage:"prepare"});
         });
         onState("preparing");
         return true;
