@@ -298,3 +298,13 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - [ ] Den gemeldeten Aufnahme-Wiedergabe-Screenshot **separat** nach der Statuskorrektur analysieren; AVPlay/Bild/Ton sind dadurch nicht bestätigt.
 
 **Quell-/CI-Status:** Teststand nach Merge nachtragen; kein Hardware-PASS ohne erneute TV-Beobachtung. **Rollback:** vorherigen Quellstand wiederherstellen, aber keinen ungeprüften TV-Downgrade ausführen. Aktuelle funktionierende Device-Anmeldung nicht überschreiben.
+
+## S7.3: Kopplungsstatus vs. echte Sender/Aufnahmen (25.10.2026)
+
+**Reproduzierter TV-Befund (vor Fix):** Trotz authentifizierten echten Live-Sendern und VDR-Aufnahmen meldeten die Einstellungen weiterhin sinngemäß „nicht gekoppelt“/„ungeprüft“. Ursache war ein veralteter UI-Status, nicht notwendigerweise verlorenes Credential. Die erfolgreichen Geräteverifikationen der Sender- und Aufnahmeseite aktualisierten die Einstellungsanzeige nicht.
+
+**Quellfix:** Erfolgreiche Device-Verifikation aktualisiert den nur im laufenden Prozess gehaltenen Authentifizierungsnachweis. Beim Öffnen der Einstellungen wird der aktuelle KeyManager-Status neu gelesen. Positiver Authentifizierungsnachweis ist auf genau Credential-ID und Serverbasis beschränkt, HTTP 401 widerruft nur die lokale *Bestätigungsanzeige*; ein Speicherfehler löst weder Reset noch automatische Kopplung aus.
+
+**Hardware-Retest offen:** Bereits bestehende Anmeldung benutzen, Sender und Aufnahmen per OK laden, Einstellungen öffnen und prüfen, dass die Kopplungsanzeige „Gerät authentifiziert“ mit derselben Device-ID ausgibt. App neu starten; vor neuer Netzwerkbestätigung ist „nur lokal gespeichert“ korrekt. „Anmeldung prüfen“ muss bei gültigem Credential die bestätigte Anzeige herstellen. Keine automatische Neu-Kopplung. **Kein** erneutes Run Project allein für diese reine Anzeigeänderung, bevor ein gesondertes TV-Install-Gate bewusst freigegeben ist.
+
+**Offene separate S5.2-Beobachtung (Fotos):** AVPlay öffnet einen kleinen Wiedergabebereich unterhalb der Aufnahmeliste statt Vollbild; Video startet nicht. Danach erscheint mitunter „Session-Stop nicht bestätigt / Zeitüberschreitung“, was den ursprünglichen Playerfehler überdecken kann. Als **gesonderten Player-Slice** behandeln; dieser S7.3-Fix behauptet ausdrücklich keinen AVPlay-Hardwarepass.
