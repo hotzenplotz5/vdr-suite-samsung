@@ -135,7 +135,8 @@ test("S5.2 preflight/play/open stages are unambiguous and safe",()=>{
 test("S5.2 late session-stop timeout cannot mask original AVPlay failure",()=>{
   const main=readFileSync(new URL("../app/src/main.js",import.meta.url),"utf8");
   assert.match(main,/if \(reason === "user" && currentView === "recordings" && !result\.ok\)/);
-  assert.match(main,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error","AVPlay-Wiedergabe fehlgeschlagen"/);
+  assert.match(main,/probeMediaHttpHeaders\(window,result\.mediaUrl,function \(probe\) \{/);
+  assert.match(main,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error",mode === "html5"/);
   assert.match(main,/samsungPlaybackDiagnosis\(detail,transport\)/);
   assert.match(main,/if \(recordingTeardownBusy\) \{/);
   assert.match(main,/recordingSelected = null; \/\/ Changing folder\/page/);
