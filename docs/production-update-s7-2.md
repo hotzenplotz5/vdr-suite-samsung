@@ -60,7 +60,19 @@ Zunächst wie üblich **nur lokal**:
    **kein** solcher Nachweis.
 2. Für einen *neuen Release* die **Versionsnummer in `app/config.xml` und
    `package.json` gemeinsam erhöhen**, sonst ist es kein sauberer Upgrade-
-   Kandidat. IDs unverändert lassen.
+   Kandidat. IDs unverändert lassen. Dafür gibt es jetzt ein explizites,
+   offline arbeitendes Werkzeug mit Vorschau, beispielsweise:
+
+   ```powershell
+   node scripts/tv-release-version.mjs --next 0.1.1 --dry-run
+   node scripts/tv-release-version.mjs --next 0.1.1 --apply
+   ```
+
+   **Nur als Beispiel für den aktuell dokumentierten Ausgangsstand 0.1.0.**
+   Für spätere Releases entsprechend die nächste Version verwenden. `--apply`
+   ändert ausschließlich die beiden versionierten Quelldateien, ohne
+   automatische Neu-Generierung, Signierung, Installation oder Git-Bereinigung.
+   Anschließend wie im nächsten Schritt die Runtime generieren und testen.
 3. `npm.cmd run build:tv` und `npm.cmd run check`, danach **Build Project**
    (nicht **Run Project**) mit dem bisherigen Autor-Zertifikat.
 4. Lokale Paketprüfung im VS-Code-Terminal:
