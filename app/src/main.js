@@ -423,7 +423,7 @@ function boot() {
     }
     if (action === "backend") {
       if (liveBackends.length < 2 || !liveCredential) {
-        liveStatus("empty", "Kein weiteres Backend",
+        liveStatus(liveRows ? "ready" : "empty", "Kein weiteres Backend",
           "Es wurde nur ein freigegebenes Backend gefunden."); return;
       }
       liveBackendIndex = (liveBackendIndex + 1) % liveBackends.length;
@@ -493,7 +493,13 @@ function boot() {
     }
     currentView = view;
     if (view === "live") {
+      // Keep S2.2 DOWN-to-first-detail-button focus behavior.
+      if (!rowMemory.live) rowMemory.live = {};
+      rowMemory.live[1] = "detail-live-home";
       clearLiveRows();
+      liveCredential = null;
+      liveBackends = [];
+      liveBackendIndex = 0;
       liveCursor = null;
       liveStatus("offline", "Bereit für echte Sender",
         "„Sender laden“ nutzt deine gespeicherte Geräteanmeldung.");
