@@ -298,3 +298,22 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - [ ] Den gemeldeten Aufnahme-Wiedergabe-Screenshot **separat** nach der Statuskorrektur analysieren; AVPlay/Bild/Ton sind dadurch nicht bestätigt.
 
 **Quell-/CI-Status:** Teststand nach Merge nachtragen; kein Hardware-PASS ohne erneute TV-Beobachtung. **Rollback:** vorherigen Quellstand wiederherstellen, aber keinen ungeprüften TV-Downgrade ausführen. Aktuelle funktionierende Device-Anmeldung nicht überschreiben.
+
+## S5.2-R – Samsung-Aufnahmenwiedergabe: AVPlay vs. Session-Stop (Foto 25.10.2026)
+
+**Beobachtung auf echter Hardware:** In Aufnahmen → Action / Default VDR / Seite 1 ist eine echte Aufnahmeliste sichtbar. Nach „Wiedergabe testen“ zeigte der Fernseher „**Session-Stop nicht bestätigt**“ und „**MediaSession-Anfrage: Zeitüberschreitung · Server-Idle-Timeout greift.**“ Weder Bild/Ton noch eine erfolgreiche AVPlay-Vorbereitung sind durch das Foto nachgewiesen.
+
+**Codeanalyse:** Ein Stop-Callback in `stopRecordingPlayback()` überschrieb auch nach einem vorausgehenden AVPlay-`onerror` oder `prepareAsync`-Fehler die eigentlich wichtige erste Fehleranzeige. Screenshot-Timeout gehört daher zum **Aufräumen**, nicht zwingend zur primären Wiedergabeursache. Die vorhandene Client-MediaSession und die beim Stop verwendete Server-API sprechen für einen vorher erhaltenen positiven CREATE-Antwortpfad; die echte TV-Medienwiedergabe ist noch offen.
+
+**Quellfix S5.2-R (Source, keine Hardware-Freigabe):**
+- AVPlay-Aufrufphase wird bei Fehler sicher unterschieden: `open`, `prepareAsync`, `play`, `stream`, Vorprüfung; kurze erlaubte AVPlay-Fehlercodes statt ungefilterter nativer Exceptiontexte oder Media-URLs.
+- Spätes Stop-Timeout überschreibt **niemals** die ursprüngliche AVPlay-Fehlerursache. Ein ausdrücklich gedrücktes STOP meldet eine separate unbestätigte Serverbereinigung korrekt.
+- Während die vorherige MediaSession auf STOP-Antwort wartet, wird keine zweite CREATE ausgelöst, die das erste STOP-HTTP-XHR abbrechen würde.
+- Beim Verzeichnis-/Seitenwechsel wird die vorherige Aufnahmeselektion verworfen.
+- Ein erfolgreicher Aufruf von `webapis.avplay.play()` wird als **Play ausgelöst** bezeichnet; sichtbares Bild/Ton bleibt Hardware-Gate.
+
+**Noch nicht belegt:** Der Device-CREATE erhält einen geschützten `HttpOnly`-`vdr_suite_media`-Cookie. Dass Samsung AVPlay denselben Cookie nach XHR/Set-Cookie tatsächlich an die geschützten HLS-/MPEG-TS-Endpunkte sendet, ist nicht nachgewiesen. Die Samsung AVPlay-API kennt `setStreamingProperty("COOKIE",...)`, aber ein HttpOnly-Cookie darf nicht für JavaScript lesbar gemacht, in eine URL verlagert oder als Device-Credential in den Player eingeschleust werden. Wenn die neue AVPlay-Diagnose auf Medienzugang deutet, muss diese Grenze **serverseitig/auf dem TV mit zulässiger Authentifizierung** belegt bzw. sicher gelöst werden, nicht durch einen Secret-Fallback.
+
+**Nächster TV-Hardware-Gate erst nach bewusster Updateinstallation:** Einen abgeschlossenen H.264/AAC-Film wählen; genaue AVPlay-Phase, Profil HLS/TS/MP4 und evtl. Fehlercode abschreiben. Bestehende Grants `media.recording.play@backend` prüfen; keine neue Kopplung. STOP-/BACK-Nachricht darf primären AVPlay-Fehler nicht überschreiben. Kein Hardware-PASS vor sichtbarem Bild/Ton.
+
+**Rollback:** Ausschließlich auf Quelle/Commit-Ebene. TV-Downgrade/Run Project kann Kopplung verlieren; keine automatische Geräteinstallation.
