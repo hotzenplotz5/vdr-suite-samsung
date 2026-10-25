@@ -38,7 +38,7 @@ function simulate(options = {}) {
       removeAttribute(name) { delete attrs[name]; },
       tagName: match[0].startsWith("<input") ? "INPUT" : "BUTTON",
       value: "", disabled: false,
-      focus() {}, addEventListener(name, fn) { if (name === "click") node.click = fn; if (name === "blur") node.blur = fn; }
+      focus() {}, addEventListener(name, fn) { if (name === "click") node.click = fn; if (name === "blur") node.blur = fn; if (name === "change") node.change = fn; }
     };
     nodes[match[1]] = node;
     return node;
