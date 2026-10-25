@@ -1,0 +1,17 @@
+# Samsung WITs Watch: only app code/assets; never copy developer tooling/certs.
+.witsconfig.json
+.witsignore
+Debug/
+.tizen-rds/
+tizen_web_project.yaml
+.project
+.settings/
+.tizen/
+*.wgt
+*.tpk
+*.p12
+*.pfx
+*.pem
+*.key
+*.crt
+*.cer
