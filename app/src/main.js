@@ -1169,7 +1169,8 @@ function boot() {
         recordingStatus("ready", chosen.title || "Aufnahme",
           (chosen.description ? chosen.description.slice(0, 240) :
            "Aufnahme aus dem VDR-Katalog.") +
-          " · Zum Test „Wiedergabe testen“ auswählen.");
+          " · Jetzt OK auf „Wiedergabe testen“ startet einen kontrollierten MediaSession-Test.");
+        setFocus("detail-recordings-play");
       }
       return;
     }
