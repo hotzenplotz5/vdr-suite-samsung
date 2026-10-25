@@ -27,6 +27,14 @@ profiles.xml
 # Per-developer TV server base (no credentials), excluded from Git.
 /app/device-local.js
 
+
+# Locally generated VS Code / Tizen SDK project and debug artifacts.
+# Never remove these developer files merely because Git shows them as untracked.
+/.vscode/
+/app/.tizen-rds/
+/app/Debug/
+/app/tizen_web_project.yaml
+
 # WITs local machine-specific TV address / certificate profile config.
 /app/.witsconfig.json
 /app/.wits/
