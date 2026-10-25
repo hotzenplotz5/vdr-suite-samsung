@@ -96,3 +96,10 @@ https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/conn
 https://developer.samsung.com/smarttv/develop/faq/application-installation.html
 
 **Neuer Quellpfad:** `npm.cmd run tv:watch` nutzt nach einmaliger WITs-Einrichtung **ausschließlich WITs Watch** (keine erneute Paketinstallation), mit Fail-Closed-Preflight. Das konkrete TV-/KeyManager-Persistenz-Gate bleibt offen. `Run Project` / `Wits Start` nicht als sicheren Updatebefehl verwenden; kein Secret exportieren und keine automatische Kopplung als Workaround.
+
+## Slice: Sichtbare Samsung-App-Version / installationssicherer Nachweis (25.10.2026)
+
+Der Nutzer meldete einen WITs-`--watch`-Abbruch trotz erfolgreicher SDB-Verbindung. Die Ursache ist noch nicht abschließend auf dem TV nachgewiesen. Die bestehende VS-Code-Installation muss nicht mit der von WITs erwarteten initialisierten App identisch sein; `wits -i` legt nur die Konfiguration an. **Weder `wits -s` noch `Run Project` ist als Credential-sicherer Fix freigegeben.**
+
+Frontend-Slice: Den fest verdrahteten veralteten Footer `S3.3` durch `Samsung v<Manifest-/Paketversion> · S4.1 · b<12-stellige SHA-256-Quellkennung>` ersetzen. Das Label wird beim Offline-Boot aus der gebauten Runtime direkt auf **allen Seiten** und unter **Einstellungen** angezeigt; kein Server-/Credential-Zugriff, kein Git-Zugriff auf dem Fernseher. Der Build erzeugt deterministische Fingerprints aus produktiven JS-/HTML-/CSS-/Manifest-Inhalten und verhindert veraltete Pakete über bestehende Build-Checks. **Source/CI ist nicht reale Installation**. TV-Gate: sichtbare Kennung und erhaltene KeyManager-Anmeldung nach einem ausdrücklich freigegebenen, nachweislich datenbewahrenden Update.
+

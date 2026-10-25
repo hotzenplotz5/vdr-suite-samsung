@@ -4,6 +4,8 @@
 (function () {
   "use strict";
 
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S4.1","build":"8ca122aafa22","label":"Samsung v0.1.0 · S4.1 · b8ca122aafa22"});
+
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
   const KEY_CODES = Object.freeze({
@@ -942,6 +944,13 @@
     var topbarServerState = document.getElementById("topbar-server-status");
     var message = document.getElementById("message");
     var keyStatus = document.getElementById("key-status");
+    // The visible label comes from the packaged runtime, never from Git, a
+    // network request, localStorage or a developer-controlled TV setting.
+    var buildText = VDR_SUITE_BUILD_IDENTITY.label;
+    var buildFooter = document.getElementById("app-build-version");
+    var buildSettings = document.getElementById("settings-app-build-version");
+    if (buildFooter) buildFooter.textContent = buildText;
+    if (buildSettings) buildSettings.textContent = buildText;
   
     items.forEach(function (item) {
       var id = item.getAttribute("data-focus-id");

@@ -79,6 +79,13 @@ function boot() {
   var topbarServerState = document.getElementById("topbar-server-status");
   var message = document.getElementById("message");
   var keyStatus = document.getElementById("key-status");
+  // The visible label comes from the packaged runtime, never from Git, a
+  // network request, localStorage or a developer-controlled TV setting.
+  var buildText = VDR_SUITE_BUILD_IDENTITY.label;
+  var buildFooter = document.getElementById("app-build-version");
+  var buildSettings = document.getElementById("settings-app-build-version");
+  if (buildFooter) buildFooter.textContent = buildText;
+  if (buildSettings) buildSettings.textContent = buildText;
 
   items.forEach(function (item) {
     var id = item.getAttribute("data-focus-id");

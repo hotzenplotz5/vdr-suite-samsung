@@ -75,6 +75,8 @@ function simulate(options = {}) {
     stateNodes["detail-state-skeleton-" + route] = { hidden: true };
   }
   const serverStatus = {textContent:"", setAttribute(name,value) { if(name==="data-connection-state") this.state=value; }};
+  const versionFooter = {textContent:""};
+  const versionSettings = {textContent:""};
   const pairResult = {textContent:""};
   const pairCode = {textContent:""};
   const serverInput = nodes["settings-base-input"];
@@ -97,6 +99,8 @@ function simulate(options = {}) {
       if (id === "suite-connection-result") return serverStatus;
       if (id === "home-server-state") return textNodes["message"];
       if (id === "topbar-server-status") return textNodes["message"];
+      if (id === "app-build-version") return versionFooter;
+      if (id === "settings-app-build-version") return versionSettings;
       if (id === "pairing-result") return pairResult;
       if (id === "pairing-user-code") return pairCode;
       if (id === "live-channel-list") return liveList;
@@ -137,8 +141,24 @@ function simulate(options = {}) {
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, versionFooter, versionSettings };
 }
+
+test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
+  const version = runtime.match(/const VDR_SUITE_BUILD_IDENTITY = Object\.freeze\((\{[^;]+\})\);/);
+  assert(version, "Bundled version identity must be present");
+  const info = JSON.parse(version[1]);
+  const pkg = JSON.parse(readFileSync("package.json","utf8"));
+  const manifest = readFileSync("app/config.xml","utf8");
+  assert.equal(info.version, pkg.version);
+  assert.match(manifest, new RegExp('version="' + info.version.replace(/\./g,"\\.") + '"'));
+  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S4\.1 · b[0-9a-f]{12}$/);
+  assert(!runtime.includes("VDR-Suite Samsung · S3.3"));
+  const sim = simulate();
+  assert.equal(sim.versionFooter.textContent, info.label);
+  assert.equal(sim.versionSettings.textContent, info.label);
+  assert.equal(sim.serverStatus.textContent, "");
+});
 
 test("S2.1 runtime boots original intro, capability probes and D-pad navigation", () => {
   const sim = simulate();

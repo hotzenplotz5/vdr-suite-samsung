@@ -100,6 +100,11 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
 .rail-copy small { display: block; color: #c0cad8; font-size: 13px; }
 .statusbar { flex: 0 0 30px; display: flex; justify-content: space-between; align-items: flex-end;
   font-size: 12px; color: #7794b6; }
+.statusbar #app-build-version {
+  display: inline-block; flex: 0 0 auto; margin-left: 14px;
+  color: #d6ebff; font-size: 16px; font-weight: bold; letter-spacing: .3px;
+  white-space: nowrap;
+}
 .tv-focusable { outline: none; }
 .tv-focusable.is-focused, .tv-focusable:focus { outline: 3px solid #64b4ff; outline-offset: -3px;
   box-shadow: 0 0 0 2px rgba(65,145,250,.32),0 0 26px rgba(0,117,255,.33); z-index: 3; }

@@ -91,6 +91,14 @@ Der Samsung-TV selbst muss TLS, Proxy-Pfad und CORS erfolgreich nutzen können. 
 
 **TV-BESTÄTIGT:** Samsung-Gerät zeigt mit HTTPS-Serverbasis inklusive Proxy-Prefix `/vdr-suite`: `Public API v1 erreichbar. 31 Fähigkeiten gemeldet`. Screenshot vom Nutzer bestätigt. Ohne Prefix erschien vorher HTTP 502. Diese Bestätigung beweist Discovery, nicht Admin-Login, Kopplung, Grants oder Streaming. Keine private Serveradresse in Repository-Dateien.
 
+## Sichtbare App-Version und WITs-Fehlstart – offener TV-Test (25.10.2026)
+
+- [ ] **Buildkennung auf echtem Samsung sichtbar:** Neues, aus dem gebündelten Inhalt deterministisch berechnetes Label `Samsung v0.1.0 · S4.1 · b<12 hex>` ist auf allen Ansichten unten rechts und zusätzlich unter **Einstellungen → Installierte App-Version** lesbar. Eine Quellcodeprüfung/CI allein ist **kein** TV-Installationsnachweis.
+- [ ] Nach erfolgreicher *datenbewahrender* Aktualisierung vergleichen: genau dieselbe Kennung am TV und im gebauten `app/tv-runtime.js`. Der zuvor fest eingebrannte Footer `S3.3` darf nicht mehr erscheinen.
+- **Hardware-Befund vom 25.10.:** WITs `--watch` nach `wits -i` erreicht den Samsung per SDB (TV-IP bestätigt), bricht aber mit `Failed to launchApp. Please check the application is already installed on the Target.` ab. Kein Live Reload und **kein Nachweis**, dass der neue Samsung-Fix/Versionsbanner installiert wurde. WITs dokumentiert `--watch` als Live-Reload einer **zuvor mit WITs gestarteten** App; `wits -s` könnte installieren und Geräte-Credentials gefährden und bleibt ohne gesonderte Freigabe ausgeschlossen.
+- [ ] Geräteseitig ausschließlich **lesend** App-/Package-ID mit `config.xml` (`VDRSuiteTV.VDRSuite`) abgleichen; erst danach datenschonenden Aktualisierungspfad bewusst bestimmen. Keinen pauschalen Neuinstallationsversuch, keinen KeyManager-Export.
+- **Fallback im Altstand:** Solange der TV weiterhin `S3.3` anzeigt, ist das *nicht* der neue Versionsbanner. Bereits laufende App nicht als aktualisierte Version ausgeben.
+
 ## S3.2 – Geräte-Pairing und KeyManager (Implementierung, TV-Gate offen)
 
 - [ ] S2-Design/Intro und S3.1-API-Discovery weiterhin nutzbar.
