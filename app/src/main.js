@@ -139,10 +139,13 @@ function boot() {
     currentView = view;
     if (PREVIEW_ROUTES.indexOf(view) >= 0) {
       renderPreview(view, "offline");
-      // Preserve S2.2's DOWN-to-first-detail-button behavior even though
-      // S2.3 adds a second preview button alongside it.
+      // Preserve S2.2's DOWN-to-first-detail-button behavior.
       if (!rowMemory[view]) rowMemory[view] = {};
       rowMemory[view][1] = "detail-" + view + "-home";
+    } else if (view === "settings") {
+      // A new server address/test row must not steal the first DOWN key.
+      if (!rowMemory.settings) rowMemory.settings = {};
+      rowMemory.settings[1] = "detail-settings-home";
     }
     panels.forEach(function (panel) {
       panel.hidden = panel.getAttribute("data-panel") !== view;

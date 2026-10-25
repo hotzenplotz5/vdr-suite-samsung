@@ -20,7 +20,9 @@ test("Standalone Tizen 5.5 TV configuration points to packaged files", () => {
 
 test("Phase S1 has no hardcoded remote URL or authentication", () => {
   const code = read("app/src/main.js") + read("app/index.html");
-  assert.doesNotMatch(code, /https?:\/\//);
+  // S3.1 may show a clearly fictional HTTPS placeholder, never a real deployed host.
+  assert.doesNotMatch(read("app/src/main.js"), /https?:\/\//);
+  assert.match(read("app/index.html"), /placeholder="https:\/\/server\.example\/vdr-suite"/);
   assert.doesNotMatch(code, /fetch\(|XMLHttpRequest|credentialSecret|Authorization:/);
 });
 
