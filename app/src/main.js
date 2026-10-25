@@ -558,7 +558,7 @@ function boot() {
     var backend = recordingBackends[recordingBackendIndex];
     recordingBusy = true;
     recordingStatus("loading", "Lade Aufnahmen",
-      backend.name + " · maximal 20 Aufnahmen pro Seite");
+      backend.name + " · maximal 100 Aufnahmen pro Serveranfrage");
     recordingCatalog.listRecordings(recordingCredential, backend.backendId, cursor, function (result) {
       if (run !== recordingRun) return;
       recordingBusy = false;
@@ -578,7 +578,7 @@ function boot() {
           String(result.value.items.length) + " echte Aufnahmen · Seite " +
             String(pageIndex + 1) : "Keine Aufnahmen gefunden",
         "Nur freigegebene Aufnahmedaten · " +
-          (recordingNextCursor ? "Weitere Seite über „Nächste Seite“" :
+          (recordingNextCursor ? "Weitere Aufnahmen über „Nächste Seite“" :
            "Ende der Aufnahmeliste") +
           " · Wiedergabe folgt in S5.");
     });
