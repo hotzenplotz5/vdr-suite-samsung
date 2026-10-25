@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"cea5f25d6e07","label":"Samsung v0.1.0 · S5.1 · bcea5f25d6e07"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"ce612a2c6bee","label":"Samsung v0.1.0 · S5.1 · bce612a2c6bee"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -2343,7 +2343,8 @@
           recordingStatus("ready", chosen.title || "Aufnahme",
             (chosen.description ? chosen.description.slice(0, 240) :
              "Aufnahme aus dem VDR-Katalog.") +
-            " · Zum Test „Wiedergabe testen“ auswählen.");
+            " · Jetzt OK auf „Wiedergabe testen“ startet einen kontrollierten MediaSession-Test.");
+          setFocus("detail-recordings-play");
         }
         return;
       }
