@@ -8,6 +8,7 @@ import { normalizeSuiteBase, createDiscoveryClient, classifyDiscoveryError } fro
 import { createPairingClient, pairingError } from "./api/device-pairing.js";
 import { createDeviceVault } from "./platform/device-vault.js";
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
+import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -39,6 +40,15 @@ function boot() {
   var pairingClient = createPairingClient(window);
   var vault = createDeviceVault(window);
   var channelCatalog = createChannelCatalog(window);
+  var recordingCatalog = createRecordingCatalog(window);
+  var recordingCredential = null;
+  var recordingBackends = [];
+  var recordingBackendIndex = 0;
+  var recordingCursors = [null];
+  var recordingPageIndex = 0;
+  var recordingNextCursor = null;
+  var recordingBusy = false;
+  var recordingRun = 0;
   var liveCredential = null;
   var liveBackends = [];
   var liveBackendIndex = 0;
@@ -58,6 +68,8 @@ function boot() {
   var pairingCode = document.getElementById("pairing-user-code");
   var liveList = document.getElementById("live-channel-list");
   var liveBackendName = document.getElementById("live-backend-name");
+  var recordingList = document.getElementById("recording-list");
+  var recordingBackendName = document.getElementById("recording-backend-name");
   var serverInput = document.getElementById("suite-base-input");
   var serverTest = document.getElementById("settings-test-button");
   var connectionResult = document.getElementById("suite-connection-result");
@@ -75,6 +87,9 @@ function boot() {
     if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
     if (currentView === "live") return [NAV_ROW,
       ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
+    if (currentView === "recordings") return [NAV_ROW,
+      ["detail-recordings-home", "detail-recordings-load", "detail-recordings-backend"],
+      ["detail-recordings-previous", "detail-recordings-next"]];
     if (currentView === "settings") return [
       NAV_ROW,
       ["detail-settings-home", "settings-base-input", "settings-test"],
@@ -483,6 +498,172 @@ function boot() {
     });
   }
 
+  function recordingStatus(state, title, description) {
+    var card = document.getElementById("detail-state-recordings");
+    var badge = document.getElementById("detail-state-badge-recordings");
+    var headline = document.getElementById("detail-state-title-recordings");
+    var explanation = document.getElementById("detail-state-description-recordings");
+    var skeleton = document.getElementById("detail-state-skeleton-recordings");
+    if (card) card.setAttribute("data-state", state);
+    if (badge) badge.textContent = state === "ready" ? "AUFNAHMEN" :
+      state === "loading" ? "LÄDT" : state === "error" ? "FEHLER" :
+      state === "empty" ? "LEER" : "OFFLINE";
+    if (headline) headline.textContent = title;
+    if (explanation) explanation.textContent = description;
+    if (skeleton) skeleton.hidden = state !== "loading";
+  }
+
+  function clearRecordingRows() {
+    if (!recordingList) return;
+    recordingList.textContent = "";
+    recordingList.hidden = true;
+  }
+
+  function showRecordingError(result) {
+    clearRecordingRows();
+    recordingStatus("error", "Aufnahmen nicht verfügbar", recordingCatalogError(result));
+  }
+
+  function showRecordingRows(rows) {
+    clearRecordingRows();
+    if (!recordingList) return;
+    rows.forEach(function (recording) {
+      // Server text is untrusted; only textContent, never innerHTML or native paths.
+      var row = document.createElement("li");
+      row.className = "recording-row";
+      row.setAttribute("data-recording-id", recording.recordingId);
+      var title = document.createElement("strong");
+      title.textContent = recording.title || "Ohne Titel";
+      var details = document.createElement("span");
+      var info = [];
+      if (recording.recordedAt) {
+        info.push("Aufgenommen: " +
+          recording.recordedAt.replace("T", " ").slice(0, 16));
+      }
+      if (recording.durationKnown)
+        info.push(Math.round(recording.durationSeconds / 60) + " Min.");
+      if (recording.edited) info.push("Geschnitten");
+      if (recording.sizeMb > 0) info.push(Math.round(recording.sizeMb) + " MB");
+      details.textContent = info.join(" · ");
+      row.appendChild(title);
+      row.appendChild(details);
+      recordingList.appendChild(row);
+    });
+    recordingList.hidden = rows.length === 0;
+    recordingList.scrollTop = 0;
+  }
+
+  function fetchRecordingPage(run, cursor, pageIndex) {
+    if (!recordingCredential || !recordingBackends.length || run !== recordingRun) return;
+    var backend = recordingBackends[recordingBackendIndex];
+    recordingBusy = true;
+    recordingStatus("loading", "Lade Aufnahmen",
+      backend.name + " · maximal 20 Aufnahmen pro Seite");
+    recordingCatalog.listRecordings(recordingCredential, backend.backendId, cursor, function (result) {
+      if (run !== recordingRun) return;
+      recordingBusy = false;
+      if (!result.ok) { showRecordingError(result); return; }
+      recordingPageIndex = pageIndex;
+      recordingCursors[pageIndex] = cursor;
+      // Do not retain a speculative forward cursor if the catalog changed.
+      recordingCursors.length = pageIndex + 1;
+      recordingNextCursor = result.value.page.hasMore ?
+        result.value.page.nextCursor : null;
+      showRecordingRows(result.value.items);
+      if (recordingBackendName) recordingBackendName.textContent =
+        "Backend: " + backend.name + " · " + backend.backendId +
+        " · Seite " + String(pageIndex + 1);
+      recordingStatus(result.value.items.length ? "ready" : "empty",
+        result.value.items.length ?
+          String(result.value.items.length) + " echte Aufnahmen · Seite " +
+            String(pageIndex + 1) : "Keine Aufnahmen gefunden",
+        "Nur freigegebene Aufnahmedaten · " +
+          (recordingNextCursor ? "Weitere Seite über „Nächste Seite“" :
+           "Ende der Aufnahmeliste") +
+          " · Wiedergabe folgt in S5.");
+    });
+  }
+
+  function loadRecordings(action) {
+    if (recordingBusy) return;
+    if (action === "previous") {
+      if (recordingPageIndex === 0 || !recordingCredential) {
+        recordingStatus("empty", "Erste Seite",
+          "„Aufnahmen laden“ startet einen neuen Abruf."); return;
+      }
+      fetchRecordingPage(recordingRun,
+        recordingCursors[recordingPageIndex - 1], recordingPageIndex - 1);
+      return;
+    }
+    if (action === "next") {
+      if (!recordingNextCursor || !recordingCredential) {
+        recordingStatus("empty", "Keine weitere Seite",
+          "„Aufnahmen laden“ startet einen neuen Abruf."); return;
+      }
+      fetchRecordingPage(recordingRun, recordingNextCursor, recordingPageIndex + 1);
+      return;
+    }
+    if (action === "backend") {
+      if (!recordingCredential || recordingBackends.length < 2) {
+        recordingStatus("empty", "Kein weiteres Backend",
+          "Es wurde nur ein sichtbares Backend gefunden."); return;
+      }
+      recordingBackendIndex = (recordingBackendIndex + 1) % recordingBackends.length;
+      recordingCursors = [null];
+      recordingPageIndex = 0;
+      recordingNextCursor = null;
+      clearRecordingRows();
+      fetchRecordingPage(++recordingRun, null, 0);
+      return;
+    }
+    // Credentials remain in Tizen KeyManager; no localStorage or automatic pairing.
+    var saved = vault.read();
+    if (!saved.ok || !saved.credential) {
+      showRecordingError({kind:"invalid_credential"}); return;
+    }
+    var selectedBase = serverInput && normalizeSuiteBase(serverInput.value);
+    if (selectedBase && selectedBase !== saved.credential.base) {
+      recordingStatus("error", "Anderer Server ausgewählt",
+        "Die sichere Geräteanmeldung gehört zu einem anderen Server. Adresse prüfen.");
+      return;
+    }
+    recordingCredential = saved.credential;
+    recordingBackends = [];
+    recordingBackendIndex = 0;
+    recordingCursors = [null];
+    recordingPageIndex = 0;
+    recordingNextCursor = null;
+    clearRecordingRows();
+    recordingBusy = true;
+    var run = ++recordingRun;
+    recordingStatus("loading", "Prüfe Geräteanmeldung",
+      "Anmeldung mit dem gespeicherten Tizen-Credential …");
+    pairingClient.verify(recordingCredential, function (verified) {
+      if (run !== recordingRun) return;
+      if (!verified.ok) {
+        recordingBusy = false;
+        showRecordingError(verified); return;
+      }
+      recordingStatus("loading", "Prüfe sichtbare Backends",
+        "Für Aufnahmen ist recordings.view erforderlich.");
+      channelCatalog.listBackends(recordingCredential, function (found) {
+        if (run !== recordingRun) return;
+        if (!found.ok) {
+          recordingBusy = false;
+          showRecordingError(found); return;
+        }
+        recordingBackends = found.value.items;
+        if (!recordingBackends.length) {
+          recordingBusy = false;
+          recordingStatus("empty", "Keine Backends freigegeben",
+            "Der Administrator muss recordings.view für ein Backend freigeben.");
+          return;
+        }
+        fetchRecordingPage(run, null, 0);
+      });
+    });
+  }
+
   function showView(view) {
     if (ROUTES.indexOf(view) < 0) return false;
     if (currentView === "live" && view !== "live") {
@@ -490,6 +671,12 @@ function boot() {
       liveRun += 1;
       liveBusy = false;
       channelCatalog.cancel();
+    }
+    if (currentView === "recordings" && view !== "recordings") {
+      recordingRun += 1;
+      recordingBusy = false;
+      recordingCatalog.cancel();
+      channelCatalog.cancel(); // Backend discovery may still be pending.
     }
     currentView = view;
     if (view === "live") {
@@ -503,6 +690,20 @@ function boot() {
       liveCursor = null;
       liveStatus("offline", "Bereit für echte Sender",
         "„Sender laden“ nutzt deine gespeicherte Geräteanmeldung.");
+    } else if (view === "recordings") {
+      if (!rowMemory.recordings) rowMemory.recordings = {};
+      rowMemory.recordings[1] = "detail-recordings-home";
+      clearRecordingRows();
+      recordingCredential = null;
+      recordingBackends = [];
+      recordingBackendIndex = 0;
+      recordingCursors = [null];
+      recordingPageIndex = 0;
+      recordingNextCursor = null;
+      if (recordingBackendName)
+        recordingBackendName.textContent = "Noch kein Backend geladen";
+      recordingStatus("offline", "Bereit für echte Aufnahmen",
+        "„Aufnahmen laden“ nutzt die gespeicherte Geräteanmeldung. recordings.view erforderlich.");
     } else if (PREVIEW_ROUTES.indexOf(view) >= 0) {
       renderPreview(view, "offline");
       // Preserve S2.2's DOWN-to-first-detail-button behavior.
@@ -602,6 +803,11 @@ function boot() {
     var liveAction = item.getAttribute("data-live-action");
     if (liveAction) {
       loadLiveChannels(liveAction);
+      return;
+    }
+    var recordingAction = item.getAttribute("data-recordings-action");
+    if (recordingAction) {
+      loadRecordings(recordingAction);
       return;
     }
     var previewRoute = item.getAttribute("data-preview-route");
