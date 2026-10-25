@@ -8,6 +8,7 @@ import { devicePairingStatus } from "./views/device-auth-status.js";
 import { normalizeSuiteBase, createDiscoveryClient, classifyDiscoveryError } from "./api/public-discovery.js";
 import { createPairingClient, pairingError, deviceVerificationError } from "./api/device-pairing.js";
 import { createDeviceVault } from "./platform/device-vault.js";
+import { restoreVerifiedSessionCredential } from "./platform/device-recovery.js";
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
@@ -274,6 +275,15 @@ function boot() {
     if (pairingBusy || pendingCredential || pairingRequest) {
       pairMessage("Es läuft bereits eine Kopplung. Status prüfen oder Ablauf abwarten."); return;
     }
+    // A disappearing alias in a session that already authenticated is NOT
+    // permission to create a second server device. Diagnose/recover first.
+    if (lastVerifiedDevice && pairedCredential &&
+        lastVerifiedDevice.credentialId === pairedCredential.credentialId &&
+        lastVerifiedDevice.base === pairedCredential.base) {
+      pairMessage("Dieses Gerät wurde in der laufenden Sitzung bereits authentifiziert. " +
+        "Bitte zuerst „Anmeldung prüfen“ wählen. Keine neue Kopplung gestartet.");
+      return;
+    }
     var base = serverInput && normalizeSuiteBase(serverInput.value);
     if (!base) { pairMessage("Zuerst eine gültige HTTPS-Serveradresse eingeben."); return; }
     if (testingConnection) { pairMessage("Die Verbindung wird noch geprüft."); return; }
@@ -395,7 +405,48 @@ function boot() {
     }
     if (!saved.credential) {
       rejectedCredentialId = null;
-      pairMessage("Kein gespeichertes Device-Credential gefunden. Prüfe zuerst den App-/Installationsstatus.");
+      var currentState = devicePairingStatus(saved,lastVerifiedDevice,rejectedCredentialId);
+      if (currentState.state !== "conflict") {
+        pairMessage(currentState.text + " Nach einer deinstallierenden Testinstallation " +
+          "ist das Credential nicht wiederherstellbar; niemals alte Server-Geräte auf Verdacht löschen.");
+        return;
+      }
+      // Do not recover a credential for a different selected server.
+      var requestedBase = serverInput && normalizeSuiteBase(serverInput.value);
+      if (requestedBase && pairedCredential && requestedBase !== pairedCredential.base) {
+        pairMessage("Die Sitzung gehört zu einem anderen Server. Adresse prüfen; " +
+          "keine lokale Wiederherstellung, keine neue Kopplung.");
+        return;
+      }
+      // Only in the running process can we possess a credential that was
+      // demonstrably verified earlier. The explicit Verify click authorizes
+      // a read-only server recheck and a guarded KeyManager re-save.
+      pairingBusy = true;
+      pairMessage("Bereits authentifiziertes Gerät erkannt. Prüfe die " +
+        "bestehende Anmeldung erneut und sichere sie gegebenenfalls im KeyManager …");
+      restoreVerifiedSessionCredential(saved,pairedCredential,lastVerifiedDevice,
+        function (credential,done) {pairingClient.verify(credential,done);},
+        function (credential,done) {vault.store(credential,done);},
+        function (restored) {
+          pairingBusy = false;
+          if (restored.ok) {
+            markDeviceAuthenticated(restored.credential);
+            pairMessage("Bestehende Geräteanmeldung sicher erneut gespeichert und " +
+              "serverseitig bestätigt (Device-ID: " + restored.credential.deviceId +
+              "). Keine neue Kopplung, kein neues Server-Gerät.");
+          } else if (restored.kind === "verification") {
+            if (restored.verification && restored.verification.kind === "http" &&
+                restored.verification.status === 401)
+              updateVerificationFailure(pairedCredential,restored.verification);
+            pairMessage("Frühere Anmeldung in dieser Sitzung bekannt, aber erneute " +
+              "Serverprüfung fehlgeschlagen: " + deviceVerificationError(restored.verification) +
+              " Nichts entfernt, kein neues Gerät angelegt.");
+          } else {
+            pairMessage("Frühere Anmeldung in dieser Sitzung bekannt, aber " +
+              "KeyManager-Wiederherstellung nicht bestätigt. Keine neue Kopplung; " +
+              "App möglichst nicht beenden.");
+          }
+        });
       return;
     }
     var selectedBase = serverInput && normalizeSuiteBase(serverInput.value);

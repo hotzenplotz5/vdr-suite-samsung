@@ -41,6 +41,15 @@ npm.cmd run check
 
 **Nach dem erfolgreichen Pull gilt `.gitattributes` zusätzlich für LF-Checkouts.** Das verhindert nicht, dass `npm run build:tv` eine getrackte Datei bei wirklich geänderten Quellen erneut modifiziert. Daher **bei jedem späteren blockierten Pull zuerst `git status --short --untracked-files=no` und `git ls-files --eol -- app/tv-runtime.js` prüfen**. Wenn ausschließlich die generierte Runtime verändert ist und nichts staged ist, ihren Inhalt sichern, nur diese Datei auf HEAD zurückstellen, sauberen Status bestätigen und **ohne Zwischen-Build sofort pullen**. Bei anderen Änderungen stoppen; niemals pauschal zurücksetzen. Beim reinen TV-Paketbau eines bereits aktuellen Checkouts nur `npm.cmd run build:tv`, `npm.cmd run check` und `Tizen > Build Project` benutzen – **kein unnötiges `git pull`**. Der gesamte Ablauf erfolgt **im VS-Code-Terminal**, VS Code muss nicht geschlossen werden.
 
+## Wiederholt verlorene Kopplung – harte Sperre für destruktive Testinstallationen
+
+**Wiederholte echte TV-Beobachtung (25.10.2026):** Nach einem Build/Run erscheint erneut „Kein gespeichertes Device-Credential gefunden“. Ein grüner `npm.cmd run check`-Durchlauf oder eine neue Buildkennung sagt **nichts** darüber aus, ob Tizen Studio vor dem Installieren `VDRSuiteTV` entfernt. Herstellerquelle: https://developer.samsung.com/smarttv/develop/faq/data-and-file-handling.html. 
+
+- **Ab sofort keine Routineupdates von `VDRSuiteTV` über VS Code `Run Project`, `tizen install`, `sdb install`, `vd_appinstall`, `WITs Start` im Produktionsordner oder einen pauschalen „Neuinstallation ist okay, weil das Credential schon weg ist“-Workaround.** Selbst wenn der User einmal neu koppelt, würde das nächste `Run Project` den Zustand wieder zerstören.
+- Für Iteration am echten Samsung ist der bereitgestellte, voneinander getrennte **`VDRSuitDev`**-Workflow unter [WITs-Isolierung](wits-isolated-development.md) gedacht. Er benötigt **einmalig ein separat zugelassenes DEV-Installations-Gate**, danach nutzt `tv:watch` ausschließlich Watch ohne Installationsfallback. Ein DEV-Gerät erhält ausdrücklich getrennte Berechtigungen.
+- Produktiv-Updates sind erst nach belegtem, datenbewahrendem Install-/Store-Weg zugelassen, mit unveränderter Signatur, nachgewiesener Basispaketidentität und realem KeyManager-Hardware-Gate. `Build Project` bleibt rein offline.
+- **Jetzt prüfen:** Ohne App-Neustart kann ein sichtbarer echter Sender-/Aufnahme-GET die gegenwärtige Device-Authentifizierung belegen. Zeigt „Anmeldung prüfen“ trotzdem „kein Credential“, ist das ein Zustandswiderspruch. Fehlt das Credential tatsächlich auch nach Neustart/bei allen Device-GETs, lässt es sich nicht durch Code zurückholen. Nach bewusstem Einzel-Pairing keine weitere Installationsprobe.
+
 ## Tizen-Build und Installation sind separate Schritte
 
 1. Nach erfolgreichem Build in VS Code/Tizen Extension **Build Project**, damit mit dem vorhandenen gültigen Samsung-Zertifikatsprofil ein `app/Debug/app.wgt` gebaut/signiert wird. Erst danach die neue Build-Kennung und WGT-Inhalt überprüfen.
