@@ -7,28 +7,19 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const builder = readFileSync(join(root, "scripts/build-tv-runtime.mjs"), "utf8");
+// Use the real bundle manifests. Adding a new module must not silently break
+// the Windows CRLF checkout fixture by omitting it from the temp project.
+function buildInputList(name) {
+  const match = builder.match(new RegExp("\\bconst\\s+" + name + "\\s*=\\s*(\\[[\\s\\S]*?\\]);"));
+  assert.ok(match, "Missing builder input list: " + name);
+  return JSON.parse(match[1]);
+}
 const files = [
   "scripts/build-tv-runtime.mjs",
   "app/tv-runtime.js",
-  "app/src/navigation/remote.js",
-  "app/src/navigation/focus.js",
-  "app/src/navigation/premium-focus.js",
-  "app/src/platform/capabilities.js",
-  "app/src/platform/keys.js",
-  "app/src/platform/startup-video.js",
-  "app/src/views/view-state.js",
-  "app/src/api/public-discovery.js",
-  "app/src/platform/device-vault.js",
-  "app/src/api/device-pairing.js",
-  "app/src/api/channel-catalog.js",
-  "app/src/api/recording-catalog.js",
-  "app/src/api/recording-playback.js",
-  "app/src/platform/recording-player.js",
-  "app/src/main.js",
-  "app/index.html",
-  "app/styles.css",
-  "app/config.xml",
-  "package.json"
+  ...buildInputList("inputs"),
+  ...buildInputList("presentationInputs")
 ];
 
 test("Tizen TV bundle accepts Windows CRLF checkout yet detects real changes", () => {

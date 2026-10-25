@@ -61,3 +61,16 @@ node scripts/tv-update-preflight.mjs --candidate "app\Debug\app.wgt" --baseline 
 Nur identische Paket-/App-ID, höhere Version, unveränderter Autor-Zertifikat-Fingerprint und passende Quellen können den Preflight bestehen. Ohne bekanntes Basis-WGT oder belegte Update-Installationsmethode gibt es **keine Freigabe zur TV-Installation**. Ein Preflight-PASS garantiert weder kryptographisch geprüfte WGT-Signaturen noch KeyManager-Datenpersistenz; `sdb install`, `vd_appinstall`, Tizen Run und WITs Start bleiben gesondert nicht freigegeben. Ausführlich: [S7.2 Produktions-Update](production-update-s7-2.md).
 
 Siehe auch [Entwicklungssetup](development-setup.md) und [Hardware-Abnahme](hardware-acceptance.md).
+
+
+## Windows-Testblockade nach S7.3/S5.2-R (25.10.2026)
+
+**Realer Nutzerbefund:** `git pull --ff-only origin main` von `8622cfb` nach `ba34c29` war ein erfolgreicher Fast-Forward; `npm.cmd run build:tv` und das Bundle-`--check` liefen ebenfalls. `npm.cmd run check` meldete danach **85/109 PASS, 24 FAIL**. Die Ursache war **kein Git-/Windows-/Tizen-Installationsfehler** und keine verlorene TV-Kopplung, sondern ausschließlich inkonsistente Test-Fixtures:
+
+- Der CRLF-Check-Test hatte `app/src/views/device-auth-status.js` nicht ins temporäre Projekt kopiert; behoben durch Ableitung der Dateien aus den zwei autoritativen Builder-Eingabelisten.
+- Der S5.2-R-Quelltest verwendete `readFileSync` ohne Node-FS-Import; Import ergänzt.
+- Der Mock `pairing-result` in `tv-runtime.test.js` implementierte `setAttribute` nicht; nach S7.3 brachen daher 22 Laufzeitsimulationen beim App-Boot ab. Der Test-DOM stellt nun `setAttribute/getAttribute` bereit; die alte Textannahme `Server-Anmeldung UNGEPRÜFT` wurde an die neue präzisere Form `Server-Anmeldung noch nicht geprüft` angepasst. Zusätzlich prüfen echte simulierte Sender- und Aufnahmen-Authentifizierung den sichtbaren Pairing-Zustand beim Wechsel zu Einstellungen.
+
+**Vorgehen:** Nach dem Fix nur `git pull --ff-only origin main` und `npm.cmd run check` erneut ausführen. Da keine produktiven App-Dateien geändert wurden, ist **kein erneutes `build:tv` notwendig** und der TV-Buildfingerprint bleibt gleich. `Build Project` / TV-Installation **erst**, wenn der lokale Check erfolgreich beendet ist. Kein pauschaler Reset/Clean/Stash; bestehende KeyManager-Credentials nicht verändern.
+
+**Abnahme:** Bis zum erneuten lokalen `npm.cmd run check` mit 0 FAIL **kein** Test- oder TV-Hardware-PASS behaupten. Eine CI-Anzeige ersetzt den lokalen Windows-Test hier nicht.
