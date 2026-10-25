@@ -50,4 +50,14 @@ npm.cmd run check
 
 **Nachweis dieses zweiten konkreten Vorfalls am 25.10.2026:** `git pull` von `05d8af6` nach `1bafaaa` scheiterte mehrfach an `app/tv-runtime.js`. Dabei war `i/lf w/lf` belegt und die Ursache **nicht CRLF**. `npm.cmd run build:tv` und 77/77 grüne Tests liefen jeweils noch auf dem alten S4.1-Stand, und ein vorzeitiger Build machte die Runtime erneut schmutzig. **Erst gezieltes `git restore --source=HEAD --worktree -- app/tv-runtime.js`, direkt anschließend `git pull --ff-only origin main`** führte nachweislich zu `Fast-forward` mit den S5.1-Dateien. Diesen Weg vor der Wiederholung langer Reparaturskripte priorisieren; die bereits gesicherten Runtime-Backups, lokale Tizen-Artefakte, Zertifikate und TV-Anmeldung bleiben unberührt. Eine neue TV-IP im Tizen-Gerätemanager ist ein unabhängiger Anschluss-Schritt, kein Grund für Git-Reset oder Neu-Pairing.
 
+### S7.2 – Produktions-Update mit vorherigem Offline-WGT-Gate
+
+**Build Project ist nur Paketierung, kein Nachweis eines sicheren Updates.** `Run Project` kann laut Samsung bei Test-Builds vorher deinstallieren und damit App-Daten und KeyManager-Credentials entfernen. Für einen echten neuen Release muss die Version in `package.json` und `app/config.xml` zusammen angehoben werden. Nach Build/Check und dem signierten **Build Project** das WGT strikt offline gegen das **nachweislich bereits installierte** alte signierte WGT vergleichen:
+
+```powershell
+node scripts/tv-update-preflight.mjs --candidate "app\Debug\app.wgt" --baseline "C:\Pfad\zum\alten-installierten.wgt"
+```
+
+Nur identische Paket-/App-ID, höhere Version, unveränderter Autor-Zertifikat-Fingerprint und passende Quellen können den Preflight bestehen. Ohne bekanntes Basis-WGT oder belegte Update-Installationsmethode gibt es **keine Freigabe zur TV-Installation**. Ein Preflight-PASS garantiert weder kryptographisch geprüfte WGT-Signaturen noch KeyManager-Datenpersistenz; `sdb install`, `vd_appinstall`, Tizen Run und WITs Start bleiben gesondert nicht freigegeben. Ausführlich: [S7.2 Produktions-Update](production-update-s7-2.md).
+
 Siehe auch [Entwicklungssetup](development-setup.md) und [Hardware-Abnahme](hardware-acceptance.md).
