@@ -70,12 +70,13 @@ function simulate() {
     },
     addEventListener(name, fn) { listeners[name] = fn; }
   };
+  const exits = { count: 0 };
   const window = {
-    tizen: { tvinputdevice: { registerKey() {} } },
+    tizen: { tvinputdevice: { registerKey() {} }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
     webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
   runInNewContext(runtime, { document, window });
-  return { nodes, panels, textNodes, video, listeners, overlay };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits };
 }
 
 test("S2.1 runtime boots original intro, capability probes and D-pad navigation", () => {
@@ -96,9 +97,71 @@ test("S2.1 runtime boots original intro, capability probes and D-pad navigation"
   key(13); // OK -> live view
   assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
   assert.equal(sim.nodes["nav-live"].isFocused, true);
-  key(10009); // BACK -> home
+  key(10009); // BACK -> home with exact previous card focused
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["nav-home"].isFocused, true);
+  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+});
+
+
+test("S2.2 D-Pad remembers the selected tile and Back restores Home focus", () => {
+  const sim = simulate();
+  sim.video.finish();
+  const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
+  key(40); // from Home menu to first stage card
+  key(39); // hero card
+  key(40); // middle action button
+  key(40); // middle rail card
+  key(39); // search rail card
+  assert.equal(sim.nodes["rail-search"].isFocused, true);
+  key(38); // previous action row
+  assert.equal(sim.nodes["action-recordings"].isFocused, true);
+  key(40); // return to remembered rail card, not default column
+  assert.equal(sim.nodes["rail-search"].isFocused, true);
+  key(13); // open search
+  assert.equal(sim.panels.find(p => p.route === "search").hidden, false);
+  assert.equal(sim.nodes["nav-search"].isFocused, true);
+  assert.equal(sim.nodes["rail-search"].isFocused, false); // never focus a hidden tile
+  sim.listeners.focusin({ target: sim.nodes["rail-live"] }); // hidden panel can't hijack focus
+  assert.equal(sim.nodes["nav-search"].isFocused, true);
+  key(10009); // return to the exact Home card
+  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
+  assert.equal(sim.nodes["rail-search"].isFocused, true);
+  key(10009); // Back from Home calls Tizen application exit
+  assert.equal(sim.exits.count, 1);
+});
+
+test("S2.2 Back traverses detail history without losing the original Home tile", () => {
+  const sim = simulate();
+  sim.video.finish();
+  const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
+  key(40); // stage-favorites
+  key(39); // stage-hero
+  key(13); // live
+  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
+  key(39); // nav-recordings
+  key(13); // recordings from live
+  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  key(10009);
+  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
+  assert.equal(sim.nodes["nav-recordings"].isFocused, true);
+  key(10009);
+  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
+  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+});
+
+test("S2.2 explicit Home clears history and restores origin from detail Home button", () => {
+  const sim = simulate();
+  sim.video.finish();
+  const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
+  key(40); // stage-favorites
+  key(13); // live
+  key(40); // focus detail-live-home
+  assert.equal(sim.nodes["detail-live-home"].isFocused, true);
+  key(13); // explicit back to Home
+  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
+  assert.equal(sim.nodes["stage-favorites"].isFocused, true);
+  key(10009);
+  assert.equal(sim.exits.count, 1); // no stale detail history
 });
 
 test("Generated TV runtime header is safe JavaScript", () => {

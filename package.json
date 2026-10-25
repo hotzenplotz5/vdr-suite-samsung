@@ -6,7 +6,7 @@
   "description": "Standalone Samsung Tizen client for VDR-Suite",
   "scripts": {
     "test": "node --test",
-    "check": "node scripts/build-tv-runtime.mjs --check && node --check app/tv-runtime.js && node --check app/src/platform/startup-video.js && node --check app/src/main.js && node --check app/src/navigation/remote.js && node --check app/src/navigation/focus.js && node --check app/src/platform/capabilities.js && node --check app/src/platform/keys.js && node --test",
+    "check": "node scripts/build-tv-runtime.mjs --check && node --check app/tv-runtime.js && node --check app/src/platform/startup-video.js && node --check app/src/main.js && node --check app/src/navigation/remote.js && node --check app/src/navigation/focus.js && node --check app/src/navigation/premium-focus.js && node --check app/src/platform/capabilities.js && node --check app/src/platform/keys.js && node --test",
     "build:tv": "node scripts/build-tv-runtime.mjs"
   },
   "engines": {

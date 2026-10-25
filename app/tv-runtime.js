@@ -42,29 +42,37 @@
   // END app/src/navigation/focus.js
 
   // BEGIN app/src/navigation/premium-focus.js
-  // S2 TV focus graph: stable IDs and explicit rows. No DOM geometry required.
-  // A single document key handler in main.js remains the sole remote owner.
-  function nextFocusId(current, direction, rows) {
-    if (!rows || !rows.length || !rows[0].length) return null;
+  // S2.2 Samsung focus graph. Each view supplies its visible, ordered rows.
+  // Pure navigation logic: no Tizen API, layout measurement or second key listener.
+  function nextFocusId(current, direction, rows, remembered) {
+    if (!rows || !rows.length || !rows[0] || !rows[0].length) return null;
+  
     var row = -1;
     var column = -1;
     for (var r = 0; r < rows.length; r += 1) {
-      for (var c = 0; c < rows[r].length; c += 1) {
-        if (rows[r][c] === current) {
-          row = r;
-          column = c;
-          break;
-        }
+      var cells = rows[r] || [];
+      var found = cells.indexOf(current);
+      if (found !== -1) {
+        row = r;
+        column = found;
+        break;
       }
-      if (row !== -1) break;
     }
     if (row === -1) return rows[0][0];
+  
     if (direction === "LEFT") return rows[row][Math.max(0, column - 1)];
-    if (direction === "RIGHT") return rows[row][Math.min(rows[row].length - 1, column + 1)];
+    if (direction === "RIGHT") return rows[row][Math.min(column + 1, rows[row].length - 1)];
+  
     if (direction === "UP" || direction === "DOWN") {
-      var nextRow = row + (direction === "UP" ? -1 : 1);
-      if (nextRow < 0 || nextRow >= rows.length) return current;
-      return rows[nextRow][Math.min(column, rows[nextRow].length - 1)];
+      var targetRow = row + (direction === "UP" ? -1 : 1);
+      if (targetRow < 0 || targetRow >= rows.length) return current;
+      var targets = rows[targetRow] || [];
+      if (!targets.length) return current;
+      // Going back to a previously visited row returns to its last focused card.
+      var preferred = remembered && remembered[targetRow];
+      if (preferred && targets.indexOf(preferred) !== -1) return preferred;
+      // First-time cross-row motion uses the nearest column, clamped at the edge.
+      return targets[Math.min(column, targets.length - 1)];
     }
     return current;
   }
@@ -179,6 +187,8 @@
 
   // BEGIN app/src/main.js
   
+  // Every control is in exactly one row per visible route. Navigation never
+  // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
   const NAV_ROW = [
     "nav-home", "nav-live", "nav-recordings", "nav-search", "nav-timers", "nav-settings"
   ];
@@ -196,32 +206,58 @@
     var controls = {};
     var currentView = "home";
     var focusedId = "nav-home";
+    var lastHomeFocus = "nav-home";
+    var history = [];
+    var rowMemory = {};
     var message = document.getElementById("message");
     var keyStatus = document.getElementById("key-status");
   
     items.forEach(function (item) {
-      controls[item.getAttribute("data-focus-id")] = item;
+      var id = item.getAttribute("data-focus-id");
+      if (id) controls[id] = item;
     });
   
     function focusRows() {
-      if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
-      return [NAV_ROW, ["detail-" + currentView + "-home"]];
+      return currentView === "home"
+        ? [NAV_ROW].concat(HOME_ROWS)
+        : [NAV_ROW, ["detail-" + currentView + "-home"]];
+    }
+  
+    function isVisibleFocus(id) {
+      if (!controls[id]) return false;
+      var rows = focusRows();
+      for (var r = 0; r < rows.length; r += 1) {
+        if (rows[r].indexOf(id) !== -1) return true;
+      }
+      return false;
     }
   
     function setFocus(id) {
+      if (!isVisibleFocus(id)) return false;
       var chosen = controls[id];
-      if (!chosen) return;
       focusedId = id;
+      if (currentView === "home") lastHomeFocus = id;
+      if (!rowMemory[currentView]) rowMemory[currentView] = {};
+      var rows = focusRows();
+      for (var r = 0; r < rows.length; r += 1) {
+        if (rows[r].indexOf(id) !== -1) rowMemory[currentView][r] = id;
+      }
       items.forEach(function (item) {
         var active = item === chosen;
         item.classList.toggle("is-focused", active);
         item.tabIndex = active ? 0 : -1;
       });
       chosen.focus();
+      // On smaller screens and future longer media rails, bring focus into view.
+      if (typeof chosen.scrollIntoView === "function") {
+        try { chosen.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+        catch (_) { try { chosen.scrollIntoView(false); } catch (_) {} }
+      }
+      return true;
     }
   
     function showView(view) {
-      if (ROUTES.indexOf(view) < 0) return;
+      if (ROUTES.indexOf(view) < 0) return false;
       currentView = view;
       panels.forEach(function (panel) {
         panel.hidden = panel.getAttribute("data-panel") !== view;
@@ -234,16 +270,32 @@
       });
       message.textContent = view === "home"
         ? "Offline-Designvorschau · Navigation: Pfeile · OK · Zurück"
-        : "Bereich: " + view + " · keine Serververbindung · Zurück = Home";
+        : "Bereich: " + view + " · keine Serververbindung · Zurück = vorherige Ansicht";
+      return true;
     }
   
-    function activate(item) {
-      if (!item) return;
-      var view = item.getAttribute("data-route") || item.getAttribute("data-target-view");
-      if (view && ROUTES.indexOf(view) >= 0) {
-        showView(view);
-        setFocus("nav-" + view);
+    function goHome(focusId) {
+      history = [];
+      showView("home");
+      setFocus(isVisibleFocus(focusId) ? focusId : "nav-home");
+    }
+  
+    function navigateTo(view, originId) {
+      if (ROUTES.indexOf(view) < 0) return;
+      if (view === "home") {
+        // Explicit Home clears history: Back on Home should exit the app.
+        // A detail-page Home button returns to the previously selected Home tile.
+        goHome(originId && originId.indexOf("detail-") === 0 ? lastHomeFocus : "nav-home");
+        return;
       }
+      if (view === currentView) {
+        setFocus("nav-" + view);
+        return;
+      }
+      history.push({ view: currentView, focusId: focusedId });
+      if (history.length > 12) history.shift();
+      showView(view);
+      setFocus("nav-" + view);
     }
   
     function quitApp() {
@@ -252,8 +304,29 @@
           window.tizen.application.getCurrentApplication().exit();
           return;
         }
-      } catch (_) { /* UI remains navigable on rejected app exit */ }
+      } catch (_) { /* app exit can be rejected on simulators */ }
       message.textContent = "Zurück im Home-Menü erkannt · App-Exit am TV prüfen";
+    }
+  
+    function goBack() {
+      if (currentView === "home") {
+        quitApp();
+        return;
+      }
+      if (history.length) {
+        var previous = history.pop();
+        showView(previous.view);
+        // All rows are checked against the newly visible view before focus.
+        if (!setFocus(previous.focusId)) setFocus("nav-" + previous.view);
+      } else {
+        goHome(lastHomeFocus);
+      }
+    }
+  
+    function activate(item) {
+      if (!item) return;
+      var view = item.getAttribute("data-route") || item.getAttribute("data-target-view");
+      if (view) navigateTo(view, item.getAttribute("data-focus-id"));
     }
   
     var caps = getPlatformCapabilities(window);
@@ -269,6 +342,7 @@
       source: "./assets/branding/startvideo.mp4"
     });
   
+    // Exactly one keydown owner. No view adds its own Samsung remote listener.
     document.addEventListener("keydown", function (event) {
       var key = normalizeRemoteKey(event);
       if (!key) return;
@@ -280,25 +354,30 @@
         return;
       }
       if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
-        setFocus(nextFocusId(focusedId, key, focusRows()));
+        setFocus(nextFocusId(focusedId, key, focusRows(), rowMemory[currentView]));
       } else if (key === "OK") {
         activate(controls[focusedId]);
       } else if (key === "BACK") {
-        if (currentView !== "home") {
-          showView("home");
-          setFocus("nav-home");
-        } else {
-          quitApp();
-        }
+        goBack();
       }
+    });
+  
+    // Mouse/keyboard focus can also occur on desktop/emulator; synchronize it
+    // without registering another key handler or moving into a hidden panel.
+    document.addEventListener("focusin", function (event) {
+      var item = event.target;
+      if (!item || typeof item.getAttribute !== "function") return;
+      var id = item.getAttribute("data-focus-id");
+      if (id && id !== focusedId && isVisibleFocus(id)) setFocus(id);
     });
   
     items.forEach(function (item) {
       item.addEventListener("click", function () {
-        setFocus(item.getAttribute("data-focus-id"));
-        activate(item);
+        var id = item.getAttribute("data-focus-id");
+        if (setFocus(id)) activate(item);
       });
     });
+  
     showView("home");
     setFocus("nav-home");
     intro.start();

@@ -29,7 +29,7 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 ## Phase S2 – TV-Oberfläche
 
-- **S2.1 IN IMPLEMENTIERUNG (2026-10-25):** Dark-Premium-Media-Home im Samsung-Client mit oberer Navigation, großer Hero-Karte, seitlichen Karten, Aktionsleiste, horizontaler Mediathek-Reihe und sechs routbaren Offline-Ansichten. Alle Daten erkennbar als Designvorschau; kein echter Sender/EPG/Account behauptet. Back-Stack zunächst Home->Unteransicht->Home; weitere Lade-/Fehlerzustände und verschachtelte Routen folgen in S2.2/S2.3. Hardwaretest dieser neuen Oberfläche OFFEN.
+- **S2.1 VISUELLES HARDWARE-PASS (Nutzerbestätigung 2026-10-25):** Dark-Premium-Media-Home im Samsung-Client mit oberer Navigation, großer Hero-Karte, seitlichen Karten, Aktionsleiste, horizontaler Mediathek-Reihe und sechs routbaren Offline-Ansichten. Alle Daten erkennbar als Designvorschau; kein echter Sender/EPG/Account behauptet. Back-Stack zunächst Home->Unteransicht->Home; weitere Lade-/Fehlerzustände und verschachtelte Routen folgen in S2.2/S2.3. Dark-Premium-Oberfläche auf dem echten Samsung vom Nutzer mit 'gefällt mir! und pass!' bestätigt; umfassende Fernbedienungs-Abnahme ist S2.2.
 - **S2.2** Samsung-tauglicher Fokusgraph, klare Remote-Events, Raster und Content-Rails.
 - **S2.3** Web-Frontend-Parität als Produktreferenz, ohne Browser-Private-API oder massenhaftes Laden.
 

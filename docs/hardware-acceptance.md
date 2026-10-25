@@ -25,7 +25,7 @@
 | S1.2-b | `.wgt` erfolgreich signiert und installiert | BESTÄTIGT | `app/Debug/app.wgt`; Run Project zeigt App auf realem TV |
 | S1.2-c | Launcher/Startbildschirm ohne Browserchrome | BESTÄTIGT | S1-Startbildschirm am TV ohne Browserchrome; nach Fix funktionsfähige JS-Probes |
 | S1.3-a | D-Pad/OK, sichtbarer Fokus | BESTÄTIGT | Vier Screenshots: Fokus auf Startseite, Live-TV, Aufnahmen, Einstellungen; 'Letzte Taste: OK' |
-| S1.3-b | Back/Exit sauber | OFFEN | |
+| S1.3-b | Back/Exit sauber | TEILWEISE | BACK von Einstellungen zurück auf Startseite vom Nutzer bestätigt; Exit und Relaunch noch offen |
 | S1.3-c | Play/Pause/Stop/Farbtasten, soweit verfügbar | OFFEN | |
 | S1.4-a | Tizen-API- und AVPlay-Verfügbarkeit sichtbar | BESTÄTIGT | TV zeigt Tizen API, Samsung AVPlay und TV-Tasten API jeweils 'vorhanden' (keine Codec-Akzeptanz) |
 | S1.4-b | Bildschirmdarstellung und Relaunch geprüft | TEILWEISE | Sichtbare Bildschirmdarstellung bestätigt; eigenständiger Exit und Relaunch noch offen |
@@ -53,4 +53,4 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - Implementiert: neue HTML/CSS-Oberfläche mit Header, Hero, Aktionsleiste, Media-Rail und sechs Offline-Routen; die S1-Hardwarediagnose unter Einstellungen bleibt zugänglich.
 - Quelle: vom Nutzer freigegebener Screenshot als **visuelle Referenz**, nicht als gerendertes App-Bild.
 - Keine Live-Daten, kein API-Zugriff, keine echte Wiedergabe. Demo ausdrücklich sichtbar markiert.
-- **Hardware-Abnahme OFFEN:** nach Pull/Build/Run 16:9-Darstellung, Fokus, OK, Back, Video-Intro und Fehllayout bei 1080p am realen TV prüfen.
+- **Visuelle Abnahme PASS (Nutzerbestätigung):** Nutzer bestätigt Dark-Premium-Design auf Samsung mit 'gefällt mir! und pass!'. Volle Navigation und Fokus-Rückkehr auf dem neuen Screen sind Gegenstand des S2.2-Hardware-Gates.

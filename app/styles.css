@@ -85,8 +85,8 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
 .collection-heading { flex: 0 0 30px; display: flex; align-items: center; }
 .collection-heading strong { font-size: 18px; }
 .collection-heading span { font-size: 13px; margin-left: 20px; color: #92a5c1; }
-.rail { flex: 1 1 auto; min-height: 0; display: flex; }
-.rail-card { min-width: 0; flex: 1 1 0; margin-right: 11px; position: relative; overflow: hidden;
+.rail { flex: 1 1 auto; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; }
+.rail-card { min-width: 220px; flex: 1 1 0; margin-right: 11px; position: relative; overflow: hidden;
   border-radius: 13px; text-align: left; border: 1px solid #2b405d; background: #0e1e36; }
 .rail-card:last-child { margin-right: 0; }
 .rail-art { display: block; position: absolute; inset: 0; }
