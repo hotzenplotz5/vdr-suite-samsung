@@ -29,3 +29,13 @@
 - README, ROADMAP und Abnahmeprotokoll aktualisieren, ohne ungeprüfte Hardware-Akzeptanz zu behaupten.
 - Kein Secret und kein absoluter privater Benutzerpfad in Doku/Test-Fixtures.
 
+## Verbindlicher Windows-/Tizen-Update-Pfad
+
+- **Vor jedem Windows-Git-Pull oder Tizen-Build zuerst [docs/windows-update-workflow.md](docs/windows-update-workflow.md) lesen.** Der Workflow wurde am realen Windows-/VS-Code-Samsung-Setup mit 77/77 grünen Tests erprobt.
+- **Keine pauschale Git-Clean-Guard:** `git status --porcelain` darf nicht allein wegen lokaler `.vscode/`, `app/.tizen-rds/`, `app/Debug/`, `app/tizen_web_project.yaml` oder der generierten `app/tv-runtime.js` abbrechen. Unversionierte lokale Entwicklungsdateien unangetastet lassen.
+- Git for Windows kann `app/tv-runtime.js` durch CRLF/LF als geändert markieren und so `git pull` blockieren. **Nur wenn ausschließlich diese generierte Datei geändert und nichts staged ist**: Datei außerhalb des Repos sichern, SHA-256 bestätigen, gezielt **nur** `app/tv-runtime.js` aus `HEAD` wiederherstellen, danach `git pull --ff-only`, `npm.cmd run build:tv`, `npm.cmd run check`. Bei weiteren Quelländerungen abbrechen.
+- **Nie** `git clean`, `git reset --hard`, `git restore .`, pauschale Stash-/Pop-Tricks oder Löschung von Tizen-/VS-Code-Verzeichnissen als schnelle Reparatur anbieten.
+- Signiertes WGT in VS Code über **Build Project**, nicht `Run Project`. WITs Watch nur mit vorher eingerichteter WITs-Basis, kein Start-/Install-Fallback. Credential-Persistenz bei SDB-/Tizen-Update auf Hardware getrennt überprüfen; **kein** automatisches Neu-Pairing.
+- Ist `npm.cmd run check` bereits erfolgreich und der Buildfingerprint korrekt, **nicht erneut Git-Pull/Build verlangen**, sondern zum separaten Paketierungs-/TV-Hardware-Gate übergehen.
+
+

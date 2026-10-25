@@ -33,6 +33,8 @@ Tizen Studio oder VS Code + Tizen Extension mit Samsung TV Extension installiere
 5. In Tizen Device Manager bzw. SDB das TV als Entwicklerziel verbinden.
 6. Ein gültiges **Samsung Author Certificate + Distributor Certificate** für die Entwicklungsinstallation über die Samsung Certificate Extension erzeugen. Private Schlüssel und Passwörter ausschließlich lokal aufbewahren, nicht committen.
 
+> **WICHTIG: Wiederkehrende Git-/CRLF-/Tizen-Fehler vermeiden.** Für bereits eingerichtete Windows-/VS-Code-/Samsung-Checkouts gilt zwingend [Windows-Update-Workflow](windows-update-workflow.md). Die `app/tv-runtime.js` ist eine versionierte, generierte Datei; lokale `.vscode/`, `app/.tizen-rds/`, `app/Debug/` und `app/tizen_web_project.yaml` bleiben erhalten. Keine pauschalen Git-Sauberkeitsprüfungen, keine rekursiven Lösch-/Hard-Reset-Befehle. Am 25.10.2026 funktionierte der dokumentierte gezielte Sicherungs-/Restore-/Pull-/Build-Pfad mit **77 PASS / 0 FAIL**. **Build Project** zum Paketieren; **Run Project** nicht als datenbewahrendes Update verwenden.
+
 ## D. Quellprojekt öffnen, testen, bauen
 
 ```powershell
