@@ -47,6 +47,8 @@ function boot() {
   var recordingCursors = [null];
   var recordingPageIndex = 0;
   var recordingNextCursor = null;
+  var recordingFocusIds = [];
+  var recordingCurrentPageItems = [];
   var recordingBusy = false;
   var recordingRun = 0;
   var liveCredential = null;
@@ -87,9 +89,14 @@ function boot() {
     if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
     if (currentView === "live") return [NAV_ROW,
       ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
-    if (currentView === "recordings") return [NAV_ROW,
-      ["detail-recordings-home", "detail-recordings-load", "detail-recordings-backend"],
-      ["detail-recordings-previous", "detail-recordings-next"]];
+    if (currentView === "recordings") {
+      var rows = [NAV_ROW,
+        ["detail-recordings-home", "detail-recordings-load",
+         "detail-recordings-backend", "detail-recordings-previous"]];
+      recordingFocusIds.forEach(function (id) { rows.push([id]); });
+      rows.push(["detail-recordings-next"]);
+      return rows;
+    }
     if (currentView === "settings") return [
       NAV_ROW,
       ["detail-settings-home", "settings-base-input", "settings-test"],
@@ -514,6 +521,18 @@ function boot() {
   }
 
   function clearRecordingRows() {
+    if (recordingFocusIds.indexOf(focusedId) >= 0 &&
+        currentView === "recordings")
+      setFocus("detail-recordings-load");
+    recordingFocusIds.forEach(function (id) {
+      var item = controls[id];
+      delete controls[id];
+      var index = items.indexOf(item);
+      if (index !== -1) items.splice(index, 1);
+    });
+    recordingFocusIds = [];
+    recordingCurrentPageItems = [];
+    if (rowMemory.recordings) rowMemory.recordings = {};
     if (!recordingList) return;
     recordingList.textContent = "";
     recordingList.hidden = true;
@@ -527,11 +546,20 @@ function boot() {
   function showRecordingRows(rows) {
     clearRecordingRows();
     if (!recordingList) return;
-    rows.forEach(function (recording) {
-      // Server text is untrusted; only textContent, never innerHTML or native paths.
+    recordingCurrentPageItems = rows.slice();
+    rows.forEach(function (recording, index) {
+      // One focus owner: dynamic list items join the existing D-Pad graph.
       var row = document.createElement("li");
-      row.className = "recording-row";
-      row.setAttribute("data-recording-id", recording.recordingId);
+      var id = "recording-row-" + String(index);
+      row.className = "recording-row tv-focusable";
+      row.tabIndex = -1;
+      row.setAttribute("role", "button");
+      row.setAttribute("data-focus-id", id);
+      row.setAttribute("data-recording-index", String(index));
+      row.setAttribute("aria-label", recording.title || "Aufnahme ohne Titel");
+      controls[id] = row;
+      items.push(row);
+      recordingFocusIds.push(id);
       var title = document.createElement("strong");
       title.textContent = recording.title || "Ohne Titel";
       var details = document.createElement("span");
@@ -548,6 +576,9 @@ function boot() {
       row.appendChild(title);
       row.appendChild(details);
       recordingList.appendChild(row);
+      row.addEventListener("click", function () {
+        if (setFocus(id)) activate(row);
+      });
     });
     recordingList.hidden = rows.length === 0;
     recordingList.scrollTop = 0;
@@ -803,6 +834,16 @@ function boot() {
     var liveAction = item.getAttribute("data-live-action");
     if (liveAction) {
       loadLiveChannels(liveAction);
+      return;
+    }
+    var recordingIndex = item.getAttribute("data-recording-index");
+    if (recordingIndex !== null && currentView === "recordings") {
+      var chosen = recordingCurrentPageItems[Number(recordingIndex)];
+      if (chosen) {
+        recordingStatus("ready", chosen.title || "Aufnahme",
+          (chosen.description || "Aufnahme aus dem VDR-Katalog.") +
+          " · Wiedergabe wird in S5 integriert.");
+      }
       return;
     }
     var recordingAction = item.getAttribute("data-recordings-action");
