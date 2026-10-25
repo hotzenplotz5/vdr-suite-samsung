@@ -63,7 +63,7 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - **Separat weiterhin offen:** Exit-/Relaunch-Detailprotokoll aus S1, Medienfunktionen und API-/Netzwerk-Gates. Die allgemeine S2.2-PASS-Meldung ist kein gesonderter Messnachweis für jeden Einzelpunkt.
 
 
-## Phase S2.3 – Detailansichten (Nutzer-PASS 2026-10-25)
+## Phase S2.3 – Detailansichten (Nutzer-PASS; Umfang der TV-Einzeltests offen)
 
 - [ ] S2.1-Startbildschirm und lokales MP4-Intro unverändert, kein schwarzer Bildschirm
 - [ ] Reiter mit Pfeilen nur fokussieren, mit OK öffnen (kein ungewolltes Nachladen)
