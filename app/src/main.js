@@ -11,7 +11,7 @@ import { createDeviceVault } from "./platform/device-vault.js";
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
-import { createSamsungRecordingPlayer, conservativeSamsungCapabilities } from "./platform/recording-player.js";
+import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis } from "./platform/recording-player.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -48,6 +48,7 @@ function boot() {
   var recordingPlayer = createSamsungRecordingPlayer(window);
   var recordingSelected = null;
   var recordingPlayBusy = false;
+  var recordingTeardownBusy = false;
   var recordingPlaybackSession = null;
   var recordingPlayerSurface = document.getElementById("recording-player-surface");
   var recordingCredential = null;
@@ -658,6 +659,7 @@ function boot() {
     });
     recordingFocusIds = [];
     recordingCurrentPageItems = [];
+    recordingSelected = null; // Changing folder/page must not play an old selection.
     if (rowMemory.recordings) rowMemory.recordings = {};
     if (!recordingList) return;
     recordingList.textContent = "";
@@ -716,24 +718,37 @@ function boot() {
   }
 
   function stopRecordingPlayback(reason) {
+    // The stop request is a SECONDARY cleanup operation. A late timeout may
+    // never overwrite an earlier AVPlay/decoder/media-access failure.
+    if (recordingTeardownBusy) return;
     recordingPlaybackClient.cancel();
     recordingPlayer.stop();
     if (recordingPlayerSurface) recordingPlayerSurface.hidden = true;
     var session = recordingPlaybackSession;
     recordingPlaybackSession = null;
     recordingPlayBusy = false;
-    if (session && session.credential)
+    if (session && session.credential) {
+      recordingTeardownBusy = true;
       recordingPlaybackClient.stop(session.credential,session.backendId,
         session.sessionId,function (result) {
-          if (!result.ok)
-            recordingStatus("error","Session-Stop nicht bestätigt",
-              recordingPlaybackError(result) + " · Server-Idle-Timeout greift.");
+          recordingTeardownBusy = false;
+          // Report cleanup failure only after an explicit user STOP/BACK;
+          // never mask the native player failure that triggered cleanup.
+          if (reason === "user" && currentView === "recordings" && !result.ok)
+            recordingStatus("error","AVPlay gestoppt · Session-Stop unbestätigt",
+              recordingPlaybackError(result) + " · Server-Idle-Timeout kann aufräumen.");
         });
+    }
     if (reason === "user") recordingStatus("ready","Wiedergabe beendet",
-      "Samsung AVPlay gestoppt; MediaSession-Stop angefordert.");
+      "Samsung AVPlay lokal gestoppt; Server-Stop angefordert.");
   }
   function startSelectedRecording() {
     if (recordingPlayBusy || recordingPlaybackSession) return;
+    if (recordingTeardownBusy) {
+      recordingStatus("loading","Vorige MediaSession wird beendet",
+        "Bitte erst den Server-Stop abschließen, dann erneut Wiedergabe testen.");
+      return;
+    }
     if (!recordingSelected || !recordingCredential || !recordingBackends.length) {
       recordingStatus("error","Keine Aufnahme ausgewählt",
         "Zuerst eine Aufnahme per OK markieren, dann „Wiedergabe testen“ wählen.");
@@ -779,18 +794,22 @@ function boot() {
           credential:safe.credential,backendId:backendId,sessionId:result.sessionId
         };
         if (recordingPlayerSurface) recordingPlayerSurface.hidden = false;
-        var started = recordingPlayer.start(result.mediaUrl,function (state) {
+        var transport = /\/hls\/master\.m3u8$/.test(result.mediaUrl) ? "HLS" :
+          /\/recording\/stream\.ts$/.test(result.mediaUrl) ? "TS" :
+          /\/recording\/stream\.mp4$/.test(result.mediaUrl) ? "MP4" : "unbekannt";
+        var started = recordingPlayer.start(result.mediaUrl,function (state,detail) {
           if (state === "playing") {
-            recordingStatus("ready","AVPlay spielt",rec.title +
-              " · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+            recordingStatus("ready","AVPlay-Play ausgelöst",rec.title +
+              " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
           } else if (state === "preparing" || state === "buffering") {
-            recordingStatus("loading","Samsung AVPlay startet",rec.title);
+            recordingStatus("loading","Samsung AVPlay startet",rec.title +
+              " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
           } else if (state === "error" || state === "unsupported") {
-            stopRecordingPlayback();
-            recordingStatus("error","AVPlay kann Stream nicht starten",
-              "TV-Decoder/Netzwerk/HttpOnly-Cookie prüfen. Kein unsicherer Token-Fallback.");
+            stopRecordingPlayback("failure");
+            recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
+              samsungPlaybackDiagnosis(detail,transport));
           } else if (state === "finished") {
-            stopRecordingPlayback();
+            stopRecordingPlayback("finished");
             recordingStatus("ready","Aufnahme beendet",rec.title);
           }
         });

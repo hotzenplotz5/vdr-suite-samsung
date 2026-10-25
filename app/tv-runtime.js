@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"efb04b4ebd7c","label":"Samsung v0.1.0 · S5.1 · befb04b4ebd7c"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"e0c249bbc019","label":"Samsung v0.1.0 · S5.1 · be0c249bbc019"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1105,6 +1105,28 @@
 
   // BEGIN app/src/platform/recording-player.js
   // Samsung AVPlay adapter: exactly one native playback owner. Tizen 5.5.
+  function safeAvplayCode(value) {
+    if (typeof value === "number" && isFinite(value) &&
+        Math.floor(value) === value && value >= 0 && value <= 999999)
+      return String(value);
+    if (typeof value === "string" && /^[A-Za-z0-9_-]{1,32}$/.test(value))
+      return value;
+    return "unbekannt";
+  }
+  function samsungPlaybackDiagnosis(detail,transport) {
+    var stages = {
+      open:"AVPlay.open",prepare:"AVPlay.prepareAsync",play:"AVPlay.play",
+      stream:"AVPlay-Stream",unsupported:"AVPlay-Vorprüfung"
+    };
+    var stage=detail && stages[detail.stage] || "AVPlay";
+    var code=detail && detail.code && /^[A-Za-z0-9_-]{1,32}$/.test(detail.code)
+      ? " · Fehlercode " + detail.code : "";
+    var format = transport === "HLS" ? "HLS" :
+      transport === "TS" ? "MPEG-TS" : transport === "MP4" ? "MP4" : "Medienformat unklar";
+    return stage + code + " · " + format +
+      ". Möglich: TV-Decoder/Container oder geschützter Medienzugang (HttpOnly-Cookie im AVPlay-Netzwerkstack).";
+  }
+  
   function createSamsungRecordingPlayer(environment) {
     var api = environment && environment.webapis && environment.webapis.avplay;
     var generation = 0;
@@ -1123,7 +1145,7 @@
     function start(mediaUrl,onState) {
       if (!available() || typeof mediaUrl !== "string" ||
           !/^https:\/\/[^\s?#]+$/.test(mediaUrl)) {
-        onState("unsupported"); return false;
+        onState("unsupported",{stage:"unsupported"}); return false;
       }
       stop();
       var token = generation;
@@ -1136,7 +1158,7 @@
             onbufferingstart:function () {if (token === generation) onState("buffering");},
             onbufferingcomplete:function () {if (token === generation) onState("ready");},
             onstreamcompleted:function () {if (token === generation) onState("finished");},
-            onerror:function () {if (token === generation) onState("error");}
+            onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
           });
         api.prepareAsync(function () {
           if (token !== generation) return;
@@ -1144,13 +1166,13 @@
             api.play();
             active = true;
             onState("playing");
-          } catch (_) {onState("error");}
-        },function () {if (token === generation) onState("error");});
+          } catch (_) {onState("error",{stage:"play"});}
+        },function () {if (token === generation) onState("error",{stage:"prepare"});});
         onState("preparing");
         return true;
       } catch (_) {
         stop();
-        onState("error");
+        onState("error",{stage:"open"});
         return false;
       }
     }
@@ -1255,6 +1277,7 @@
     var recordingPlayer = createSamsungRecordingPlayer(window);
     var recordingSelected = null;
     var recordingPlayBusy = false;
+    var recordingTeardownBusy = false;
     var recordingPlaybackSession = null;
     var recordingPlayerSurface = document.getElementById("recording-player-surface");
     var recordingCredential = null;
@@ -1865,6 +1888,7 @@
       });
       recordingFocusIds = [];
       recordingCurrentPageItems = [];
+      recordingSelected = null; // Changing folder/page must not play an old selection.
       if (rowMemory.recordings) rowMemory.recordings = {};
       if (!recordingList) return;
       recordingList.textContent = "";
@@ -1923,24 +1947,37 @@
     }
   
     function stopRecordingPlayback(reason) {
+      // The stop request is a SECONDARY cleanup operation. A late timeout may
+      // never overwrite an earlier AVPlay/decoder/media-access failure.
+      if (recordingTeardownBusy) return;
       recordingPlaybackClient.cancel();
       recordingPlayer.stop();
       if (recordingPlayerSurface) recordingPlayerSurface.hidden = true;
       var session = recordingPlaybackSession;
       recordingPlaybackSession = null;
       recordingPlayBusy = false;
-      if (session && session.credential)
+      if (session && session.credential) {
+        recordingTeardownBusy = true;
         recordingPlaybackClient.stop(session.credential,session.backendId,
           session.sessionId,function (result) {
-            if (!result.ok)
-              recordingStatus("error","Session-Stop nicht bestätigt",
-                recordingPlaybackError(result) + " · Server-Idle-Timeout greift.");
+            recordingTeardownBusy = false;
+            // Report cleanup failure only after an explicit user STOP/BACK;
+            // never mask the native player failure that triggered cleanup.
+            if (reason === "user" && currentView === "recordings" && !result.ok)
+              recordingStatus("error","AVPlay gestoppt · Session-Stop unbestätigt",
+                recordingPlaybackError(result) + " · Server-Idle-Timeout kann aufräumen.");
           });
+      }
       if (reason === "user") recordingStatus("ready","Wiedergabe beendet",
-        "Samsung AVPlay gestoppt; MediaSession-Stop angefordert.");
+        "Samsung AVPlay lokal gestoppt; Server-Stop angefordert.");
     }
     function startSelectedRecording() {
       if (recordingPlayBusy || recordingPlaybackSession) return;
+      if (recordingTeardownBusy) {
+        recordingStatus("loading","Vorige MediaSession wird beendet",
+          "Bitte erst den Server-Stop abschließen, dann erneut Wiedergabe testen.");
+        return;
+      }
       if (!recordingSelected || !recordingCredential || !recordingBackends.length) {
         recordingStatus("error","Keine Aufnahme ausgewählt",
           "Zuerst eine Aufnahme per OK markieren, dann „Wiedergabe testen“ wählen.");
@@ -1986,18 +2023,22 @@
             credential:safe.credential,backendId:backendId,sessionId:result.sessionId
           };
           if (recordingPlayerSurface) recordingPlayerSurface.hidden = false;
-          var started = recordingPlayer.start(result.mediaUrl,function (state) {
+          var transport = /\/hls\/master\.m3u8$/.test(result.mediaUrl) ? "HLS" :
+            /\/recording\/stream\.ts$/.test(result.mediaUrl) ? "TS" :
+            /\/recording\/stream\.mp4$/.test(result.mediaUrl) ? "MP4" : "unbekannt";
+          var started = recordingPlayer.start(result.mediaUrl,function (state,detail) {
             if (state === "playing") {
-              recordingStatus("ready","AVPlay spielt",rec.title +
-                " · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+              recordingStatus("ready","AVPlay-Play ausgelöst",rec.title +
+                " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
             } else if (state === "preparing" || state === "buffering") {
-              recordingStatus("loading","Samsung AVPlay startet",rec.title);
+              recordingStatus("loading","Samsung AVPlay startet",rec.title +
+                " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
             } else if (state === "error" || state === "unsupported") {
-              stopRecordingPlayback();
-              recordingStatus("error","AVPlay kann Stream nicht starten",
-                "TV-Decoder/Netzwerk/HttpOnly-Cookie prüfen. Kein unsicherer Token-Fallback.");
+              stopRecordingPlayback("failure");
+              recordingStatus("error","AVPlay-Wiedergabe fehlgeschlagen",
+                samsungPlaybackDiagnosis(detail,transport));
             } else if (state === "finished") {
-              stopRecordingPlayback();
+              stopRecordingPlayback("finished");
               recordingStatus("ready","Aufnahme beendet",rec.title);
             }
           });
