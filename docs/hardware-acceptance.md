@@ -86,3 +86,21 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - [ ] Rücknavigation, Fokus und Startvideo aus S2 unverändert
 
 Der Samsung-TV selbst muss TLS, Proxy-Pfad und CORS erfolgreich nutzen können. Tizen-Manifest mit dynamischer Netzwerkfreigabe nur für diese geprüfte HTTPS-Discovery; vor Distribution gesondert auditieren. Keine Umgehung von Zertifikatsprüfungen, kein Klartext-HTTP. **TV-PASS noch offen.**
+
+## S3.1 – bestätigte Verbindung (2026-10-25)
+
+**TV-BESTÄTIGT:** Samsung-Gerät zeigt mit HTTPS-Serverbasis inklusive Proxy-Prefix `/vdr-suite`: `Public API v1 erreichbar. 31 Fähigkeiten gemeldet`. Screenshot vom Nutzer bestätigt. Ohne Prefix erschien vorher HTTP 502. Diese Bestätigung beweist Discovery, nicht Admin-Login, Kopplung, Grants oder Streaming. Keine private Serveradresse in Repository-Dateien.
+
+## S3.2 – Geräte-Pairing und KeyManager (Implementierung, TV-Gate offen)
+
+- [ ] S2-Design/Intro und S3.1-API-Discovery weiterhin nutzbar.
+- [ ] Tizen-KeyManager Preflight auf echtem TV erfolgreich (keine Browser-Fallback-Speicherung).
+- [ ] Echte Bootstrap-POST-Antwort zeigt nur `userCode` öffentlich; Token nicht teilen.
+- [ ] Admin bestätigt im Server-Frontend per eigener Session; TV liest `approved` über Token-GET.
+- [ ] Einmaliges Credential-POST nur nach KeyManager-Preflight; Readback exakt erfolgreich.
+- [ ] GET `/api/v1` mit Device-Schema ergibt authentifizierten Actor ohne automatische Grants.
+- [ ] App-Neustart findet gespeichertes Credential wieder; Login erneut prüfen.
+- [ ] Negative Gates: fehlender KeyManager, abgelehnter/abgelaufener Code, HTTP 401/409/410/503, Netzwerkfehler.
+- [ ] Server-Grants werden nicht als durch Pairing erteilt angezeigt.
+
+Keine Fotos oder Logs mit dem Kopplungscode (nur kurzlebig), Pairing-Token oder Credential-Secret veröffentlichen. Keine Protokolle im Quellbaum; niemals Credentials kopieren. Release-Status: S3.2 weiterhin **unverified auf Hardware**.

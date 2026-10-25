@@ -18,6 +18,8 @@ const files = [
   "app/src/platform/startup-video.js",
   "app/src/views/view-state.js",
   "app/src/api/public-discovery.js",
+  "app/src/platform/device-vault.js",
+  "app/src/api/device-pairing.js",
   "app/src/main.js"
 ];
 

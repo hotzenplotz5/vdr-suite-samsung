@@ -52,3 +52,13 @@
 - Ein gemeldetes `available` und der Authentifizierungsstatus sind **kein Content-Grant**.
 - Keine Browser-Private-API, keine dynamischen Serverlinks als Requestziele und keine Anmeldung in S3.1.
 - Tizen braucht `internet` und `access`; tatsächlich funktionierende TV-Netzwerkverbindung und CORS/TLS bleiben ein Hardware-Gate.
+
+## S3.2 – aktueller Samsung-Client (Quelle/TV-Gate)
+
+- Anonym `POST /api/v1/device-pairings` mit geschlossenem JSON `{displayName,clientKind:"samsung",appVersion}`, erwartet 201.
+- Nur TV-Token `X-VDR-Suite-Pairing-Token` für `GET /api/v1/device-pairings/{id}`, erwartet 200 mit `status`.
+- Administrator entscheidet getrennt nach authentifiziertem Admin-GET und `If-Match`; der TV hat keine Admin-Autorität.
+- Bei `approved`, ausschließlich nach KeyManager-Preflight und bewusster TV-Aktion: `POST .../{id}/credential` **ohne Body**; 201 einmalig. Keine blinden Wiederholungen.
+- Credential ausschließlich Tizen-KeyManager, dann `GET /api/v1` mit `Authorization: VDR-Suite-Device <credentialId>.<credentialSecret>`.
+- Benutzer-/Admin-Passwörter, Browser-Cookies, Browser-private APIs, automatische Grants und Mediensessions bleiben ausgeschlossen.
+- TV-Hardwareprüfung und Device-Grants noch ausstehend.

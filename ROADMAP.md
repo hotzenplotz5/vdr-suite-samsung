@@ -37,9 +37,9 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 ## Phase S3 – API-v1-Anbindung und Identität
 
-- **S3.1 QUELLCODE IMPLEMENTIERT – TV-GATE OFFEN (2026-10-25):** Konfigurierbare HTTPS-Basisadresse unter Einstellungen, ausschließlich durch OK ausgelöste anonyme API-v1-Discovery (`GET /api/v1`, `/api/v1/capabilities`), v1-Vertragsprüfung und abgestufte Fehlertypisierung. Keine automatischen Anfragen beim Reiterwechsel. Die Adresse (keine Credentials) bleibt lokal auf dem TV. Manifest-Privilege für dynamische HTTPS-Ziele. CORS, TLS und TV-Erreichbarkeit noch nicht bestätigt.
-- **S3.2** Device-Pairing: Bootstrap -> Admin-Freigabe -> einmalige Credential-Ausgabe -> Device-Auth.
-- **S3.3** sichere TV-Credential-Persistenz, Widerruf und getrennte Backend-Grants.
+- **S3.1 QUELLCODE + TV-GATE PASS (2026-10-25):** Konfigurierbare HTTPS-Basisadresse unter Einstellungen, ausschließlich durch OK ausgelöste anonyme API-v1-Discovery (`GET /api/v1`, `/api/v1/capabilities`), v1-Vertragsprüfung und abgestufte Fehlertypisierung. Keine automatischen Anfragen beim Reiterwechsel. Die Adresse (keine Credentials) bleibt lokal auf dem TV. Manifest-Privilege für dynamische HTTPS-Ziele. TV-Nutzerfoto bestätigt HTTPS-Discovery unter dem korrekten nginx-Prefix mit 31 Public-v1-Fähigkeiten; kein Device-Login oder Content-Grant.
+- **S3.2 IMPLEMENTIERT, HARDWARE-GATE OFFEN (2026-10-25):** Manuell ausgelöster anonymer Pairing-Bootstrap, TV-Code, token-only Statusprüfung, Admin-Freigabe, einmalig ausgelöste Credential-Ausgabe, sichere persistente Speicherung im Tizen-KeyManager mit Readback und expliziter Device-Auth-Prüfung. Kein automatisches Polling und kein QR bis zu einer vom Server gelieferten sicheren Freigabe-URL. Kein unsicherer Storage-Fallback; bei unbekanntem POST-Ergebnis keine Wiederholung. Tests quellsseitig, echter Samsung-KeyManager/Pairing-Server noch nicht abgenommen.
+- **S3.3 TEILWEISE QUELLCODE:** Tizen-KeyManager als persistenter Credential-Vault eingebaut (Hardwaretest offen), kein Credential in localStorage. Device-Grants/Revocation-UI und Lifecycle bleiben offen.
 
 **Gate:** Testgerät authentifiziert sich mit `VDR-Suite-Device`-Scheme; fehlende Grants werden ausdrücklich verweigert. Remote-SSH des Laptops zählt nicht als Netzwerkpfad des TVs.
 
@@ -71,5 +71,5 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**S3.1 Hardware-Gate:** Paket installieren und auf Samsung in Einstellungen eine tatsächlich vom TV erreichbare HTTPS-Serveradresse eintragen; mit „Verbindung prüfen“ Public API v1 und Fähigkeiten prüfen. Host-/CORS-/TLS-Nachweis am echten TV ist erforderlich. Vor S3.2 kein Pairing und keine Grants.
+**S3.2 Hardware-Gate:** neues Samsung-Paket installieren, bei bereits bestätigter Serverbasis erneut „Verbindung prüfen“, Tizen-KeyManager durch „Kopplung starten“ testen und echten User-Code/Administratorfreigabe durchspielen. Credential-Ausstellung genau einmal; nur nach nachgewiesen erfolgreichem Vault-Preflight. Kein automatischer Admin-Grant.
 

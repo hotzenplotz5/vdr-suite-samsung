@@ -5,6 +5,8 @@ import { registerOptionalKeys } from "./platform/keys.js";
 import { createStartupVideo } from "./platform/startup-video.js";
 import { nextPreviewState, getViewPresentation } from "./views/view-state.js";
 import { normalizeSuiteBase, createDiscoveryClient, classifyDiscoveryError } from "./api/public-discovery.js";
+import { createPairingClient, pairingError } from "./api/device-pairing.js";
+import { createDeviceVault } from "./platform/device-vault.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -33,9 +35,23 @@ function boot() {
   var editingServerAddress = false;
   var testingConnection = false;
   var discovery = createDiscoveryClient(window);
+  var pairingClient = createPairingClient(window);
+  var vault = createDeviceVault(window);
+  var pairingRequest = null;
+  var pairingBase = null;
+  var pairingApproved = false;
+  var issueAttempted = false;
+  var pairingBusy = false;
+  var pendingCredential = null;
+  var pairedCredential = null;
+  var discoveredBase = null;
+  var pairingResult = document.getElementById("pairing-result");
+  var pairingCode = document.getElementById("pairing-user-code");
   var serverInput = document.getElementById("suite-base-input");
   var serverTest = document.getElementById("settings-test-button");
   var connectionResult = document.getElementById("suite-connection-result");
+  var homeServerState = document.getElementById("home-server-state");
+  var topbarServerState = document.getElementById("topbar-server-status");
   var message = document.getElementById("message");
   var keyStatus = document.getElementById("key-status");
 
@@ -45,13 +61,16 @@ function boot() {
   });
 
   function focusRows() {
-    return currentView === "home"
-      ? [NAV_ROW].concat(HOME_ROWS)
-      : [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
-        ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
-        : currentView === "settings"
-          ? ["detail-settings-home", "settings-base-input", "settings-test"]
-          : ["detail-" + currentView + "-home"]];
+    if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
+    if (currentView === "settings") return [
+      NAV_ROW,
+      ["detail-settings-home", "settings-base-input", "settings-test"],
+      ["settings-pair-start", "settings-pair-check", "settings-pair-activate",
+       "settings-pair-verify", "settings-pair-retry"]
+    ];
+    return [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
+      ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
+      : ["detail-" + currentView + "-home"]];
   }
 
   function testServerConnection() {
@@ -66,6 +85,9 @@ function boot() {
     try {
       if (window.localStorage) window.localStorage.setItem("vdr-suite.samsung.serverBase", address);
     } catch (_) {}
+    discoveredBase = null;
+    if (homeServerState) homeServerState.textContent = "Noch nicht verbunden";
+    if (topbarServerState) topbarServerState.textContent = "Offline";
     testingConnection = true;
     if (serverTest) serverTest.disabled = true;
     connectionResult.setAttribute("data-connection-state", "loading");
@@ -79,8 +101,140 @@ function boot() {
         return;
       }
       connectionResult.setAttribute("data-connection-state", "success");
+      discoveredBase = result.base;
+      if (homeServerState) homeServerState.textContent = "API v1 erreichbar · Anmeldung offen";
+      if (topbarServerState) topbarServerState.textContent = "API v1 erreichbar";
+      message.textContent = "Einstellungen · Public API v1 erreichbar · noch kein Device-Grant";
       connectionResult.textContent = "Public API v1 erreichbar. " +
         result.capabilityCount + " Fähigkeiten gemeldet; noch nicht angemeldet oder freigegeben.";
+    });
+  }
+
+
+  function pairMessage(text) { if (pairingResult) pairingResult.textContent = text; }
+  function clearPairRequest() {
+    pairingRequest = null; pairingBase = null; pairingApproved = false;
+    issueAttempted = false;
+    if (pairingCode) pairingCode.textContent = "– – – – – –";
+  }
+  function storedStatus() {
+    var saved = vault.read();
+    if (saved.ok && saved.credential) {
+      pairedCredential = saved.credential;
+      pairMessage("Gerät gespeichert. Anmeldung prüfen; Backend-Berechtigungen sind separat zu vergeben.");
+    } else if (!saved.ok) {
+      pairMessage("Sichere Geräteablage nicht verfügbar. Kopplung gesperrt (kein unsicherer Ersatz).");
+    }
+  }
+  function pairStart() {
+    if (pairingBusy || pendingCredential || pairingRequest) {
+      pairMessage("Es läuft bereits eine Kopplung. Status prüfen oder Ablauf abwarten.");return;
+    }
+    var base = serverInput && normalizeSuiteBase(serverInput.value);
+    if (!base) {pairMessage("Zuerst eine gültige HTTPS-Serveradresse eingeben.");return;}
+    if (base !== discoveredBase) {
+      pairMessage("Bitte zuerst für genau diese Serveradresse „Verbindung prüfen“ ausführen.");return;
+    }
+    pairingBusy = true;
+    pairMessage("Prüfe den sicheren Tizen KeyManager …");
+    vault.preflight(function (ready) {
+      if (!ready.ok || ready.credential) {
+        pairingBusy = false;
+        if (ready.credential) {
+          pairedCredential = ready.credential;
+          pairMessage("Dieses TV-Gerät ist bereits gekoppelt. Vor erneutem Pairing Server-Identität prüfen.");
+        } else pairMessage("KeyManager nicht schreib-/lesbar. Keine Kopplung gestartet.");
+        return;
+      }
+      pairingClient.create(base,function (result) {
+        pairingBusy = false;
+        if (!result.ok) {pairMessage(pairingError(result.kind,result.status));return;}
+        pairingRequest = result.pairing;
+        pairingBase = base; pairingApproved = false; issueAttempted = false;
+        if (pairingCode) pairingCode.textContent = result.pairing.code;
+        pairMessage("Code beim Administrator freigeben. Anschließend „Status prüfen“ drücken. Gültigkeit laut Server: "+result.pairing.expiresAt);
+      });
+    });
+  }
+  function pairCheck() {
+    if (pairingBusy || !pairingRequest || !pairingBase) {
+      pairMessage(pairingRequest ? "Bitte laufenden Vorgang abschließen." : "Bitte zuerst eine Kopplung starten.");return;
+    }
+    if (issueAttempted) {pairMessage("Credential-Ausgabe wurde schon versucht. Nicht wiederholen.");return;}
+    pairingBusy = true;
+    pairMessage("Frage Kopplungsstatus beim Server ab …");
+    pairingClient.poll(pairingBase,pairingRequest,function (result) {
+      pairingBusy = false;
+      if (!result.ok) {
+        pairMessage(pairingError(result.kind,result.status));
+        if (result.kind==="http" && (result.status===404 || result.status===410)) clearPairRequest();
+        return;
+      }
+      if (result.status==="approved") {
+        pairingApproved = true;
+        pairMessage("Administrator hat freigegeben! Jetzt „Gerät aktivieren“ drücken.");
+      } else if (result.status==="rejected") {
+        pairMessage("Kopplung vom Administrator abgelehnt.");
+        clearPairRequest();
+      } else pairMessage("Freigabe steht noch aus. Später erneut „Status prüfen“ drücken.");
+    });
+  }
+  function pairActivate() {
+    if (pairingBusy || !pairingRequest || !pairingApproved || issueAttempted) {
+      pairMessage("Erst Kopplung starten, Freigabe prüfen und noch nicht verbraucht haben.");return;
+    }
+    pairingBusy = true;
+    // Last safety check before the one-way credential issuance.
+    vault.preflight(function (ready) {
+      if (!ready.ok || ready.credential) {
+        pairingBusy = false;
+        pairMessage("KeyManager nicht verfügbar oder Gerät bereits gespeichert. Ausgabe nicht gestartet.");return;
+      }
+      issueAttempted = true;
+      pairMessage("Einmaliges Geräte-Credential wird ausgestellt und sicher gespeichert …");
+      pairingClient.issue(pairingBase,pairingRequest,function (result) {
+        if (!result.ok) {
+          pairingBusy = false;
+          pairMessage(pairingError(result.kind,result.status)+" Bei unklarem POST-Ergebnis niemals blind wiederholen.");
+          return;
+        }
+        pendingCredential = result.credential;
+        savePendingCredential();
+      });
+    });
+  }
+  function savePendingCredential() {
+    if (!pendingCredential) {pairMessage("Kein ausstehendes Credential.");return;}
+    pairingBusy = true;
+    vault.store(pendingCredential,function (result) {
+      pairingBusy = false;
+      if (!result.ok) {
+        pairMessage("Credential-Ausgabe erfolgt, aber KeyManager-Speicherung fehlgeschlagen. App NICHT schließen; „Speichern wiederholen“ drücken. Nie erneut ausstellen.");
+        return;
+      }
+      pairedCredential = result.credential;
+      pendingCredential = null;
+      clearPairRequest();
+      pairMessage("Gerät sicher gekoppelt. „Anmeldung prüfen“ kontrolliert die Device-Authentifizierung. Noch keine Backend-Rechte.");
+    });
+  }
+  function pairVerify() {
+    if (pairingBusy || pendingCredential) {pairMessage("Bitte zuerst Speicherung abschließen.");return;}
+    var saved=vault.read();
+    if (!saved.ok || !saved.credential) {pairMessage("Kein gespeichertes Device-Credential.");return;}
+    pairedCredential=saved.credential;
+    pairingBusy = true;
+    pairMessage("Prüfe Geräteanmeldung über Public API v1 …");
+    pairingClient.verify(pairedCredential,function (result) {
+      pairingBusy = false;
+      if (result.ok) {
+        discoveredBase=pairedCredential.base;
+        if (homeServerState) homeServerState.textContent = "Device verbunden · Grants offen";
+        if (topbarServerState) topbarServerState.textContent = "Gerät angemeldet";
+        message.textContent = "Device authentifiziert · Berechtigungen werden separat vergeben";
+        pairMessage("Device-Authentifizierung erfolgreich. Sender/Aufnahmen benötigen Admin-Grants.");
+      } else pairMessage("Geräteanmeldung nicht bestätigt: "+pairingError(result.kind,result.status)+
+        " Credential bleibt sicher gespeichert.");
     });
   }
 
@@ -158,7 +312,7 @@ function boot() {
     });
     message.textContent = view === "home"
       ? "Offline-Designvorschau · Navigation: Pfeile · OK · Zurück"
-      : "Bereich: " + view + " · keine Serververbindung · Zurück = vorherige Ansicht";
+      : "Bereich: " + view + (discoveredBase ? " · Public API v1 erreichbar" : " · Server noch nicht geprüft") + " · Zurück = vorherige Ansicht";
     return true;
   }
 
@@ -213,6 +367,15 @@ function boot() {
 
   function activate(item) {
     if (!item) return;
+    var pairAction = item.getAttribute("data-pair-action");
+    if (pairAction) {
+      if (pairAction === "start") pairStart();
+      else if (pairAction === "check") pairCheck();
+      else if (pairAction === "activate") pairActivate();
+      else if (pairAction === "verify") pairVerify();
+      else if (pairAction === "retry") savePendingCredential();
+      return;
+    }
     if (item.getAttribute("data-server-test") === "true") {
       testServerConnection();
       return;
@@ -298,6 +461,7 @@ function boot() {
     });
   });
 
+  storedStatus();
   showView("home");
   setFocus("nav-home");
   intro.start();

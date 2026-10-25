@@ -32,7 +32,7 @@
         <button type="button" class="menu-item tv-focusable" data-focus-id="nav-timers" data-route="timers">Timer</button>
         <button type="button" class="menu-item tv-focusable" data-focus-id="nav-settings" data-route="settings">Einstellungen</button>
       </nav>
-      <div class="topbar-status"><span class="status-dot"></span> Offline <span class="status-separator">|</span> Samsung TV</div>
+      <div class="topbar-status"><span class="status-dot"></span> <span id="topbar-server-status">Offline</span> <span class="status-separator">|</span> Samsung TV</div>
     </header>
 
     <main class="main">
@@ -66,7 +66,7 @@
             <img src="assets/branding/vdr-suite-icon-v4.png" alt="" class="action-icon">
             <div><strong>VDR-Suite</strong><span>Bereit für deinen Server</span></div>
           </div>
-          <div class="action-detail"><span>Verbindungsstatus</span><strong>Noch nicht verbunden</strong></div>
+          <div class="action-detail"><span>Verbindungsstatus</span><strong id="home-server-state">Noch nicht verbunden</strong></div>
           <button type="button" class="action-button primary tv-focusable" data-focus-id="action-live" data-target-view="live">▸ &nbsp; Live-TV</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="action-recordings" data-target-view="recordings">▣ &nbsp; Aufnahmen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="action-settings" data-target-view="settings">⚙ &nbsp; Einstellungen</button>
@@ -201,7 +201,7 @@
       </section>
       <section class="page detail-page" data-panel="settings" hidden>
         <span class="detail-eyebrow">EINSTELLUNGEN</span><h1>Dein Samsung-TV.</h1>
-        <p>Die Gerätefunktionen werden lokal erkannt. Kopplung und Benutzerrechte folgen erst in Phase S3.</p>
+        <p>Die Gerätefunktionen werden lokal erkannt. Kopplung erfolgt hier über die Public API v1. Berechtigungen vergibt später der Administrator.</p>
         <div class="diagnostics">
           <h2>Gerätefähigkeit · S1-Hardwarediagnose</h2>
           <dl>
@@ -223,12 +223,30 @@
             <button type="button" class="action-button primary tv-focusable" id="settings-test-button" data-focus-id="settings-test" data-server-test="true">Verbindung prüfen</button>
           </div>
           <p class="connection-result" id="suite-connection-result" role="status">Noch nicht geprüft. Nur ein Druck auf „Verbindung prüfen“ startet zwei anonyme API-v1-Abfragen.</p>
-          <small>Die Serveradresse wird nur auf diesem TV gespeichert, nicht in Git. Pairing und Berechtigungen folgen in S3.2/S3.3.</small>
+          <small>Nur die Serveradresse wird in den TV-Einstellungen gespeichert. Geräte-Credentials gehören ausschließlich in den Tizen KeyManager.</small>
+        </section>
+
+        <section class="pairing-panel" aria-label="Samsung-Gerät koppeln">
+          <h2>Samsung-TV mit VDR-Suite koppeln</h2>
+          <p>Nach erfolgreicher Serverprüfung eine Kopplung starten. Den Code anschließend als Administrator im VDR-Suite-Webfrontend freigeben. Das Gerätepasswort wird nicht auf dem Fernseher eingegeben.</p>
+          <div class="pairing-steps">
+            <div class="pairing-code-box"><span>DEIN KOPPLUNGSCODE</span><strong id="pairing-user-code">– – – – – –</strong><small>Nur kurz gültig · niemals das geheime Pairing-Token weitergeben</small></div>
+            <div class="pairing-help"><strong>1. Code anfordern</strong><span>2. Auf einem anderen Gerät VDR-Suite als Administrator öffnen und Kopplung freigeben</span><span>3. Am Fernseher Status prüfen und Gerät aktivieren</span></div>
+          </div>
+          <p class="pairing-status" id="pairing-result" role="status">Noch nicht gekoppelt. Tizen KeyManager wird vor der Kopplung geprüft.</p>
+          <div class="pairing-actions">
+            <button type="button" class="action-button primary tv-focusable" data-focus-id="settings-pair-start" data-pair-action="start">Kopplung starten</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="settings-pair-check" data-pair-action="check">Status prüfen</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="settings-pair-activate" data-pair-action="activate">Gerät aktivieren</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="settings-pair-verify" data-pair-action="verify">Anmeldung prüfen</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="settings-pair-retry" data-pair-action="retry">Speichern wiederholen</button>
+          </div>
+          <small>Die Tizen-KeyManager-Daten bleiben auf diesem Fernseher. Kopplung vergibt noch keine Sender- oder Aufnahmeberechtigungen.</small>
         </section>
 
       </section>
     </main>
-    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S3.1</span></footer>
+    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S3.2</span></footer>
   </div>
   <script src="tv-runtime.js"></script>
 </body>

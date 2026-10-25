@@ -206,3 +206,33 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
   .server-input { font-size: 14px; padding: 11px; }
   .connection-controls .action-button { min-width: 125px; }
 }
+
+
+/* S3.2 – Pairing is a real server operation; only the userCode is displayed.
+   TV KeyManager holds device credentials (no localStorage fallback). */
+.pairing-panel { max-width:1050px; border:1px solid #345779; border-radius:17px;
+  background:linear-gradient(120deg,#122b49,#07172b); padding:23px 25px;
+  margin:24px 0 35px; }
+.pairing-panel h2 { margin:0 0 10px; font-size:23px; }
+.pairing-panel > p { margin:5px 0 14px; line-height:1.4; font-size:16px; color:#b9cce4; }
+.pairing-steps { display:flex; align-items:stretch; margin:15px 0; }
+.pairing-code-box { flex:0 0 45%; background:#061429; border:1px solid #45688e;
+  border-radius:15px; padding:22px; text-align:center; }
+.pairing-code-box > span { display:block; font-size:12px; color:#a9c8e8; letter-spacing:1.2px; }
+.pairing-code-box > strong { display:block; font-size:34px; letter-spacing:3px; color:#fff;
+  margin:16px 0; white-space:nowrap; }
+.pairing-code-box > small { font-size:11px; color:#8fa7c2; }
+.pairing-help { flex:1; display:flex; flex-direction:column; justify-content:center; padding:12px 25px; }
+.pairing-help strong, .pairing-help span { display:block; line-height:1.5; font-size:15px; margin-bottom:11px; }
+.pairing-help span { color:#b1cbe5; }
+.pairing-panel .pairing-status { border-top:1px solid #2a435f; padding-top:15px; min-height:50px; }
+.pairing-actions { display:flex; flex-wrap:wrap; margin:14px 0; }
+.pairing-actions .action-button { margin:0 10px 10px 0; min-width:165px; padding:14px; }
+.pairing-panel > small { color:#91a9c5; font-size:12px; }
+@media (max-width:1380px) {
+ .pairing-panel {padding:14px; margin:16px 0 20px;}
+ .pairing-panel h2 {font-size:19px;}
+ .pairing-panel > p,.pairing-help strong,.pairing-help span {font-size:13px;}
+ .pairing-code-box > strong {font-size:23px;}
+ .pairing-actions .action-button {font-size:12px; min-width:130px; padding:10px;}
+}
