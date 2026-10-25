@@ -114,8 +114,10 @@ test("S4.1 fail-closed HTTP auth/grants/network and paging expiry",()=>{
   h.calls[4].ontimeout();
   assert.match(recordingCatalogError(result),/Zeitüberschreitung/);
   client.listRecordings(credential,"default",null,r=>{result=r;});
+  h.calls[5].status=200;
   h.calls[5].responseURL="https://example.invalid/redirect";
-  h.reply(5,200,envelope([row]));
+  h.calls[5].responseText=JSON.stringify(envelope([row]));
+  h.calls[5].onload();
   assert.equal(result.kind,"bad_response");
 });
 
