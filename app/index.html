@@ -128,14 +128,14 @@
         </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>
-        <span class="detail-eyebrow">AUFNAHMEN · DESIGNVORSCHAU</span>
+        <span class="detail-eyebrow">AUFNAHMEN · ECHTE MEDIATHEK</span>
         <h1>Deine Mediathek.</h1>
-        <p>Aufnahmen, Serien, Filme und Ordner – an einem Ort.</p>
+        <p>Deine echten VDR-Aufnahmen aus dem freigegebenen Backend. Ordner und Wiedergabe folgen in S4.2 und S5.</p>
         <div class="detail-grid">
           <div class="detail-art detail-art-recordings" aria-hidden="true">
             <span class="detail-art-kicker">DEINE GESCHICHTEN</span>
             <span class="detail-art-motif">▣</span>
-            <strong>Ordner & Wiedergabe</strong>
+            <strong>Deine Aufnahmen</strong>
             <span>VDR-Suite Samsung</span>
           </div>
           <section class="detail-status-card" id="detail-state-recordings" data-state="offline" aria-label="Bereichsstatus">
@@ -145,12 +145,19 @@
             <div class="detail-skeleton" id="detail-state-skeleton-recordings" hidden aria-hidden="true">
               <i></i><i></i><i></i>
             </div>
-            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+            <span class="detail-status-hint">Nur Metadaten · kein automatischer Abruf · keine Wiedergabe</span>
           </section>
         </div>
-        <div class="detail-actions">
+        <div class="detail-actions recordings-actions">
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-recordings-home" data-target-view="home">Zurück zu Home</button>
-          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-recordings-preview" data-preview-route="recordings">Zustände ansehen</button>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-recordings-load" data-recordings-action="load">Aufnahmen laden</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-backend" data-recordings-action="backend">Backend wechseln</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-previous" data-recordings-action="previous">Vorherige Seite</button>
+        </div>
+        <div class="recording-catalog" aria-label="Echte Aufnahmen, in Seiten von bis zu 100 pro Serveranfrage">
+          <p class="recording-backend-name" id="recording-backend-name">Noch kein Backend geladen</p>
+          <ol class="recording-list" id="recording-list" hidden></ol>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-next" data-recordings-action="next">Weitere Aufnahmen</button>
         </div>
       </section>
       <section class="page detail-page" data-panel="search" hidden>

@@ -45,7 +45,7 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 ## Phase S4 – Aufnahmen/Library
 
-- **S4.1** Backend- und Recording-Collection, begrenzte Seiten statt Katalog-Vollabruf.
+- **S4.1 QUELLCODE IMPLEMENTIERT, TV-HARDWARE-GATE OFFEN (2026-10-25):** Samsung Aufnahmen-Ansicht liest nach bewusster OK-Aktion über die vorhandene Device-Anmeldung `GET /api/v1/backends` und `GET /api/v1/recordings?backendId=...&limit=100&sort=recordingId&order=asc`. Maximal **100 Datensätze pro Serveranfrage, keine Begrenzung der gesamten Aufnahmemediathek**: über echte `rc1_`-Keyset-Cursor sind weitere Seiten erreichbar; aktuelle Seite ersetzt ältere DOM-Zeilen. D-Pad-fokussierbare Aufnahmezeilen, Vorherige Seite, Weitere Aufnahmen und Backendwechsel, sichere Textdarstellung, keine Browser-private Route. Unberechtigter Zugriff (fehlendes `recordings.view@backend`) zeigt explizit Fehler. Kein automatischer Abruf beim Fokus, keine MediaSession/Wiedergabe, kein lokales Speichern von Geheimnissen. Quelltests/CI und echter Samsung-TV-S4.1-Test getrennt dokumentieren.
 - **S4.2** VDR-Ordneransicht (`view=folders`), sichere Back-Navigation und echte Identitäten.
 - **S4.3** Genres, Artwork nur über freigegebene APIs, Details/Continue Watching.
 
@@ -71,15 +71,15 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**Nächste Entwicklungsarbeit: VDR-`channels.conf`-Reihenfolge sauber lösen.** Der Samsung-Erstseiten-Test ist erfolgreich; eine weitere Build-/Installationsrunde nur zur Wiederholung ist unnötig. Aktuell ist `sort=backendId,channelId&order=asc` die **einzige** unterstützte Sortierung. Zuerst den API-v1-Vertrag inklusive stabiler Keyset-Paginierung für `channelNumber ASC` auf dem Server erweitern und die entsprechenden Source-/Security-/Referenzclient-Tests bestehen lassen; danach den Samsung-Client auf diese echte serverseitige Ordnung umstellen. Nicht die ersten 20 bereits falsch ausgewählten Zeilen nachträglich umsortieren.
+**S4.1 Hardware-Gate (noch offen):** Aktuellen Samsung-S4.1-Client auf der realen Tizen-5.5-Hardware testen: bei bereits gespeichertem Device-Credential in die Aufnahmen wechseln und ausdrücklich **„Aufnahmen laden“** wählen. **Wichtig:** Zusätzlich zu `channels.view` muss der Administrator `recordings.view@default` für die **aktuelle** Geräteidentität freigeben. Die Senderberechtigung verleiht keinen Aufnahmezugriff. Nach erfolgreichem Laden echte Aufnahmezeilen, D-Pad-Fokus, nächste/vorherige Seite, Backendwahl und fehlende Grants prüfen. Server ist unverändert; keine automatische neue Pairing- oder Device-Grants-Operation.
 
-**Zusätzliche gezielte Hardware-Gates:** „Mehr Sender“, Geräteanmeldung nach normalem App-Neustart und datenbewahrendem Tizen-Update, 10-Sekunden-Admin-Polling/Altgeräte-Widerruf und später AVPlay-Bild/Ton. Keine erneute produktive Kopplung oder Server-Write-Tests ohne konkrete Notwendigkeit.
+**Priorität danach:** S4.2 – VDR-Ordnerstruktur und Navigation über `view=folders`. Dann S5 AVPlay-/MediaSession-Wiedergabe und S5.3 P1 Resume/Continue Watching. Die gewünschte `channels.conf`-Senderreihenfolge bleibt als **separater Server-API-v1-Numeric-Sort-Vertrag** offen und darf nicht per lokaler 20er-Page-Sortierung kaschiert werden.
 
-**Slice-Dateien:** app/src/api/channel-catalog.js, app/src/main.js, app/index.html, app/styles.css, scripts/build-tv-runtime.mjs, app/tv-runtime.js, Tests und Dokumentation.
-**Schnittstellen:** ausschliesslich lesende öffentliche GET /api/v1, GET /api/v1/backends und GET /api/v1/channels.
-**Risiken:** Beim dokumentierten VS-Code-Testupdate ging das lokale KeyManager-Credential **tatsächlich verloren**, während die alte Server-Geräteidentität bestehen blieb; neue Identität und Grant mussten getrennt eingerichtet werden. Dauerhaft datenbewahrendes Tizen-Update noch nicht nachgewiesen; 30-Backend-Vorschauseite begrenzt.
-**Nichtziele:** automatische Pairing-Wiederholung, Admin-Grants, Aufnahmen, EPG, Wiedergabe, AVPlay.
-**Rollback:** Samsung-Client auf vorherigen main-Stand zurücksetzen; keine Serveränderung. Tizen-Test-Installationen können lokale App-Daten löschen.
+**Betroffene S4.1-Dateien:** `app/src/api/recording-catalog.js`, `app/src/main.js`, `app/index.html`, `app/styles.css`, `scripts/build-tv-runtime.mjs`, `app/tv-runtime.js`, Tests, `docs/api-contracts.md` und Abnahme/Roadmap.
+**Schnittstellen:** Ausschließlich öffentliche lesende `GET /api/v1` (Device-Verifikation), `GET /api/v1/backends` und `GET /api/v1/recordings` (100 pro Seite).
+**Risiken:** Eine Neuinstallation via VS Code `Run Project` hat zuvor den Tizen-KeyManager-Eintrag gelöscht; bestehende Servergeräte und Grants bleiben trotzdem bestehen. Kein erneutes Pairing auf Verdacht; zunächst `Einstellungen → Anmeldung prüfen`.
+**Nichtziele:** Neue Device-Identität, automatische Berechtigungsvergabe, Vollkatalog-Abruf, Recording-Aktionen/MOVE/DELETE, Ordneransicht, EPG, AVPlay und P1 Resume.
+**Rollback:** Samsung-Client auf den vorigen `main`-Stand zurücksetzen; keine Server-DB-/Dateiänderung. TV-Installationen können lokale App-Daten löschen.
 
 ### Achtung: Update kann Device-Identität löschen (Tizen 5.5)
 

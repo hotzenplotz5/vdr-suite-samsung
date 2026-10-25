@@ -256,3 +256,25 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
   .live-channel-row strong { font-size: 16px; }
   .live-channel-row span { font-size: 13px; }
 }
+
+
+/* S4.1: bounded read-only recording pages (at most 20 visible DOM rows). */
+.recordings-actions { flex-wrap: wrap; }
+.recordings-actions .action-button { min-width: 175px; margin-bottom: 8px; }
+.recording-catalog { margin-top: 12px; max-width: 1180px; }
+.recording-backend-name { color: #9dc4e8; font-size: 16px; margin: 0 0 8px; }
+.recording-list { list-style: none; padding: 0; margin: 0; max-height: 300px;
+  overflow-y: auto; border: 1px solid #2b4a6e; border-radius: 14px; }
+.recording-row { min-height: 63px; padding: 11px 18px;
+  border-bottom: 1px solid #1e3854; background: #091a30; }
+.recording-row:nth-child(even) { background: #0e2540; }
+.recording-row strong { display: block; font-size: 19px; color: #f2f7ff; }
+.recording-row span { display: block; font-size: 14px; margin-top: 4px; color: #adc3da; }
+@media(max-width:1380px) {
+  .recordings-actions .action-button { min-width: 125px; }
+  .recording-catalog { margin-top: 8px; }
+  .recording-list { max-height: 220px; }
+  .recording-row { min-height: 47px; padding: 7px 12px; }
+  .recording-row strong { font-size: 16px; }
+  .recording-row span { font-size: 12px; }
+}

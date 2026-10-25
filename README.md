@@ -132,3 +132,14 @@ Live-TV per OK öffnen, dann Sender laden per OK drücken. Der TV liest das vorh
 Fehlende oder widerrufene Geräteidentitäten und fehlende channels.view-Grants werden angezeigt; kein automatisches Re-Pairing und keine Rechteerweiterung. Live-TV-Wiedergabe, EPG, Aufnahmen und MediaSessions gehören nicht zu diesem Slice. Nur echte Serverfelder werden als Senderdaten angezeigt.
 
 Quellenänderungen erfordern npm run build:tv und danach npm run check. Tests laufen ohne npm-Pakete. Das signierte WGT und ein realer TV-Test sind separate Gates. Rollback: vorheriger Samsung-main-Stand ohne Server-Eingriff.
+
+
+## Phase S4.1 – echte Aufnahmen im Samsung-Client (Source-Kandidat, 2026-10-25)
+
+Der Menüpunkt **Aufnahmen** verwendet jetzt nach **OK → Aufnahmen laden** die vorhandene, sicher im Tizen-KeyManager gespeicherte Geräteanmeldung für `GET /api/v1/backends` und `GET /api/v1/recordings`. `recordings.view@backend` muss der Administrator ausdrücklich für dieses Gerät gewähren; der für Live-TV vorhandene Grant `channels.view` genügt **nicht**.
+
+Die Mediathek ist **nicht auf 20 oder 100 Aufnahmen insgesamt begrenzt**. Es werden bis zu 100 öffentliche `rec_...`-Einträge pro Serveranfrage geladen; „Weitere Aufnahmen“ und „Vorherige Seite“ erreichen beliebig viele Folgeseiten. Im DOM verbleibt immer nur eine Seite. Aufnahmezeilen sind mit D-Pad/OK fokussierbar und zeigen echte Metadaten. Keine Wiedergabe, Streaming-URL, künstliche Demoaufnahme, Autoload oder private Serverroute.
+
+**Status:** Code/Tests zunächst source-only; die TV-Installation und der reale Grant-/Mehrseiten-Test müssen separat bestätigt werden. Nach einer VS-Code-`Run Project`-Neuinstallation kann das lokale Device-Credential verlorengehen; dadurch entsteht auf dem Server **kein** automatisch wiederverwendbares Device. Bestehende Geräte nicht blind löschen oder erneut koppeln. Die VDR-`channels.conf`-Senderreihenfolge bleibt unabhängig davon eine offene API-v1-Serverfrage.
+
+**Lokaler Samsung-Workflow:** `git pull origin main`, `npm.cmd run build:tv`, `npm.cmd run check`, anschließend in der bestehenden VS-Code-Tizen-Extension **Build Project** und **Run Project**. Nur ausführen, wenn ein TV-Retest ausdrücklich beabsichtigt ist.
