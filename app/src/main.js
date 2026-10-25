@@ -51,6 +51,10 @@ function boot() {
   var recordingTeardownBusy = false;
   var recordingPlaybackSession = null;
   var recordingPlayerSurface = document.getElementById("recording-player-surface");
+  // Samsung native AVPlay requires a viewport-level object, not one clipped by
+  // .detail-page / .recording-catalog scrolling containers.
+  if (recordingPlayerSurface && document.body)
+    document.body.appendChild(recordingPlayerSurface);
   var recordingCredential = null;
   var recordingBackends = [];
   var recordingBackendIndex = 0;
@@ -724,6 +728,7 @@ function boot() {
     recordingPlaybackClient.cancel();
     recordingPlayer.stop();
     if (recordingPlayerSurface) recordingPlayerSurface.hidden = true;
+    document.documentElement.classList.remove("recording-avplay-active");
     var session = recordingPlaybackSession;
     recordingPlaybackSession = null;
     recordingPlayBusy = false;
@@ -793,7 +798,11 @@ function boot() {
         recordingPlaybackSession = {
           credential:safe.credential,backendId:backendId,sessionId:result.sessionId
         };
-        if (recordingPlayerSurface) recordingPlayerSurface.hidden = false;
+        if (recordingPlayerSurface) {
+          // Show the full-screen AVPlay object and uncover the native video plane.
+          recordingPlayerSurface.hidden = false;
+          document.documentElement.classList.add("recording-avplay-active");
+        }
         var transport = /\/hls\/master\.m3u8$/.test(result.mediaUrl) ? "HLS" :
           /\/recording\/stream\.ts$/.test(result.mediaUrl) ? "TS" :
           /\/recording\/stream\.mp4$/.test(result.mediaUrl) ? "MP4" : "unbekannt";

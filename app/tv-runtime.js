@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"e0c249bbc019","label":"Samsung v0.1.0 · S5.1 · be0c249bbc019"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"3df107e496f6","label":"Samsung v0.1.0 · S5.1 · b3df107e496f6"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1153,6 +1153,13 @@
         api.open(mediaUrl);
         if (typeof api.setDisplayRect === "function")
           api.setDisplayRect(0,0,1920,1080);
+        // Fill the TV display area but preserve film aspect ratio.
+        // Older Tizen devices may omit/reject this optional API; playback must
+        // not fail merely because letterboxing is unsupported.
+        if (typeof api.setDisplayMethod === "function") {
+          try {api.setDisplayMethod("PLAYER_DISPLAY_MODE_LETTER_BOX");}
+          catch (_) { /* optional display mode, setDisplayRect remains active */ }
+        }
         if (typeof api.setListener === "function")
           api.setListener({
             onbufferingstart:function () {if (token === generation) onState("buffering");},
@@ -1280,6 +1287,10 @@
     var recordingTeardownBusy = false;
     var recordingPlaybackSession = null;
     var recordingPlayerSurface = document.getElementById("recording-player-surface");
+    // Samsung native AVPlay requires a viewport-level object, not one clipped by
+    // .detail-page / .recording-catalog scrolling containers.
+    if (recordingPlayerSurface && document.body)
+      document.body.appendChild(recordingPlayerSurface);
     var recordingCredential = null;
     var recordingBackends = [];
     var recordingBackendIndex = 0;
@@ -1953,6 +1964,7 @@
       recordingPlaybackClient.cancel();
       recordingPlayer.stop();
       if (recordingPlayerSurface) recordingPlayerSurface.hidden = true;
+      document.documentElement.classList.remove("recording-avplay-active");
       var session = recordingPlaybackSession;
       recordingPlaybackSession = null;
       recordingPlayBusy = false;
@@ -2022,7 +2034,11 @@
           recordingPlaybackSession = {
             credential:safe.credential,backendId:backendId,sessionId:result.sessionId
           };
-          if (recordingPlayerSurface) recordingPlayerSurface.hidden = false;
+          if (recordingPlayerSurface) {
+            // Show the full-screen AVPlay object and uncover the native video plane.
+            recordingPlayerSurface.hidden = false;
+            document.documentElement.classList.add("recording-avplay-active");
+          }
           var transport = /\/hls\/master\.m3u8$/.test(result.mediaUrl) ? "HLS" :
             /\/recording\/stream\.ts$/.test(result.mediaUrl) ? "TS" :
             /\/recording\/stream\.mp4$/.test(result.mediaUrl) ? "MP4" : "unbekannt";
