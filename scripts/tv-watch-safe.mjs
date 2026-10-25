@@ -1,7 +1,7 @@
 // Development-only, non-installing Samsung WITs Watch wrapper.
 // Intentionally NEVER invokes WITs Start, Tizen install/uninstall or SDB install.
 import {existsSync, readFileSync} from "node:fs";
-import {dirname, join} from "node:path";
+import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawn, spawnSync} from "node:child_process";
 
@@ -83,7 +83,6 @@ function main() {
     else process.exitCode=code===0?0:1;
   });
 }
-if (process.argv[1] && fileURLToPath(import.meta.url)===
-    join(process.cwd(),process.argv[1]).replace(/\\/g,"/")) {
+if (process.argv[1] && fileURLToPath(import.meta.url)===resolve(process.argv[1])) {
   main();
 }
