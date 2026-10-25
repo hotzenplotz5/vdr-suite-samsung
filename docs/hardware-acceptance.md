@@ -283,3 +283,18 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 - [ ] Vorher dieselbe aktive Device-ID und KeyManager-Anmeldung, nach Update und Neustart unveränderte Device-ID, gültige Authentifizierung und gleiche Grants beobachten.
 
 **STOP bei unbekanntem Basis-WGT, verlorener Author-Identität, abweichender Paketkennung, drohendem Uninstall oder fehlender Hardware-Freigabe.** Source-PASS bedeutet nicht TV-PASS. Siehe [S7.2](production-update-s7-2.md).
+
+## S7.3 – Settings zeigt fälschlich „nicht gekoppelt“, obwohl Live-TV und Aufnahmen funktionieren
+
+**Hardwarebefund vom Nutzer (25.10.2026):** Nach der neuen Samsung-Testinstallation zeigt die Einstellungsseite keine gespeicherte Kopplung an, obwohl reale Sender und Aufnahmen des freigegebenen Backends erfolgreich angezeigt werden. Die beiden Katalogladewege führen zuvor jeweils eine echte öffentliche API-v1-Device-Authentifizierung durch; ein Erfolg ist daher ein Beleg für eine gültige Device-Anmeldung im Zeitpunkt des Abrufs. Das widersprüchliche Einstellungslabel ist **kein Grund für neue Kopplung oder Löschung bestehender Grants**.
+
+**Quellursache und Fix:** Beim App-Start wird der KeyManager-Status einmal ins Settings-Label kopiert; der vorherige Ablauf aktualisierte ihn nicht nach erfolgreich verifiziertem Abruf von Sendern oder Aufnahmen. S7.3 synchronisiert die erfolgreiche Authentifizierung mit dem Einstellungsstatus, liest beim Wechsel in die Einstellungen erneut aus dem KeyManager und kennzeichnet `gespeichert`, `authentifiziert`, `KeyManager nicht lesbar`, `widersprüchlicher flüchtiger Read`, `wirklich kein Eintrag` und `HTTP 401` getrennt. Keine Secrets, automatisches Pairing oder serverseitige Änderungen.
+
+- [ ] Nach **neuer, ausdrücklich freigegebener** Samsung-Installation die aktuelle Buildkennung notieren.
+- [ ] Sender laden und Aufnahmen laden (ohne Pairing), dann Einstellungen öffnen: *authentifiziert*, einschließlich derselben **nicht geheimen Device-ID**; nicht fälschlich *nicht gekoppelt*.
+- [ ] TV-App neu starten: gespeicherte Anmeldung darf als *lokal vorhanden, serverseitig ungeprüft* erscheinen, bis einmal eine Verifikation erfolgt; danach wieder *authentifiziert*.
+- [ ] Vorübergehend nicht lesbarer KeyManager darf nie „nicht gekoppelt“ oder automatische Neu-Pairing-Aufforderung auslösen.
+- [ ] Temporäre Netzwerk-/Backendfehler ≠ verlorenes Credential, HTTP 401 ≠ lokaler Datenverlust.
+- [ ] Den gemeldeten Aufnahme-Wiedergabe-Screenshot **separat** nach der Statuskorrektur analysieren; AVPlay/Bild/Ton sind dadurch nicht bestätigt.
+
+**Quell-/CI-Status:** Teststand nach Merge nachtragen; kein Hardware-PASS ohne erneute TV-Beobachtung. **Rollback:** vorherigen Quellstand wiederherstellen, aber keinen ungeprüften TV-Downgrade ausführen. Aktuelle funktionierende Device-Anmeldung nicht überschreiben.
