@@ -68,7 +68,17 @@ export function createSamsungRecordingPlayer(environment) {
           active = true;
           onState("playing");
         } catch (_) {onState("error",{stage:"play"});}
-      },function () {if (token === generation) onState("error",{stage:"prepare"});});
+      },function (error) {
+        if (token !== generation) return;
+        // Samsung Product WebAPI ErrorCallback receives a WebAPIError.
+        // Surface ONLY an allowlisted error name/code; NEVER log message,
+        // response URL, cookie, internal path or native exception object.
+        var reason = error && safeAvplayCode(error.name) !== "unbekannt"
+          ? safeAvplayCode(error.name) : error && safeAvplayCode(error.code);
+        onState("error",{
+          stage:"prepare",code:reason === "unbekannt" ? undefined : reason
+        });
+      });
       onState("preparing");
       return true;
     } catch (_) {
