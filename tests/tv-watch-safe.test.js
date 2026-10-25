@@ -4,7 +4,7 @@ import {readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, copyFileSyn
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
-import {devManifest, manifestIdentity, identity, production, verifyStaging} from "../scripts/tv-wits-isolated.mjs";
+import {devManifest, manifestIdentity, identity, production, verifyStaging, smoke} from "../scripts/tv-wits-isolated.mjs";
 
 const original=readFileSync(join(production,"config.xml"),"utf8");
 const generated=devManifest(original);
@@ -35,8 +35,9 @@ function fixture() {
   writeFileSync(join(source,"config.xml"),original);
   writeFileSync(join(target,"config.xml"),generated);
   for(const name of ["index.html","styles.css","tv-runtime.js"]) {
-    writeFileSync(join(source,name),"source "+name);
-    writeFileSync(join(target,name),"source "+name);
+    const fixtureContent=name==="index.html"?"<strong>VDR-Suite</strong>":"source "+name;
+    writeFileSync(join(source,name),fixtureContent);
+    writeFileSync(join(target,name),fixtureContent);
   }
   writeFileSync(join(target,".witsignore"),".witsconfig.json\nDebug\n*.p12\ndevice-local.js\n");
   const config={connectionInfo:{baseAppPath:".",deviceIp:"192.0.2.1"},profileInfo:{path:"profile-only-placeholder"}};
@@ -58,6 +59,18 @@ test("Isolated WITs staging checks identity, source sync and local config withou
     assert.match(f.inspect().join(" "),/Unknown file/);
   } finally {rmSync(f.base,{recursive:true,force:true});}
 });
+test("DEV visual smoke changes only staging and is restored by next preparation",()=>{
+  const f=fixture();
+  try {
+    const original=readFileSync(join(f.source,"index.html"),"utf8");
+    smoke({source:f.source,target:f.target});
+    assert.equal(readFileSync(join(f.source,"index.html"),"utf8"),original);
+    assert.match(readFileSync(join(f.target,"index.html"),"utf8"),/DEV-RELOAD-TEST/);
+    assert.ok(f.inspect().some(x=>x.includes("not current")));
+    assert.throws(()=>smoke({source:f.source,target:f.target}),/DEV smoke blocked/);
+  } finally {rmSync(f.base,{recursive:true,force:true});}
+});
+
 test("Watch is fail-closed in a fresh checkout and cannot touch production",()=>{
   const script=readFileSync(new URL("../scripts/tv-watch-safe.mjs",import.meta.url),"utf8");
   const npm=JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8"));
