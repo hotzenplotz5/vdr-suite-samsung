@@ -54,3 +54,10 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - Quelle: vom Nutzer freigegebener Screenshot als **visuelle Referenz**, nicht als gerendertes App-Bild.
 - Keine Live-Daten, kein API-Zugriff, keine echte Wiedergabe. Demo ausdrücklich sichtbar markiert.
 - **Visuelle Abnahme PASS (Nutzerbestätigung):** Nutzer bestätigt Dark-Premium-Design auf Samsung mit 'gefällt mir! und pass!'. Volle Navigation und Fokus-Rückkehr auf dem neuen Screen sind Gegenstand des S2.2-Hardware-Gates.
+
+## Phase S2.2 – Fernbedienung und Fokus (2026-10-25)
+
+- **Gesamt-Abnahme: PASS laut Nutzer**, nach Installation und Test auf dem realen Samsung-TV („pass, hab schon getestet“).
+- Implementiert und automatisiert geprüft: Fokusgraph für Menü, Hero, Aktionsleiste, horizontale Rail; Fokus-Rückkehr nach Back, Verlauf zwischen Detailansichten, Vermeidung versteckter Fokuselemente. GitHub-Actions-Checks zum Implementierungscommit `785b4b9` erfolgreich.
+- **Bewusste Bedienungsentscheidung:** Links/Rechts markiert den Reiter ohne sofortigen Seitenwechsel; OK öffnet ihn. So sind bei künftiger API-Anbindung keine unnötigen Seitenladungen durch bloßes Blättern nötig.
+- **Separat weiterhin offen:** Exit-/Relaunch-Detailprotokoll aus S1, Medienfunktionen und API-/Netzwerk-Gates. Die allgemeine S2.2-PASS-Meldung ist kein gesonderter Messnachweis für jeden Einzelpunkt.
