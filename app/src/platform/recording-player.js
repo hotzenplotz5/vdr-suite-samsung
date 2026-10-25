@@ -47,6 +47,13 @@ export function createSamsungRecordingPlayer(environment) {
       api.open(mediaUrl);
       if (typeof api.setDisplayRect === "function")
         api.setDisplayRect(0,0,1920,1080);
+      // Fill the TV display area but preserve film aspect ratio.
+      // Older Tizen devices may omit/reject this optional API; playback must
+      // not fail merely because letterboxing is unsupported.
+      if (typeof api.setDisplayMethod === "function") {
+        try {api.setDisplayMethod("PLAYER_DISPLAY_MODE_LETTER_BOX");}
+        catch (_) { /* optional display mode, setDisplayRect remains active */ }
+      }
       if (typeof api.setListener === "function")
         api.setListener({
           onbufferingstart:function () {if (token === generation) onState("buffering");},
