@@ -201,3 +201,19 @@ Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs 
 **Quellanalyse:** `app/src/main.js` leitete aus `vault.read().credential` das pauschale „bereits gekoppelt“ ab. Das lokale Credential kann nach einem serverseitigen Widerruf weiter vorhanden sein. Public v1 `GET /api/v1` mit Device-Authorization ist die richtige separate Authentifizierungsprobe und liefert für ungültige/widerrufene Credentials HTTP 401; ein erfolgreiches anonymes Discovery-GET ist hierfür kein Beweis.
 
 **S4.1-D Fix-Kandidat (Source/CI ≠ TV-Installation):** gespeichertes Credential konsequent als *lokal vorhanden, online ungeprüft* anzeigen. Bei nachgewiesenem HTTP 401 explizite Serverablehnung mit Geräte-ID (nicht Secret) anzeigen; eine lokale Bereinigung ist ausschließlich nach zweimaliger aktiver Bestätigung möglich. Bei 403, Offline, Timeout oder KeyManager-Fehler niemals automatisch löschen; keine automatische Neukopplung, keine Geräte-/Grant-Änderung auf dem Server. Der TV muss nach späterem bewusstem Update den Fix und die zwei Prüfungen (401, kontrollierter Reset) erneut hardwaretesten, bevor D3–D5 neu bewertet werden. D8/D11/D12 bleiben offen; E–H sind weiterhin nicht abgenommen.
+
+
+## S4.1 – Erster erfolgreicher Aufnahmeabruf auf Samsung (Nutzer-Rückmeldung 2026-10-25)
+
+**Beobachtung am echten Samsung-TV:** Nach dem erfolgreichen Windows-Quellupdate (`npm.cmd run check`: 77/77 PASS; erwarteter gebündelter Quell-Build `b659eaf54fff5`) und anschließenden Tizen-Installationsschritten meldet der Nutzer: **„Melde erfolg, konnte eben die Aufnahmen laden“**.
+
+**Hardwareevidenz:** `Aufnahmen laden` funktioniert für den Nutzer auf der Samsung-App; erste positive Abnahme der echten Aufnahmeliste (S4.1-Basisabruf). Das ist ein deutlich stärkerer Nachweis als ein Source-/CI-Test. Das Design nutzt authentifizierte Public-v1-Aufnahmeabfragen. Die Rückmeldung spricht für eine funktionierende Device-Authentifizierung und einen wirksamen `recordings.view`-Grant zum Abrufzeitpunkt. **Nicht separat bestätigt:** exakte am TV sichtbare Buildkennung, aktuelle Device-ID, Anmeldung-prüfen-Ergebnis, Umfang/Anzahl der Aufnahmen, Titel-/Metadata-Felder, mehr als 100 Einträge/Paginierung, Fernbedienungsnavigation und längere Laufzeit.
+
+**Abnahmegrenzen:**
+- **S4.1 Basis-Aufnahmeabruf: PASS (Nutzerbeobachtung, echter TV).**
+- **TEST D:** Vorherige D3–D5 FAIL nach widerrufenem Credential gelten als historischer Befund. Die erfolgreiche Aufnahmeabfrage deutet auf inzwischen gültige Device-Authentifizierung hin, ersetzt aber nicht die Einzeltests D8/D11/D12 über App- und TV-Neustart.
+- **TEST E:** Für den aktuellen Build keine neue E1–E10-Einzelabnahme gemeldet.
+- **TEST F:** Nur Basisabruf positiv; alle weiteren F-Einzelchecks bleiben OPEN, insbesondere Berechtigungsfehler, Navigation, 100er-Pagination, HTTP-/Timeout-Fälle.
+- **Playback nicht geprüft:** S4.1 zeigt ausschließlich Aufnahmemetadaten, keine Wiedergabe/AVPlay-Akzeptanz.
+
+**Nächste sichere Hardwareprüfungen:** Installierte Buildkennung am TV ablesen, `Einstellungen → Anmeldung prüfen` ausführen (ohne Credentials zu veröffentlichen), Liste/ungefähre Anzahl der Aufnahmen melden; dann Aufnahme-Fernbedienungsnavigation und bei tatsächlich mehr als 100 Aufnahmen nächste/vorherige Cursorseite testen. **Keine** unnötige Neuinstallation, keine erneute Kopplung und kein Widerruf bei bestehendem Erfolg.
