@@ -69,13 +69,13 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 ## Phase S7 – Verteilung/Wartung
 
-- **S7.1 SOURCE IMPLEMENTIERT, TV-HARDWARE-NACHWEIS OFFEN (25.10.2026):** Samsung-Tizen-5.5-Entwicklungsupdates über **WITs Watch ohne Paket-Neuinstallation**, statt nach jedem Slice `Run Project` und damit erneutes Device-Pairing zu riskieren. `npm.cmd run tv:watch` prüft WITs-Konfiguration, Git-ignorierte Entwicklerinformationen, stabile Tizen-Paket-ID, vollständige klassische Runtime und Unit-Tests. Es ruft **ausschließlich `wits --watch`**, niemals `--start`, Install oder Uninstall auf; ohne bereits eingerichtetes WITs bricht es ab. Initiales WITs Start kann eine letzte bewusste Neuinstallation erfordern; verloren gegangene KeyManager-Credentials lassen sich nicht rekonstruieren. Siehe [Entwicklungsanleitung](docs/development-setup.md) und [Hardware-Abnahme](docs/hardware-acceptance.md).
+- **S7.1 ISOLIERTER WITs-SOURCE-KANDIDAT, TV-HARDWARE OFFEN (25.10.2026):** Paketkollision im vorigen WITs-Konzept identifiziert: ein WITs-Host aus `app/` behält `VDRSuiteTV` als Package-ID. Neuer, offline erzeugter und Git-ignorierter Entwicklungsstand `.tizen-wits-dev/` mit eigenem Paket `VDRSuitDev` und WITs-App-ID `VDRSuitDev.VDRSuiteWITs`. `tv:watch` arbeitet ausschließlich dort; `tv:dev:prepare`, `tv:dev:identity`, Source-/CI-Gates verhindern versehentliche Nutzung der Produktionskennung. **DEV-Erstinstallation nur nach eigener Freigabe**, WITs Watch nie automatischer Install-Fallback. Ein unabhängiges DEV-KeyManager-Credential kann eine bewusste einmalige Kopplung benötigen; die Produktiv-App wird nicht verändert. [Detaillierter Gate](docs/wits-isolated-development.md).
 - **S7.2 OFFEN:** Datenbewahrender signierter Release-/Store-/Paket-Updatepfad, Signatur-/ABI-/Versionsmigration und unabhängige Hardware-Akzeptanz. WITs-Entwicklungs-Live-Reload ist **nicht gleich einem produktiven Tizen-App-Update**.
 - Weiterhin: Signierung, Reproduzierbarkeit, Versionierung, Rollback, Modell-Kompatibilitätsmatrix; Store-Einreichung nur nach gesondertem Entscheid.
 
 ## Nächster konkreter Schritt
 
-**Zuerst S7.1: sichere Entwicklungs-Updates statt Run Project.** Das gilt vor jedem weiteren Samsung-Slice: WITs-Watch einmalig einrichten; einen möglichen ersten WITs-Start als potenziell deinstallierende Neuinstallation behandeln; nach bewusstem Pairing auf realer Hardware Anmeldung vor/nach `tv:watch` prüfen. Noch kein KeyManager-Persistenz-PASS.
+**Zuerst S7.1: WITs als getrenntes DEV-Paket vorbereiten.** Vor weiterer Samsung-Entwicklung isolierte IDs offline ausgeben und prüfen; WITs -i ausschließlich in `.tizen-wits-dev/`, eine erstmalige Installation nur nach gesonderter manueller Freigabe. Dann DEV-KeyManager-Persistenz vor/nach Live-Reload und Neustart hardwaretesten. Produktions-Pairing unangetastet; kein Hardware-PASS.
 
 **S4.1 Hardware-Gate (noch offen):** Aktuellen Samsung-S4.1-Client auf der realen Tizen-5.5-Hardware testen: bei bereits gespeichertem Device-Credential in die Aufnahmen wechseln und ausdrücklich **„Aufnahmen laden“** wählen. **Wichtig:** Zusätzlich zu `channels.view` muss der Administrator `recordings.view@default` für die **aktuelle** Geräteidentität freigeben. Die Senderberechtigung verleiht keinen Aufnahmezugriff. Nach erfolgreichem Laden echte Aufnahmezeilen, D-Pad-Fokus, nächste/vorherige Seite, Backendwahl und fehlende Grants prüfen. Server ist unverändert; keine automatische neue Pairing- oder Device-Grants-Operation.
 
@@ -95,7 +95,7 @@ Samsung dokumentiert, dass beim Installieren einer neuen App-Version die bisheri
 https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/connecting-to-tv-device.html
 https://developer.samsung.com/smarttv/develop/faq/application-installation.html
 
-**Neuer Quellpfad:** `npm.cmd run tv:watch` nutzt nach einmaliger WITs-Einrichtung **ausschließlich WITs Watch** (keine erneute Paketinstallation), mit Fail-Closed-Preflight. Das konkrete TV-/KeyManager-Persistenz-Gate bleibt offen. `Run Project` / `Wits Start` nicht als sicheren Updatebefehl verwenden; kein Secret exportieren und keine automatische Kopplung als Workaround.
+**Korrigierter Quellpfad:** `npm.cmd run tv:watch` nutzt **ausschließlich das isolierte DEV-Paket** (`VDRSuitDev`) nach getrenntem Bootstrap, mit Fail-Closed-Preflight (kein produktives Paket-Update). Das konkrete TV-/KeyManager-Persistenz-Gate bleibt offen. `Run Project` / `Wits Start` nicht als sicheren Updatebefehl verwenden; kein Secret exportieren und keine automatische Kopplung als Workaround.
 
 ## Slice: Sichtbare Samsung-App-Version / installationssicherer Nachweis (25.10.2026)
 

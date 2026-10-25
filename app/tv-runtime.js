@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"ce612a2c6bee","label":"Samsung v0.1.0 · S5.1 · bce612a2c6bee"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"6d5dd71d6d44","label":"Samsung v0.1.0 · S5.1 · b6d5dd71d6d44"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.

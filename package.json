@@ -6,11 +6,13 @@
   "description": "Standalone Samsung Tizen client for VDR-Suite",
   "scripts": {
     "test": "node --test",
-    "check": "node scripts/build-tv-runtime.mjs --check && node --check app/tv-runtime.js && node --check app/src/platform/startup-video.js && node --check app/src/main.js && node --check app/src/navigation/remote.js && node --check app/src/navigation/focus.js && node --check app/src/navigation/premium-focus.js && node --check app/src/views/view-state.js && node --check app/src/api/public-discovery.js && node --check app/src/api/device-pairing.js && node --check app/src/api/channel-catalog.js && node --check app/src/api/recording-catalog.js && node --check app/src/api/recording-playback.js && node --check app/src/platform/recording-player.js && node --check scripts/tv-watch-safe.mjs && node --check app/src/platform/device-vault.js && node --check app/src/platform/capabilities.js && node --check app/src/platform/keys.js && node --test",
+    "check": "node scripts/build-tv-runtime.mjs --check && node --check app/tv-runtime.js && node --check app/src/platform/startup-video.js && node --check app/src/main.js && node --check app/src/navigation/remote.js && node --check app/src/navigation/focus.js && node --check app/src/navigation/premium-focus.js && node --check app/src/views/view-state.js && node --check app/src/api/public-discovery.js && node --check app/src/api/device-pairing.js && node --check app/src/api/channel-catalog.js && node --check app/src/api/recording-catalog.js && node --check app/src/api/recording-playback.js && node --check app/src/platform/recording-player.js && node --check scripts/tv-wits-isolated.mjs && node --check scripts/tv-watch-safe.mjs && node --check app/src/platform/device-vault.js && node --check app/src/platform/capabilities.js && node --check app/src/platform/keys.js && node --test",
     "build:tv": "node scripts/build-tv-runtime.mjs",
     "configure:tv": "node scripts/configure-tv-server.mjs",
     "tv:watch": "node scripts/tv-watch-safe.mjs",
-    "tv:watch:check": "node scripts/tv-watch-safe.mjs --preflight"
+    "tv:watch:check": "node scripts/tv-watch-safe.mjs --preflight",
+    "tv:dev:identity": "node scripts/tv-wits-isolated.mjs --identity",
+    "tv:dev:prepare": "node scripts/tv-wits-isolated.mjs --prepare"
   },
   "engines": {
     "node": ">=20"
