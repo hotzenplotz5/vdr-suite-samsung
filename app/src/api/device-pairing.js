@@ -15,6 +15,15 @@ export function pairingError(kind, status) {
   return "Kopplungsanfrage fehlgeschlagen.";
 }
 
+// Device verification is distinct from short-lived bootstrap pairing errors.
+export function deviceVerificationError(result) {
+  if (result && result.kind === "http" && result.status === 401)
+    return "HTTP 401: Device-Credential serverseitig abgewiesen (ungültig, abgelaufen oder widerrufen).";
+  if (result && result.kind === "http" && result.status === 403)
+    return "HTTP 403: Gerätezugriff verweigert. Berechtigungen prüfen.";
+  return pairingError(result && result.kind, result && result.status);
+}
+
 export function createPairingClient(environment) {
   var env = environment || {};
   var request = null;
