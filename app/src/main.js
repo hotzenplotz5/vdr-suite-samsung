@@ -4,6 +4,7 @@ import { getPlatformCapabilities } from "./platform/capabilities.js";
 import { registerOptionalKeys } from "./platform/keys.js";
 import { createStartupVideo } from "./platform/startup-video.js";
 import { nextPreviewState, getViewPresentation } from "./views/view-state.js";
+import { normalizeSuiteBase, createDiscoveryClient, classifyDiscoveryError } from "./api/public-discovery.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -29,6 +30,12 @@ function boot() {
   var history = [];
   var rowMemory = {};
   var previewStates = {};
+  var editingServerAddress = false;
+  var testingConnection = false;
+  var discovery = createDiscoveryClient(window);
+  var serverInput = document.getElementById("suite-base-input");
+  var serverTest = document.getElementById("settings-test-button");
+  var connectionResult = document.getElementById("suite-connection-result");
   var message = document.getElementById("message");
   var keyStatus = document.getElementById("key-status");
 
@@ -42,7 +49,39 @@ function boot() {
       ? [NAV_ROW].concat(HOME_ROWS)
       : [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
         ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
-        : ["detail-" + currentView + "-home"]];
+        : currentView === "settings"
+          ? ["detail-settings-home", "settings-base-input", "settings-test"]
+          : ["detail-" + currentView + "-home"]];
+  }
+
+  function testServerConnection() {
+    if (testingConnection || !serverInput || !connectionResult) return;
+    var address = normalizeSuiteBase(serverInput.value);
+    if (!address) {
+      connectionResult.textContent = classifyDiscoveryError("invalid_origin");
+      connectionResult.setAttribute("data-connection-state", "error");
+      return;
+    }
+    // Only the server base is retained, never credentials or query parameters.
+    try {
+      if (window.localStorage) window.localStorage.setItem("vdr-suite.samsung.serverBase", address);
+    } catch (_) {}
+    testingConnection = true;
+    if (serverTest) serverTest.disabled = true;
+    connectionResult.setAttribute("data-connection-state", "loading");
+    connectionResult.textContent = "Verbindung wird auf diesem TV geprüft …";
+    discovery.probe(address, function (result) {
+      testingConnection = false;
+      if (serverTest) serverTest.disabled = false;
+      if (!result.ok) {
+        connectionResult.setAttribute("data-connection-state", "error");
+        connectionResult.textContent = classifyDiscoveryError(result.kind, result.status);
+        return;
+      }
+      connectionResult.setAttribute("data-connection-state", "success");
+      connectionResult.textContent = "Public API v1 erreichbar. " +
+        result.capabilityCount + " Fähigkeiten gemeldet; noch nicht angemeldet oder freigegeben.";
+    });
   }
 
   function isVisibleFocus(id) {
@@ -171,6 +210,17 @@ function boot() {
 
   function activate(item) {
     if (!item) return;
+    if (item.getAttribute("data-server-test") === "true") {
+      testServerConnection();
+      return;
+    }
+    if (item.getAttribute("data-focus-id") === "settings-base-input") {
+      editingServerAddress = true;
+      if (serverInput) {
+        try { serverInput.focus(); } catch (_) {}
+      }
+      return;
+    }
     var previewRoute = item.getAttribute("data-preview-route");
     if (previewRoute && previewRoute === currentView) {
       renderPreview(previewRoute, nextPreviewState(previewStates[previewRoute]));
@@ -185,6 +235,14 @@ function boot() {
   document.getElementById("avplay-status").textContent = caps.avplay ? "vorhanden" : "nicht erkannt";
   document.getElementById("remote-status").textContent = caps.tvInputDevice ? "vorhanden" : "nicht erkannt";
   registerOptionalKeys(window);
+  if (serverInput) {
+    try {
+      var savedBase = window.localStorage && window.localStorage.getItem("vdr-suite.samsung.serverBase");
+      if (normalizeSuiteBase(savedBase)) serverInput.value = savedBase;
+    } catch (_) {}
+    serverInput.addEventListener("blur", function () { editingServerAddress = false; });
+  }
+
 
   var intro = createStartupVideo({
     overlay: document.getElementById("startup-cover"),
@@ -197,6 +255,14 @@ function boot() {
   document.addEventListener("keydown", function (event) {
     var key = normalizeRemoteKey(event);
     if (!key) return;
+    if (editingServerAddress && event.target === serverInput) {
+      if (key === "BACK") {
+        event.preventDefault();
+        editingServerAddress = false;
+        setFocus("settings-test");
+      }
+      return; // Samsung virtual keyboard owns input keys while editing.
+    }
     event.preventDefault();
     keyStatus.textContent = key;
     if (intro.active()) {

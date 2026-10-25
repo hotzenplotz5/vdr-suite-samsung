@@ -43,3 +43,12 @@
 4. **TV:** echte Netzwerk-/SSL-/Cookie-/Player-Semantik prüfen.
 5. **Akzeptanz:** erst danach als Laufzeit-bewiesen dokumentieren.
 
+
+## S3.1 – Public-v1 Discovery (Upstream main geprüft 2026-10-25)
+
+- Anonym: `GET /api/v1` und `GET /api/v1/capabilities`, jeweils unter der aktuellen tatsächlichen HTTPS-Deployment-Basisadresse.
+- Root erfordert `apiVersion: "v1"`, `supportedApiMajors` mit `v1`, `compatibilityPolicy`, `authentication`, `links.capabilities`.
+- Fähigkeiten erfordern `apiVersion: "v1"`, Array `capabilities`, `compatibility`, `links.root`.
+- Ein gemeldetes `available` und der Authentifizierungsstatus sind **kein Content-Grant**.
+- Keine Browser-Private-API, keine dynamischen Serverlinks als Requestziele und keine Anmeldung in S3.1.
+- Tizen braucht `internet` und `access`; tatsächlich funktionierende TV-Netzwerkverbindung und CORS/TLS bleiben ein Hardware-Gate.

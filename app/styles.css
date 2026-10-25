@@ -183,3 +183,26 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
   .detail-art-motif { font-size: 100px; }
   .detail-actions .action-button { min-width: 156px; }
 }
+
+
+/* S3.1: settings-only, user-initiated public API v1 discovery. */
+.connection-panel { margin-top: 24px; border: 1px solid #2b4b70; border-radius: 16px;
+  background: linear-gradient(125deg,#102640,#07162d); padding: 20px 25px; max-width: 1050px; }
+.connection-panel h2 { margin: 0 0 9px; font-size: 23px; }
+.connection-panel p { margin: 4px 0 14px; line-height: 1.36; font-size: 16px; color: #bfd0e5; }
+.connection-controls { display: flex; align-items: center; }
+.server-input { display: block; min-width: 0; flex: 1; background: #08182c; color: #f5f8ff;
+  border: 2px solid #496488; border-radius: 12px; padding: 15px 17px; font: inherit; font-size: 18px; }
+.server-input:focus { border-color: #62b5ff; }
+.connection-controls .action-button { min-width: 200px; margin-left: 12px; }
+.connection-panel .connection-result { margin: 14px 0 6px; color: #bad4f6; font-size: 16px; }
+.connection-result[data-connection-state="error"] { color: #ffb9ba; }
+.connection-result[data-connection-state="success"] { color: #a9e7d4; }
+.connection-panel small { color: #90abc9; font-size: 13px; }
+@media (max-width: 1380px) {
+  .connection-panel { padding: 13px; margin-top: 14px; }
+  .connection-panel h2 { font-size: 19px; }
+  .connection-panel p, .connection-result { font-size: 13px; }
+  .server-input { font-size: 14px; padding: 11px; }
+  .connection-controls .action-button { min-width: 125px; }
+}

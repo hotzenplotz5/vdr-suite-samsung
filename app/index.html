@@ -212,9 +212,23 @@
           </dl>
         </div>
         <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-settings-home" data-target-view="home">Zurück zu Home</button>
+        <section class="connection-panel" aria-label="VDR-Suite Serververbindung">
+          <h2>VDR-Suite-Server · API v1</h2>
+          <p>Trage die vollständige HTTPS-Adresse deines Servers ein (gegebenenfalls mit Proxy-Pfad). Keine Zugangsdaten eingeben.</p>
+          <div class="connection-controls">
+            <input id="suite-base-input" class="server-input tv-focusable" data-focus-id="settings-base-input"
+                   type="url" inputmode="url" placeholder="https://server.example/vdr-suite"
+                   autocomplete="off" autocapitalize="off" spellcheck="false" tabindex="-1"
+                   aria-label="HTTPS-Adresse des VDR-Suite-Servers">
+            <button type="button" class="action-button primary tv-focusable" id="settings-test-button" data-focus-id="settings-test" data-server-test="true">Verbindung prüfen</button>
+          </div>
+          <p class="connection-result" id="suite-connection-result" role="status">Noch nicht geprüft. Nur ein Druck auf „Verbindung prüfen“ startet zwei anonyme API-v1-Abfragen.</p>
+          <small>Die Serveradresse wird nur auf diesem TV gespeichert, nicht in Git. Pairing und Berechtigungen folgen in S3.2/S3.3.</small>
+        </section>
+
       </section>
     </main>
-    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S2.3</span></footer>
+    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S3.1</span></footer>
   </div>
   <script src="tv-runtime.js"></script>
 </body>

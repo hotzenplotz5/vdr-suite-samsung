@@ -13,6 +13,7 @@ const inputs = [
   "app/src/platform/keys.js",
   "app/src/platform/startup-video.js",
   "app/src/views/view-state.js",
+  "app/src/api/public-discovery.js",
   "app/src/main.js"
 ];
 const output = join(root, "app/tv-runtime.js");

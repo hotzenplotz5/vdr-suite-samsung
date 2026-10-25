@@ -84,3 +84,13 @@ Vier Bereiche (Live-TV, Aufnahmen, Suche, Timer) erhalten einheitliche, gerätef
 HTML/CSS verwenden nur mit Tizen 5.5 kompatible Grundlagen. Startvideo, Logo und Hardwarediagnose unter Einstellungen bleiben bestehen. Nach S3-API-Einführung ersetzt echte Anwendungslogik die lokalen Statusvorschauen; bis dahin gehört die Demonstration nicht zur Live-Nutzung.
 
 Automatisierte Unit-/Runtime-/Zeilenenden-Checks hinzugefügt; echte TV-Abnahme der neuen S2.3-Oberfläche bleibt noch offen.
+
+## Phase S3.1 – HTTPS und Public API v1 (2026-10-25)
+
+Unter **Einstellungen → VDR-Suite-Server** kann die vollständige HTTPS-Basisadresse (ggf. einschließlich Reverse-Proxy-Pfad, aber ohne `/api/v1`) per TV eingegeben werden. Nur diese Adresse wird auf dem TV in `localStorage` gespeichert; niemals Credentials oder Pairing-Tokens.
+
+Erst **„Verbindung prüfen“** startet zwei anonyme GETs auf `/api/v1` und `/api/v1/capabilities`. Der Client prüft API v1, unterscheidet Netzwerk-/TLS-CORS-/Timeout-, HTTP-, Redirect-, JSON- und Versionsfehler und folgert **keine** Permissions daraus. Reiterfokus allein löst weiterhin keine Anfrage aus.
+
+Das Tizen-Manifest enthält `internet` und eine dynamische `access`-Policy, weil der Nutzer den Zielserver selbst festlegt. Der Programmcode akzeptiert ausschließlich HTTPS ohne eingebettete Zugangsdaten, Query oder Fragment. TLS-Validierung darf niemals deaktiviert werden. CORS und TV-Erreichbarkeit müssen am echten Samsung geprüft werden; eine vom Windows-Laptop funktionierende Verbindung genügt nicht.
+
+**Status: S3.1-Quellcode/Test, TV- und Server-Gate OFFEN.** Pairing folgt separat in S3.2.

@@ -63,7 +63,7 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - **Separat weiterhin offen:** Exit-/Relaunch-Detailprotokoll aus S1, Medienfunktionen und API-/Netzwerk-Gates. Die allgemeine S2.2-PASS-Meldung ist kein gesonderter Messnachweis für jeden Einzelpunkt.
 
 
-## Phase S2.3 – Detailansichten (Hardwaretest offen)
+## Phase S2.3 – Detailansichten (Nutzer-PASS 2026-10-25)
 
 - [ ] S2.1-Startbildschirm und lokales MP4-Intro unverändert, kein schwarzer Bildschirm
 - [ ] Reiter mit Pfeilen nur fokussieren, mit OK öffnen (kein ungewolltes Nachladen)
@@ -73,3 +73,16 @@ Bei Fehlschlag: beobachtete Symptome, erwarteter Ist-/Sollstand, App-Git-SHA, TV
 - [ ] Zurück führt zur zuvor fokussierten Reiter-/Home-Kachel
 - [ ] Einstellungen zeigen weiter Tizen-/AVPlay-/Fernbedienungsdiagnose
 - [ ] Keine abgeschnittenen Fokusrahmen auf dem echten Samsung-Bildschirm
+
+**Abnahmehinweis:** Nutzer meldete nach dem S2.3-Update „pass dann wohl s.3 ;)“. S2.3 wird als vom Nutzer angenommen dokumentiert; separate Messnachweise jedes einzelnen Status-Zyklus liegen nicht vor.
+
+## Phase S3.1 – Public API v1 (TV-Abnahme offen)
+
+- [ ] Neue App startet unverändert offline, ohne automatischen Netzwerkzugriff
+- [ ] Serveradresse im TV unter Einstellungen eingegeben; ausschließlich HTTPS
+- [ ] „Verbindung prüfen“ führt nur auf OK zu den zwei anonymen öffentlichen API-v1-GETs
+- [ ] Antwort v1 und Fähigkeitsanzahl bestätigt – daraus werden keine Rechte abgeleitet
+- [ ] Ungültige URL, Timeout, HTTP, inkompatible Antwort und TLS/CORS/Netzwerkfehler verständlich
+- [ ] Rücknavigation, Fokus und Startvideo aus S2 unverändert
+
+Der Samsung-TV selbst muss TLS, Proxy-Pfad und CORS erfolgreich nutzen können. Tizen-Manifest mit dynamischer Netzwerkfreigabe nur für diese geprüfte HTTPS-Discovery; vor Distribution gesondert auditieren. Keine Umgehung von Zertifikatsprüfungen, kein Klartext-HTTP. **TV-PASS noch offen.**

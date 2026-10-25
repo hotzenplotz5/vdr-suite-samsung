@@ -16,7 +16,7 @@ app/
   src/main.js             ein Composition Root und Keydown-Owner
   src/navigation/         normierte Eingaben und Focus-Modell
   src/platform/           TV-Erkennung, Samsung-Key-Registrierung
-  src/api/                später eigener Public-v1 Client (S3)
+  src/api/                Public-v1 Discovery (S3.1), später Pairing und Device-API
   src/player/             später AVPlay Adapter (S5)
   src/views/              später View-Komponenten und Routen (S2)
 ```

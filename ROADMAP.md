@@ -31,13 +31,13 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 - **S2.1 VISUELLES HARDWARE-PASS (Nutzerbestätigung 2026-10-25):** Dark-Premium-Media-Home im Samsung-Client mit oberer Navigation, großer Hero-Karte, seitlichen Karten, Aktionsleiste, horizontaler Mediathek-Reihe und sechs routbaren Offline-Ansichten. Alle Daten erkennbar als Designvorschau; kein echter Sender/EPG/Account behauptet. Back-Stack zunächst Home->Unteransicht->Home; weitere Lade-/Fehlerzustände und verschachtelte Routen folgen in S2.2/S2.3. Dark-Premium-Oberfläche auf dem echten Samsung vom Nutzer mit 'gefällt mir! und pass!' bestätigt; umfassende Fernbedienungs-Abnahme ist S2.2.
 - **S2.2 HARDWARE-PASS (2026-10-25, Nutzer bestätigt):** Fokusgraph für Navigation, Hero, Aktionsleiste, Content-Rail und Detailansichten; D-Pad/OK/Zurück, Fokus-Rückkehr und Routenverlauf. Getestet vom Nutzer auf dem echten Samsung-TV und mit „pass, hab schon getestet“ bestätigt. **Reiterwechsel bleibt bewusst ohne Ansichtswechsel; erst OK aktiviert eine Ansicht**, um bei der späteren API-Anbindung unnötiges Nachladen zu vermeiden. Automatisierte Samsung-Client-Checks grün (Commit `785b4b9`).
-- **S2.3 IMPLEMENTIERT – HARDWARE-ABNAHME OFFEN (2026-10-25):** Visuell einheitliche Premium-Detailseiten für Live-TV, Aufnahmen, Suche und Timer. Offline-/Loading-/Empty-/Error-Anzeigen über ein reines, deterministisches Präsentationsmodell; am TV per ausdrücklich markierter lokaler Demo-Taste umschaltbar. Keine Netzwerkaufrufe, keine echten Inhalte oder AVPlay-Streams. Gewohnte OK-auf-Reiter-Navigation und S2.2-Fokusgraph bleiben erhalten. Erweiterte Tests und TV-Retest erforderlich.
+- **S2.3 HARDWARE-PASS LAUT NUTZER (2026-10-25):** Visuell einheitliche Premium-Detailseiten für Live-TV, Aufnahmen, Suche und Timer. Offline-/Loading-/Empty-/Error-Anzeigen über ein reines, deterministisches Präsentationsmodell; am TV per ausdrücklich markierter lokaler Demo-Taste umschaltbar. Keine Netzwerkaufrufe, keine echten Inhalte oder AVPlay-Streams. Gewohnte OK-auf-Reiter-Navigation und S2.2-Fokusgraph bleiben erhalten. Erweiterte Tests und TV-Retest erforderlich.
 
 **Gate:** Bedienung per D-Pad am TV; noch ausschließlich kontrollierte Fixtures.
 
 ## Phase S3 – API-v1-Anbindung und Identität
 
-- **S3.1** HTTPS-Origin, Capability Discovery, Fehlertypisierung und netzwerkseitige Erreichbarkeit des TVs.
+- **S3.1 QUELLCODE IMPLEMENTIERT – TV-GATE OFFEN (2026-10-25):** Konfigurierbare HTTPS-Basisadresse unter Einstellungen, ausschließlich durch OK ausgelöste anonyme API-v1-Discovery (`GET /api/v1`, `/api/v1/capabilities`), v1-Vertragsprüfung und abgestufte Fehlertypisierung. Keine automatischen Anfragen beim Reiterwechsel. Die Adresse (keine Credentials) bleibt lokal auf dem TV. Manifest-Privilege für dynamische HTTPS-Ziele. CORS, TLS und TV-Erreichbarkeit noch nicht bestätigt.
 - **S3.2** Device-Pairing: Bootstrap -> Admin-Freigabe -> einmalige Credential-Ausgabe -> Device-Auth.
 - **S3.3** sichere TV-Credential-Persistenz, Widerruf und getrennte Backend-Grants.
 
@@ -71,5 +71,5 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**S2.3 Hardware-Gate:** Neue App paketieren und auf Samsung Tizen 5.5 starten. In jedem Bereich „Zustände ansehen“ per OK durch Offline → Laden → Leer → Fehler → Offline schalten, Fokusrahmen und Zurück prüfen. Danach S3.1 (TV-seitige Erreichbarkeit und öffentlicher API-v1-Vertrag), keine vorgezogene Serveranbindung.
+**S3.1 Hardware-Gate:** Paket installieren und auf Samsung in Einstellungen eine tatsächlich vom TV erreichbare HTTPS-Serveradresse eintragen; mit „Verbindung prüfen“ Public API v1 und Fähigkeiten prüfen. Host-/CORS-/TLS-Nachweis am echten TV ist erforderlich. Vor S3.2 kein Pairing und keine Grants.
 
