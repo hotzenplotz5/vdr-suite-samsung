@@ -122,3 +122,13 @@ Nach `npm.cmd run build:tv` und `npm.cmd run check` das Samsung-WGT mit der Tize
 **Kopplung starten** prüft die öffentliche API v1 bei Bedarf selbst; der bisherige separate Tastendruck auf **Verbindung prüfen** entfällt. Erst nach erfolgreicher Discovery folgt der sichere KeyManager-Preflight und dann der Pairing-POST. **Keine** automatische Serveranfrage beim App-Start oder bloßen Reiterwechsel.
 
 **Wichtig für S3.2:** Bei einem Uninstall können auch TV-KeyManager-Daten verloren gehen. Bereits auf dem Server ausgestellte Device-Credentials und Grants verschwinden dadurch nicht. Der produktive, datenbewahrende Update-Pfad muss vor regelmäßigem Live-Pairing gesondert abgenommen werden.
+
+## S3.3 – Echte Sender mit bereits gekoppeltem Samsung (2026-10-25)
+
+Die Samsung-Kopplung wurde vom Nutzer am TV bestätigt; der Server hat channels.view für das Backend erhalten. Ob das Credential einen App-Neustart übersteht und Sender auf dem TV erscheinen, ist weiterhin ein separates Hardware-Gate.
+
+Live-TV per OK öffnen, dann Sender laden per OK drücken. Der TV liest das vorhandene Credential ausschließlich aus dem Tizen-KeyManager, authentifiziert GET /api/v1 und liest danach GET /api/v1/backends und GET /api/v1/channels (20 Sender je Seite). Mehr Sender lädt explizit die nächste Seite. Backend wechseln schaltet zwischen den zuerst zurückgegebenen Backends um; vorerst maximal 30. Kein automatischer Netzwerkzugriff beim Start oder Reiterfokus.
+
+Fehlende oder widerrufene Geräteidentitäten und fehlende channels.view-Grants werden angezeigt; kein automatisches Re-Pairing und keine Rechteerweiterung. Live-TV-Wiedergabe, EPG, Aufnahmen und MediaSessions gehören nicht zu diesem Slice. Nur echte Serverfelder werden als Senderdaten angezeigt.
+
+Quellenänderungen erfordern npm run build:tv und danach npm run check. Tests laufen ohne npm-Pakete. Das signierte WGT und ein realer TV-Test sind separate Gates. Rollback: vorheriger Samsung-main-Stand ohne Server-Eingriff.
