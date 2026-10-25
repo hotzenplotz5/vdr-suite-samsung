@@ -106,7 +106,86 @@ export function createRecordingCatalog(environment) {
       xhr.send(null);
     } catch (_) { finish({ok:false,kind:"network"}); }
   }
-  return {listRecordings:listRecordings,cancel:cancel};
+  // Canonical VDR hierarchy; opaque public folder IDs, never native paths.
+  // This is a separate offset-paged API mode, not an rc1_ keyset page.
+  function listFolders(credential, backendId, folderId, offset, done) {
+    if (!validBackendId(backendId) ||
+        (folderId !== null && folderId !== undefined &&
+         (typeof folderId !== "string" || !/^fld1_[0-9a-f]{32}$/.test(folderId))) ||
+        !Number.isInteger(offset) || offset < 0 || offset > 1000000) {
+      done({ok:false,kind:"bad_request"}); return;
+    }
+    if (!validCredential(credential) || typeof env.XMLHttpRequest !== "function") {
+      done({ok:false,kind:"invalid_credential"}); return;
+    }
+    cancel();
+    var ticket = serial;
+    var xhr = new env.XMLHttpRequest();
+    pending = xhr;
+    var finished = false;
+    function finish(value) {
+      if (finished || ticket !== serial) return;
+      finished = true;
+      pending = null;
+      done(value);
+    }
+    var path = "/api/v1/recordings?backendId=" + encodeURIComponent(backendId) +
+      "&view=folders&limit=100&offset=" + String(offset);
+    if (folderId) path += "&folderId=" + encodeURIComponent(folderId);
+    var url = credential.base.replace(/\/$/, "") + path;
+    try {
+      xhr.open("GET",url,true);
+      xhr.timeout = 8000;
+      xhr.withCredentials = false;
+      xhr.setRequestHeader("Accept","application/json");
+      xhr.setRequestHeader("Cache-Control","no-store");
+      xhr.setRequestHeader("Authorization","VDR-Suite-Device " +
+        credential.credentialId + "." + credential.credentialSecret);
+      xhr.onload = function () {
+        if (xhr.responseURL && xhr.responseURL !== url) {
+          finish({ok:false,kind:"bad_response"}); return;
+        }
+        if (xhr.status !== 200) {
+          finish({ok:false,kind:"http",status:xhr.status}); return;
+        }
+        var value;
+        try { value = JSON.parse(xhr.responseText); }
+        catch (_) {finish({ok:false,kind:"bad_response"});return;}
+        var page = value && value.page;
+        var valid = value && Array.isArray(value.items) &&
+          value.items.length <= 100 && page && page.limit === 100 &&
+          page.offset === offset && Number.isInteger(page.totalCount) &&
+          page.totalCount >= offset + value.items.length &&
+          typeof page.hasMore === "boolean" &&
+          page.hasMore === (offset + value.items.length < page.totalCount) &&
+          value.meta && value.meta.partial === false &&
+          value.items.every(function (item) {
+            if (!item || typeof item !== "object") return false;
+            if (item.kind === "folder") {
+              return /^fld1_[0-9a-f]{32}$/.test(item.folderId) &&
+                typeof item.name === "string" && item.name.length <= 4096 &&
+                Number.isInteger(item.recordingCount) && item.recordingCount >= 0;
+            }
+            return item.kind === "recording" &&
+              item.backendId === backendId &&
+              /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+              typeof item.title === "string" && item.title.length <= 4096 &&
+              (item.description === undefined ||
+                (typeof item.description === "string" && item.description.length <= 65536)) &&
+              (item.recordedAt === undefined ||
+                (typeof item.recordedAt === "string" && item.recordedAt.length <= 64)) &&
+              (item.durationSeconds === undefined ||
+                (Number.isInteger(item.durationSeconds) && item.durationSeconds >= 0)) &&
+              (item.durationKnown === undefined || typeof item.durationKnown === "boolean");
+          });
+        finish(valid ? {ok:true,value:value} : {ok:false,kind:"bad_response"});
+      };
+      xhr.onerror = function () {finish({ok:false,kind:"network"});};
+      xhr.ontimeout = function () {finish({ok:false,kind:"timeout"});};
+      xhr.send(null);
+    } catch (_) {finish({ok:false,kind:"network"});}
+  }
+  return {listRecordings:listRecordings,listFolders:listFolders,cancel:cancel};
 }
 
 export function recordingCatalogError(result) {
