@@ -236,3 +236,23 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
  .pairing-code-box > strong {font-size:23px;}
  .pairing-actions .action-button {font-size:12px; min-width:130px; padding:10px;}
 }
+
+/* S3.3: read-only, paginated public-v1 sender catalog. */
+.detail-status-card[data-state="ready"] { border-color: #2f857f; }
+.detail-status-card[data-state="ready"] .detail-status-label { color: #95ead4; }
+.live-catalog { margin-top: 22px; max-width: 1140px; }
+.live-backend-name { color: #9dc4e8; font-size: 17px; margin: 0 0 10px; }
+.live-channel-list { margin: 0; padding: 0; list-style: none; max-height: 360px;
+  overflow-y: auto; border-radius: 14px; border: 1px solid #2b4a6e; }
+.live-channel-row { display: flex; align-items: center; min-height: 56px; padding: 12px 18px;
+  background: #091a30; border-bottom: 1px solid #1e3854; }
+.live-channel-row:nth-child(even) { background: #0e2540; }
+.live-channel-row strong { flex: 0 1 47%; font-size: 19px; margin-right: 12px; }
+.live-channel-row span { color: #adc3da; font-size: 15px; }
+@media(max-width:1380px) {
+  .live-catalog { margin-top: 14px; }
+  .live-channel-list { max-height: 250px; }
+  .live-channel-row { min-height: 44px; padding: 8px 12px; }
+  .live-channel-row strong { font-size: 16px; }
+  .live-channel-row span { font-size: 13px; }
+}

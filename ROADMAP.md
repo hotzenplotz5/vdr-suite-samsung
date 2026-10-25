@@ -38,8 +38,8 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 ## Phase S3 – API-v1-Anbindung und Identität
 
 - **S3.1 QUELLCODE + TV-GATE PASS (2026-10-25):** Konfigurierbare HTTPS-Basisadresse unter Einstellungen, ausschließlich durch OK ausgelöste anonyme API-v1-Discovery (`GET /api/v1`, `/api/v1/capabilities`), v1-Vertragsprüfung und abgestufte Fehlertypisierung. Keine automatischen Anfragen beim Reiterwechsel. Die Adresse (keine Credentials) bleibt lokal auf dem TV. Manifest-Privilege für dynamische HTTPS-Ziele. TV-Nutzerfoto bestätigt HTTPS-Discovery unter dem korrekten nginx-Prefix mit 31 Public-v1-Fähigkeiten; kein Device-Login oder Content-Grant.
-- **S3.2 IMPLEMENTIERT, HARDWARE-GATE OFFEN (2026-10-25):** Manuell ausgelöster anonymer Pairing-Bootstrap, TV-Code, token-only Statusprüfung, Admin-Freigabe, einmalig ausgelöste Credential-Ausgabe, sichere persistente Speicherung im Tizen-KeyManager mit Readback und expliziter Device-Auth-Prüfung. Kein automatisches Polling und kein QR bis zu einer vom Server gelieferten sicheren Freigabe-URL. Kein unsicherer Storage-Fallback; bei unbekanntem POST-Ergebnis keine Wiederholung. Tests quellsseitig, echter Samsung-KeyManager/Pairing-Server noch nicht abgenommen.
-- **S3.3 TEILWEISE QUELLCODE:** Tizen-KeyManager als persistenter Credential-Vault eingebaut (Hardwaretest offen), kein Credential in localStorage. Device-Grants/Revocation-UI und Lifecycle bleiben offen.
+- **S3.2 KOPPLUNG AM TV BESTÄTIGT, PERSISTENZ-GATE OFFEN (2026-10-25):** Manuell ausgelöster anonymer Pairing-Bootstrap, TV-Code, token-only Statusprüfung, Admin-Freigabe, einmalig ausgelöste Credential-Ausgabe, sichere persistente Speicherung im Tizen-KeyManager mit Readback und expliziter Device-Auth-Prüfung. Kein automatisches Polling und kein QR bis zu einer vom Server gelieferten sicheren Freigabe-URL. Kein unsicherer Storage-Fallback; bei unbekanntem POST-Ergebnis keine Wiederholung. Tests quellsseitig, echter Samsung-KeyManager/Pairing-Server noch nicht abgenommen.
+- **S3.3 IMPLEMENTIERT, HARDWARE-GATE OFFEN (2026-10-25):** Persistierte KeyManager-Identität wird auf ausdrückliche TV-Aktion frisch gelesen und mit GET /api/v1 authentifiziert. Danach begrenzte Public-v1-Reads GET /api/v1/backends (erste 30 Backends, Backendwechsel) und GET /api/v1/channels (20 Sender/Seite, Cursor). Sendernamen, Nummern und Metadaten werden ohne HTML-Injektion als echte Daten angezeigt. 401/403/409/503 sowie TLS-, Timeout- und Vertragsfehler erscheinen ohne automatische Berechtigungsvergabe oder erneutes Pairing. Device-Grants/Revocation-UI, EPG, Live-Playback und MediaSessions bleiben offen.
 
 **Gate:** Testgerät authentifiziert sich mit `VDR-Suite-Device`-Scheme; fehlende Grants werden ausdrücklich verweigert. Remote-SSH des Laptops zählt nicht als Netzwerkpfad des TVs.
 
@@ -71,5 +71,20 @@ Signierung, Reproduzierbarkeit, Versionierung, Update-/Rollback-Pfad, Modell-Kom
 
 ## Nächster konkreter Schritt
 
-**S3.2 Hardware-Gate:** neues Samsung-Paket installieren, Git-ignorierte `app/device-local.js` über `npm.cmd run configure:tv -- <HTTPS-Basisadresse>` lokal konfigurieren (Tizen Studio kann beim Test-Update Web-Storage löschen); **„Kopplung starten“ prüft Public API v1 nun bei Bedarf selbst, ohne zusätzlichen Tastendruck auf „Verbindung prüfen“**. Tizen-KeyManager anschließend prüfen und echten User-Code/Administratorfreigabe durchspielen. Credential-Ausstellung genau einmal; nur nach nachgewiesen erfolgreichem Vault-Preflight. Kein automatischer Admin-Grant.
+**S3.3 Hardware-Gate:** Aktualisiertes signiertes Samsung-Paket installieren, mit OK zu Live-TV wechseln und dort einmal Sender laden drücken. Keine erneute Kopplung durchführen. Anzeige realer Sender und Berechtigungsfehler auf dem echten Tizen 5.5 separat protokollieren. Das per GitHub bestätigte Pairing ist noch kein Nachweis der KeyManager-Persistenz über App-Relaunch.
 
+**Slice-Dateien:** app/src/api/channel-catalog.js, app/src/main.js, app/index.html, app/styles.css, scripts/build-tv-runtime.mjs, app/tv-runtime.js, Tests und Dokumentation.
+**Schnittstellen:** ausschliesslich lesende öffentliche GET /api/v1, GET /api/v1/backends und GET /api/v1/channels.
+**Risiken:** TV-KeyManager nach Test-Update eventuell gelöscht; Server-Deployment-Stand unbekannt; 30-Backend-Vorschauseite begrenzt.
+**Nichtziele:** automatische Pairing-Wiederholung, Admin-Grants, Aufnahmen, EPG, Wiedergabe, AVPlay.
+**Rollback:** Samsung-Client auf vorherigen main-Stand zurücksetzen; keine Serveränderung. Tizen-Test-Installationen können lokale App-Daten löschen.
+
+### Achtung: Update kann Device-Identität löschen (Tizen 5.5)
+
+Vor einem neuen Run Project oder Installieren den aktuellen TV-App-Stand nur beenden und neu starten, dann unter Einstellungen einmal Anmeldung prüfen wählen. Damit wird zuerst die Persistenz der bereits erfolgten Kopplung geprüft, ohne die App zu ersetzen.
+
+Samsung dokumentiert, dass beim Installieren einer neuen App-Version die bisherige App automatisch deinstalliert wird und bei Uninstall Anwendungsdaten verloren gehen können:
+https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/connecting-to-tv-device.html
+https://developer.samsung.com/smarttv/develop/faq/application-installation.html
+
+Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs Watch ermöglicht auf unterstützten Samsung-TV-Modellen Live-Reload ohne erneute Installation, verlangt jedoch ein eigenes geprüftes Setup und ist hier NICHT als sicherer Erhalt des bestehenden KeyManager-Zustands bestätigt. Kein Secret exportieren und keine automatisch wiederholte Kopplung als Workaround.

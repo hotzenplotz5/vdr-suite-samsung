@@ -96,9 +96,9 @@
       </section>
 
       <section class="page detail-page" data-panel="live" hidden>
-        <span class="detail-eyebrow">LIVE-TV · DESIGNVORSCHAU</span>
+        <span class="detail-eyebrow">LIVE-TV · ECHTE SENDER</span>
         <h1>Deine Sender.</h1>
-        <p>Deine Kanäle, Favoriten und das Programm auf einen Blick.</p>
+        <p>Senderdaten aus deinem freigegebenen VDR-Backend. Wiedergabe folgt später.</p>
         <div class="detail-grid">
           <div class="detail-art detail-art-live" aria-hidden="true">
             <span class="detail-art-kicker">IMMER ALLES IM BLICK</span>
@@ -113,12 +113,18 @@
             <div class="detail-skeleton" id="detail-state-skeleton-live" hidden aria-hidden="true">
               <i></i><i></i><i></i>
             </div>
-            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+            <span class="detail-status-hint">Kein automatischer Abruf · keine Wiedergabe</span>
           </section>
         </div>
         <div class="detail-actions">
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-home" data-target-view="home">Zurück zu Home</button>
-          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-live-preview" data-preview-route="live">Zustände ansehen</button>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-preview" data-live-action="load">Sender laden</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-more" data-live-action="more">Mehr Sender</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-backend" data-live-action="backend">Backend wechseln</button>
+        </div>
+        <div class="live-catalog" aria-label="Echte Senderliste">
+          <p class="live-backend-name" id="live-backend-name">Noch kein Backend geladen</p>
+          <ul class="live-channel-list" id="live-channel-list" hidden></ul>
         </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>
@@ -246,7 +252,7 @@
 
       </section>
     </main>
-    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S3.2</span></footer>
+    <footer class="statusbar"><span id="message">Offline-Designvorschau · Navigation: Pfeile · OK · Zurück</span><span>VDR-Suite Samsung · S3.3</span></footer>
   </div>
   <!-- Optional developer-local server origin (safe if file is absent). -->
   <script src="device-local.js"></script>

@@ -112,3 +112,29 @@ Keine Fotos oder Logs mit dem Kopplungscode (nur kurzlebig), Pairing-Token oder 
 - Eine auf dem TV gespeicherte gültige Basis hat Vorrang. Änderungen im Eingabefeld werden bei `blur` bzw. `change` lokal gespeichert.
 - `Kopplung starten` führt fehlende Public-v1-Discovery selbst durch. Ungültige/unerreichbare Server stoppen vor KeyManager- und Pairing-POST.
 - **Hardware-Retest offen:** tatsächliches Mitsignieren/-packen der lokalen Datei im Tizen-VS-Code-Build; Darstellung, KeyManager und authentifiziertes Pairing auf dem realen Samsung noch nicht abgenommen.
+
+## S3.2 – Pairing-Erfolg am Gerät, Folgetest offen
+
+Nutzerbestätigung 2026-10-25: Samsung wurde erfolgreich gekoppelt und im Webfrontend als gekoppeltes Gerät angezeigt. channels.view wurde für sein Backend administrativ erteilt. Ob das Tizen-KeyManager-Credential nach App-Neustart tatsächlich noch lesbar ist, wurde dadurch nicht gesondert bewiesen.
+
+## S3.3 – Hardware-Testliste (noch nicht abgenommen)
+
+- [ ] Paket mit neuem S3.3-Commit installiert; Logo/Startanimation/D-Pad unverändert.
+- [ ] TV-App neu gestartet; Live-TV mit OK geöffnet, Sender laden einmal gedrückt.
+- [ ] Keine neue Kopplung angefordert; vorhandene Tizen-KeyManager-Identität authentifiziert GET /api/v1.
+- [ ] GET /api/v1/backends zeigt freigegebenes Backend und GET /api/v1/channels zeigt reale Sendernamen und -nummern.
+- [ ] Weitere Sender nur nach Mehr Sender; kein ungewollter Datenabruf beim Reiterfokus.
+- [ ] Fehlendes Credential, HTTP 401 und HTTP 403 zeigen hilfreichen Fehler, ohne Secrets, Grantvergabe oder Pairing-POST.
+- [ ] Fokus/Zurück weiterhin korrekt; keinerlei Live-Wiedergabe oder erfundene EPG-Daten.
+
+Bei Fehlern nur die sichtbare TV-Meldung (ohne private Adresse/Token) weitergeben. Keinen Backend-Neustart oder erneutes Pairing als erste Maßnahme durchführen. WGT-Test-Uninstall kann gespeicherte Appdaten einschließlich KeyManager entfernen.
+
+### Achtung: Update kann Device-Identität löschen (Tizen 5.5)
+
+Vor einem neuen Run Project oder Installieren den aktuellen TV-App-Stand nur beenden und neu starten, dann unter Einstellungen einmal Anmeldung prüfen wählen. Damit wird zuerst die Persistenz der bereits erfolgten Kopplung geprüft, ohne die App zu ersetzen.
+
+Samsung dokumentiert, dass beim Installieren einer neuen App-Version die bisherige App automatisch deinstalliert wird und bei Uninstall Anwendungsdaten verloren gehen können:
+https://developer.samsung.com/smarttv/develop/tools/additional-tools/vscode/connecting-to-tv-device.html
+https://developer.samsung.com/smarttv/develop/faq/application-installation.html
+
+Deshalb für diesen Nachweis nicht unbedacht Run Project erneut verwenden. WITs Watch ermöglicht auf unterstützten Samsung-TV-Modellen Live-Reload ohne erneute Installation, verlangt jedoch ein eigenes geprüftes Setup und ist hier NICHT als sicherer Erhalt des bestehenden KeyManager-Zustands bestätigt. Kein Secret exportieren und keine automatisch wiederholte Kopplung als Workaround.
