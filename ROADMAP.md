@@ -65,6 +65,8 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 **Gate:** Bild und Ton, Fehlerpfade und STOP/BACK am realen Gerät; keine URL-/Cookie-/Codec-Annahmen ohne Hardware-Nachweis. Priorität Pass-through -> Remux -> Transcode nur nach serverseitiger Policy.
 
+**S5.2-FULLSCREEN QUELLKANDIDAT (Samsung-Fotos 25.10.2026, TV-RETEST OFFEN):** Das native Samsung-`application/avplayer`-Objekt wird beim Boot als unmittelbares `document.body`-Kind registriert statt in der scrollbaren Aufnahmeseite zu verbleiben. Beim Wiedergabestart wird die Weboberfläche über eine CSS-Klasse transparent/unsichtbar, das Video-Overlay bildschirmfüllend (1920×1080 AVPlay-DisplayRect mit optionaler Letterbox); beim STOP/Fehler/Ende wird der vorherige Zustand wiederhergestellt. Tests decken DOM-Lebenszyklus und Displaymodus ab. **Das löst das Layout, beweist aber ausdrücklich keinen erfolgreichen Medienabruf, Cookie-Transport, Decoder oder Bild/Ton.** Siehe Hardware-Abnahme.
+
 ## Phase S6 – VDR-TV-Funktionen
 
 - **S6.1** Channels/Live-TV, inklusive Hardware-Player-Prüfung.
