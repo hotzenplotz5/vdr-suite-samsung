@@ -53,7 +53,7 @@ test("S5.3: media 401 indicates cookie/gateway denial; unknown CORS not decoder 
   assert.match(describeMediaAccessProbe(result),/Cookie-/);
   const q=mock();probeMediaHttpHeaders(q.env,url,v=>result=v);q.calls[0].onerror();
   assert.equal(result.kind,"network_or_cors");
-  assert.doesNotMatch(describeMediaAccessProbe(result),/Decoderfehler\./);
+  assert.match(describeMediaAccessProbe(result),/kein Beweis für einen AVPlay-Decoderfehler/);
 });
 
 test("S5.3: never probe arbitrary origin, URL token, local file or leaked session path",()=>{
@@ -70,5 +70,5 @@ test("S5.3: probe happens before MediaSession STOP and cannot overwrite a differ
  const main=readFileSync(new URL("../app/src/main.js",import.meta.url),"utf8");
  assert.match(main,/probeMediaHttpHeaders\(window,result\.mediaUrl,function \(probe\) \{/);
  assert.match(main,/if \(recordingPlaybackSession !== failedSession \|\| !failedSession\) return;/);
- assert.match(main,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error","AVPlay-Wiedergabe fehlgeschlagen"/);
+ assert.match(main,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error",mode === "html5"/);
 });
