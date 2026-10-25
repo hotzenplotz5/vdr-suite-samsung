@@ -542,6 +542,8 @@ function boot() {
       if (!result.ok) { showLiveError(result); return; }
       var response = result.value;
       if (!cursor) clearLiveRows();
+      var firstNewRow = liveFocusIds.length;
+      var jumpToNewPage = !!cursor && focusedId === "detail-live-more";
       appendLiveRows(response.items);
       liveCursor = response.page.hasMore ? response.page.nextCursor : null;
       if (liveBackendName) liveBackendName.textContent =
@@ -553,6 +555,10 @@ function boot() {
         "Nur freigegebene Senderdaten · " +
         (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
         " · Wiedergabe noch nicht freigeschaltet.");
+      // The More button sits above the list. Focus the first newly appended
+      // channel, without traversing all preceding pages.
+      if (jumpToNewPage && liveFocusIds[firstNewRow])
+        setFocus(liveFocusIds[firstNewRow]);
     });
   }
 
@@ -972,6 +978,16 @@ function boot() {
     var liveAction = item.getAttribute("data-live-action");
     if (liveAction) {
       loadLiveChannels(liveAction);
+      return;
+    }
+    var channelIndex = item.getAttribute("data-channel-index");
+    if (channelIndex !== null && currentView === "live") {
+      var chosenChannel = liveCurrentChannels[Number(channelIndex)];
+      if (chosenChannel) {
+        liveStatus("ready", String(chosenChannel.channelNumber) + " · " + chosenChannel.name,
+          "Sender ausgewählt · Wiedergabe folgt in der AVPlay-Phase. " +
+          "Mit ↑/↓ weitere Sender wählen.");
+      }
       return;
     }
     var recordingIndex = item.getAttribute("data-recording-index");
