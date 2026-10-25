@@ -62,3 +62,19 @@
 - Credential ausschließlich Tizen-KeyManager, dann `GET /api/v1` mit `Authorization: VDR-Suite-Device <credentialId>.<credentialSecret>`.
 - Benutzer-/Admin-Passwörter, Browser-Cookies, Browser-private APIs, automatische Grants und Mediensessions bleiben ausgeschlossen.
 - TV-Hardwareprüfung und Device-Grants noch ausstehend.
+
+
+## S4.1 – echte Aufnahmeliste über öffentliche API v1 (Source, Hardware offen 2026-10-25)
+
+Nach ausdrücklich ausgelöster „Aufnahmen laden“-Aktion verwendet Samsung die bereits aktivierte und bei jedem neuen Ladevorgang frisch aus Tizen-KeyManager gelesene Device-Credential. Zuerst werden über `GET /api/v1` die Anmeldedaten geprüft und anschließend `GET /api/v1/backends?limit=30&sort=backendId&order=asc` zur Backendauswahl verwendet. Eine dort sichtbare Backend-Identität **beweist noch keine `recordings.view`-Freigabe**, da positive Grants auch aus `channels.view` stammen können. Deshalb erzwingt der tatsächliche `GET /api/v1/recordings` weiterhin serverseitig `recordings.view@backendId`; HTTP 403 wird sichtbar und nicht umgangen.
+
+```http
+GET /api/v1/recordings?backendId=default&limit=100&sort=recordingId&order=asc
+Authorization: VDR-Suite-Device <credentialId>.<credentialSecret>
+```
+
+Antwort: `items` aus sicheren öffentlichen `rec_...`-Identitäten, Titel, Zeit, Dauer und Größe; `page.hasMore` / `page.nextCursor` zur Fortsetzung. Ein nächster Aufruf ergänzt `cursor=<opaque rc1_...>` und bleibt **am selben freigegebenen Backend**. Bis zu **100 Elemente pro GET, keine künstliche Gesamtgrenze**; der Fernseher hält nur eine Seite mit höchstens 100 DOM-Aufnahmezeilen gleichzeitig. „Weitere Aufnahmen“, „Vorherige Seite“ und Backendwechsel sind explizite Fernbedienungsaktionen. Kein Katalog-Vollabruf, keine clientseitig konstruierten nativen Pfade, keine `GET /api/vdr/...`-Fallbacks.
+
+HTTP 401 (Credential), 403 (fehlendes `recordings.view`), 409 (veralteter/falscher Cursor), 503 (Backend/Katalog) sowie Netz-/TLS- und Schemafehler erscheinen ausdrücklich. Bei navigationsbedingtem Abbruch darf eine alte Antwort keine andere Ansicht überschreiben. Recording-Metadaten enthalten **keine** Wiedergabe-URL. `media.recording.play` ist ein anderer, gesonderter Grant; S4.1 startet weder Session noch Player. Ordnernavigation, Detail-Metadata, Artwork, Genres, Wiedergabe und P1-Resume folgen in S4.2/S4.3/S5 und benötigen eigene Tests.
+
+Der Serververtrag ist [Recording browse](https://github.com/hotzenplotz5/vdr-suite/blob/main/api/recording-browse-epg.md); die einzige serverseitige API-v1-Hardware-Matrix liegt [hier](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md). Die S4.1-Samsung-Hardwareprobe (insbesondere eigener `recordings.view`-Grant und Fernbedienungsfokus auf mehr als einer Seite) ist noch **NOT_VERIFIED**.
