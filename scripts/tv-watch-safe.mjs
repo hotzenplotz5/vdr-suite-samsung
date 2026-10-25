@@ -79,8 +79,13 @@ function main() {
     process.exitCode=1;
   });
   child.on("exit",(code,signal)=> {
-    if (signal) process.exitCode=1;
-    else process.exitCode=code===0?0:1;
+    if (signal || code!==0) {
+      console.error("WITs Watch fehlgeschlagen. Ein SDB-Connect belegt kein Live Reload.");
+      console.error("WITs --watch erwartet eine zuvor für WITs vorbereitete/gestartete App.");
+      console.error("Keine Neuinstallation, kein wits --start und kein Run Project automatisch ausführen.");
+      console.error("Installierte App-ID und Paketidentität read-only prüfen; vorhandenes Device-Credential schützen.");
+      process.exitCode=1;
+    } else process.exitCode=0;
   });
 }
 if (process.argv[1] && fileURLToPath(import.meta.url)===resolve(process.argv[1])) {
