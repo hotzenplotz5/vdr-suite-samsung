@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {spawnSync} from "node:child_process";
-import {inspectWgt, verifyUpdate, zipEntries, manifestDetails} from "../scripts/tv-update-preflight.mjs";
+import {inspectWgt, verifyUpdate, zipEntries, manifestDetails, crc32} from "../scripts/tv-update-preflight.mjs";
 
 const source={};
 for(const file of ["config.xml","index.html","styles.css","tv-runtime.js"])
@@ -16,15 +16,17 @@ function zip(files) {
   let offset=0;
   const local=[],central=[];
   for(const [name,value] of Object.entries(files)) {
-    const filename=Buffer.from(name),data=Buffer.from(value);
+    const filename=Buffer.from(name),data=Buffer.from(value),check=crc32(data);
     const a=Buffer.alloc(30),b=Buffer.alloc(46);
     a.writeUInt32LE(0x04034b50,0);
     a.writeUInt16LE(filename.length,26);
+    a.writeUInt32LE(check,14);
     a.writeUInt32LE(data.length,18);
     a.writeUInt32LE(data.length,22);
     b.writeUInt32LE(0x02014b50,0);
     b.writeUInt16LE(20,4);
     b.writeUInt16LE(20,6);
+    b.writeUInt32LE(check,16);
     b.writeUInt32LE(data.length,20);
     b.writeUInt32LE(data.length,24);
     b.writeUInt16LE(filename.length,28);
@@ -109,4 +111,24 @@ test("S7.2 CLI is offline-only and blocks missing baseline without device operat
   assert.notEqual(run.status,0);
   assert.match(run.stderr,/S7.2 update blocked/);
   assert.match(run.stderr,/--baseline/);
+});
+
+test("S7.2 checks WGT ZIP CRC rather than trusting unsigned ZIP metadata",()=>{
+  const packaged=fixture();
+  const valid=inspectWgt(packaged);
+  assert.equal(valid.identity.packageId,"VDRSuiteTV");
+  const damaged=Buffer.from(packaged);
+  const offset=damaged.indexOf(Buffer.from("<widget"));
+  assert.ok(offset>0);
+  damaged[offset]^=1;
+  assert.throws(()=>inspectWgt(damaged),/CRC mismatch/);
+});
+
+test("S7.2 rejects conflicting local ZIP metadata and detects corrupted source bytes",()=>{
+  const packaged=fixture();
+  const local=Buffer.from(packaged);
+  local.writeUInt32LE(0,14);
+  assert.throws(()=>inspectWgt(local),/Conflicting ZIP entry lengths or CRC/);
+  const different=fixture({overrides:{"styles.css":"changed by an attacker"}});
+  assert.match(verifyUpdate(different,fixture({version:"0.0.0"}),source).join(" "),/styles.css/);
 });
