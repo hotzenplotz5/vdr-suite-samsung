@@ -532,7 +532,7 @@ test("S4.1 on the packaged TV runtime reads 100 actual recording rows and remote
   sim.video.finish();
   sim.nodes["nav-recordings"].click();
   assert.equal(h.calls.length,0,"opening recordings must never auto-fetch");
-  sim.nodes["detail-recordings-load"].click();
+  sim.nodes["detail-recordings-all"].click();
   assert.equal(h.calls.length,1);
   h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
   assert.match(h.calls[1].url,/\/api\/v1\/backends\?/);
