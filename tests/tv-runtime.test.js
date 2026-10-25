@@ -501,6 +501,10 @@ test("S3.3 restart reads KeyManager, explicit Live click verifies and displays r
   assert.match(h.calls[3].url,/cursor=ch1_more/);
   h.reply(3,200,channelPage());
   assert.equal(sim.liveList.children.length,2);
+  assert.equal(sim.pairResult.getAttribute("data-pair-state"),"authenticated");
+  sim.nodes["nav-settings"].click();
+  assert.match(sim.pairResult.textContent,/Gerät authentifiziert/);
+  assert.match(sim.pairResult.textContent,/Device-ID: tv1/);
   assert.ok(h.calls.every(req=>req.method==="GET")); // no repeated pairing
 });
 test("S3.3 missing channels.view returns an error without granting permissions",()=>{
@@ -566,6 +570,9 @@ test("S4.1 on the packaged TV runtime reads 100 actual recording rows and remote
   assert.equal(sim.recordingList.children.length,1,"old 100 DOM nodes are replaced");
   assert.equal(sim.recordingList.children[0].children[0].textContent,"Aufnahme 101");
   assert.equal(sim.recordingList.children[0].isFocused,true);
+  assert.equal(sim.pairResult.getAttribute("data-pair-state"),"authenticated");
+  sim.nodes["nav-settings"].click();
+  assert.match(sim.pairResult.textContent,/Gerät authentifiziert/);
   assert.ok(h.calls.every(x=>x.method==="GET"));
 });
 
