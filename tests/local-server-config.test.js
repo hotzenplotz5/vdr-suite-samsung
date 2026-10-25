@@ -9,7 +9,21 @@ test("Local-only server config is HTTPS-validated, Git-ignored and not committed
   const ignore=readFileSync(".gitignore","utf8");
   assert.match(ignore,/^\/app\/device-local\.js$/m);
   assert.match(readFileSync("app/index.html","utf8"),/src="device-local\.js"/);
-  assert.equal(existsSync("app/device-local.js"),false);
+  // The generated, Git-ignored file is intentionally present on real
+  // developer machines. Only versioning it is forbidden; do not demand its
+  // deletion (which would erase the user's configured HTTPS server base).
+  const tracked=spawnSync("git",[
+    "ls-files","--error-unmatch","--","app/device-local.js"
+  ],{encoding:"utf8"});
+  assert.equal(tracked.error,undefined,"git must be available to verify tracked files");
+  assert.equal(tracked.status,1,
+    "app/device-local.js must never be tracked by Git");
+  const ignored=spawnSync("git",[
+    "check-ignore","--quiet","--","app/device-local.js"
+  ],{encoding:"utf8"});
+  assert.equal(ignored.error,undefined);
+  assert.equal(ignored.status,0,
+    "app/device-local.js must remain Git-ignored even when locally generated");
   const root=mkdtempSync(join(tmpdir(),"samsung-local-base-"));
   try {
     mkdirSync(join(root,"scripts"));
