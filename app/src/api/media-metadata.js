@@ -135,7 +135,7 @@ export function createPublicMediaMetadata(environment) {
       done({ok:false,kind:"bad_request"});return;
     }
     var path="/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
-      "&channelId="+encodeURIComponent(cid)+"&eventId="+encodeURIComponent(eid);
+      "&channelId="+encodeURIComponent(cid)+"&eventId="+eid;
     request(cred,path,false,function(data) {
       return data && data.backendId===bid && data.channelId===cid &&
         data.eventId===eid && typeof data.title==="string" &&
