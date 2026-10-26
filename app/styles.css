@@ -475,3 +475,61 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
     width:126px; flex-basis:126px; max-height:196px;
   }
 }
+
+/* S6.10 – TV information hierarchy (VDR-Suite Web-inspired, not a Web fork).
+   Preserve brand colors and typeface; use the large detail area for content.
+   Tizen 5.5: no :has(), dynamic viewport units, or modern container queries. */
+.live-tv-page .live-workspace {grid-template-columns:minmax(0,36%) minmax(0,64%);}
+#detail-state-live.live-epg-panel {padding:12px 16px;}
+#detail-state-live.live-epg-panel > p {
+  font-size:15px; max-height:2.6em; margin:4px 0 7px;
+}
+#detail-state-live.live-epg-panel .live-epg {
+  padding:10px 14px; overflow:hidden; min-height:0;
+}
+#detail-state-live.live-epg-panel .live-epg-events {
+  flex:0 1 26%; max-height:26%; min-height:82px;
+}
+#detail-state-live.live-epg-panel .live-epg-events li {
+  min-height:46px; padding:9px 11px;
+}
+#detail-state-live.live-epg-panel .live-epg-detail {
+  flex:1 1 auto; overflow-y:auto; min-height:0; margin-top:8px;
+  padding:14px 16px 18px;
+  -webkit-overflow-scrolling:touch;
+}
+#detail-state-live.live-epg-panel .live-epg-detail-content {
+  align-items:flex-start; gap:24px;
+}
+#detail-state-live.live-epg-panel .live-epg-detail-poster:not([hidden]) {
+  width:190px; flex:0 0 190px; max-height:285px;
+}
+#detail-state-live.live-epg-panel .live-epg-detail h2 {
+  margin:7px 0 8px; line-height:1.2;
+}
+#detail-state-live.live-epg-panel .live-epg-detail p {line-height:1.48;}
+#detail-state-live.live-epg-panel .live-epg-scroll-actions {
+  flex:0 0 auto; display:flex; align-items:center; gap:10px;
+  padding:9px 0 0; min-height:52px;
+}
+#detail-state-live.live-epg-panel .live-epg-scroll-actions[hidden] {
+  display:none!important;
+}
+#detail-state-live.live-epg-panel .live-epg-scroll-label {
+  flex:1 1 auto; font-size:15px; color:#a9cbea;
+}
+#detail-state-live.live-epg-panel .live-epg-scroll-actions .action-button {
+  min-width:100px; font-size:17px; margin:0; padding:9px 14px;
+}
+@media(max-width:1380px) {
+  .live-tv-page .live-workspace {grid-template-columns:minmax(0,38%) minmax(0,62%);}
+  #detail-state-live.live-epg-panel .live-epg-detail-content {gap:14px;}
+  #detail-state-live.live-epg-panel .live-epg-detail-poster:not([hidden]) {
+    width:146px; flex-basis:146px; max-height:220px;
+  }
+  #detail-state-live.live-epg-panel .live-epg-detail {padding:10px 12px;}
+  #detail-state-live.live-epg-panel .live-epg-scroll-actions .action-button {
+    min-width:75px; padding:8px 9px; font-size:15px;
+  }
+  #detail-state-live.live-epg-panel .live-epg-scroll-label {font-size:12px;}
+}
