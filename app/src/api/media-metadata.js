@@ -142,8 +142,8 @@ export function createPublicMediaMetadata(environment) {
         data.title.length>0 && data.title.length<=512 &&
         typeof data.subtitle==="string" && data.subtitle.length<=512 &&
         typeof data.description==="string" && data.description.length<=1536 &&
-        typeof data.startTime==="string" && /^\\d{10,12}$/.test(data.startTime) &&
-        typeof data.endTime==="string" && /^\\d{10,12}$/.test(data.endTime) &&
+        typeof data.startTime==="string" && /^\d{10,12}$/.test(data.startTime) &&
+        typeof data.endTime==="string" && /^\d{10,12}$/.test(data.endTime) &&
         Number(data.endTime)>Number(data.startTime) &&
         Number.isInteger(data.durationSeconds) && data.durationSeconds>=0;
     },done);
