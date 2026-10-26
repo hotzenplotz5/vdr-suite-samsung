@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.0","build":"f46542830067","label":"Samsung v0.1.0 · S6.0 · bf46542830067"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.1","build":"331defcdb4b4","label":"Samsung v0.1.0 · S6.1 · b331defcdb4b4"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1252,6 +1252,97 @@
       ". Möglich: TV-Decoder/Container oder geschützter Medienzugang (HttpOnly-Cookie im AVPlay-Netzwerkstack).";
   }
   
+  // Restrict AVPlay extra_info to a small non-secret audio diagnostics schema.
+  function samsungAudioTracks(raw) {
+    var tracks = [];
+    if (!Array.isArray(raw)) return tracks;
+    for (var i=0;i<raw.length && i<32;i++) {
+      var item=raw[i];
+      if (!item || item.type !== "AUDIO" || typeof item.index !== "number" ||
+          !isFinite(item.index) || item.index<0 || item.index>65535 ||
+          Math.floor(item.index)!==item.index) continue;
+      if (tracks.some(function(t){return t.index===item.index;})) continue;
+      var info={};
+      if (typeof item.extra_info==="string" && item.extra_info.length<=2048) {
+        try {
+          var parsed=JSON.parse(item.extra_info);
+          if (parsed && typeof parsed==="object" && !Array.isArray(parsed)) info=parsed;
+        } catch (_) { /* never copy raw metadata into UI */ }
+      }
+      var cc=typeof info.fourCC==="string" ? info.fourCC.toUpperCase() : "";
+      var codec=["AAC","AACL","MP4A","AAC-LC"].indexOf(cc)>=0 ? "AAC" :
+        ["AC3","AC-3"].indexOf(cc)>=0 ? "AC3" :
+        ["EAC3","EC3","E-AC3"].indexOf(cc)>=0 ? "EAC3" :
+        ["MPEG","MP2","MP3"].indexOf(cc)>=0 ? "MPEG" : "unbekannt";
+      var channels=Number(info.channels);
+      if (!isFinite(channels) || Math.floor(channels)!==channels ||
+          channels<1 || channels>16) channels=null;
+      var language=typeof info.language==="string" ? info.language :
+        typeof info.track_lang==="string" ? info.track_lang : "";
+      language=/^[A-Za-z]{2,3}$/.test(language) ? language.toLowerCase() : "";
+      tracks.push({index:item.index,codec:codec,channels:channels,language:language});
+    }
+    return tracks;
+  }
+  function samsungAudioRead(api,method) {
+    if (typeof api[method]!=="function") return {ok:false,tracks:[]};
+    try {return {ok:true,tracks:samsungAudioTracks(api[method]())};}
+    catch (_) {return {ok:false,tracks:[]};}
+  }
+  function inspectSamsungAudio(api) {
+    var state="";
+    try {if (typeof api.getState==="function") state=api.getState();}
+    catch (_) {}
+    if (state!=="PLAYING")
+      return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+    var all=samsungAudioRead(api,"getTotalTrackInfo");
+    if (!all.ok)
+      return {status:"unavailable",total:0,currentIndex:null,tracks:[]};
+    var current=samsungAudioRead(api,"getCurrentStreamInfo");
+    var selected=current.tracks.length ? current.tracks[0] : null;
+    var result={status:"observed",total:all.tracks.length,
+      currentIndex:selected ? selected.index : null,tracks:all.tracks};
+    if (!all.tracks.length) {result.status="no_audio";return result;}
+    var compatible=null;
+    for (var i=0;i<all.tracks.length;i++)
+      if (all.tracks[i].codec==="AAC" && all.tracks[i].channels!==null &&
+          all.tracks[i].channels<=2) {compatible=all.tracks[i];break;}
+    if (selected && selected.codec==="AAC" && selected.channels!==null &&
+        selected.channels<=2) {result.status="active_compatible";return result;}
+    // Samsung permits AUDIO track switching only in PLAYING. Avoid switching
+    // single-track streams, guessing codecs or selecting unknown track IDs.
+    if (all.tracks.length<2 || !compatible ||
+        typeof api.setSelectTrack!=="function") {
+      result.status="no_safe_switch";return result;
+    }
+    try {api.setSelectTrack("AUDIO",compatible.index);}
+    catch (_) {result.status="selection_failed";return result;}
+    var after=samsungAudioRead(api,"getCurrentStreamInfo");
+    result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
+    result.status=result.currentIndex===compatible.index ?
+      "selected_confirmed" : "selection_requested";
+    return result;
+  }
+  function describeSamsungAudio(detail) {
+    if (!detail || typeof detail!=="object") return "Audio · keine Diagnose";
+    if (detail.status==="not_playing") return "Audio · AVPlay noch nicht PLAYING";
+    if (detail.status==="unavailable") return "Audio · Spurdaten nicht verfügbar";
+    if (detail.status==="no_audio") return "Audio · AVPlay meldet keine Audiospur";
+    var tracks=Array.isArray(detail.tracks) ? detail.tracks : [];
+    var current=tracks.filter(function(t){return t.index===detail.currentIndex;})[0];
+    var count=typeof detail.total==="number" && detail.total>=0 ? detail.total : 0;
+    var label="Audio · "+count+" Spur(en)" +
+      (detail.currentIndex===null ? " · keine gewählt" : " · Index "+detail.currentIndex);
+    if (current) label+=" · "+current.codec +
+      (current.channels===null ? "" : " "+current.channels+"ch") +
+      (current.language ? " "+current.language : "");
+    var labels={active_compatible:"bereits aktiv",
+      selected_confirmed:"AAC-Spur bestätigt",selection_requested:"AAC-Spur angefordert",
+      selection_failed:"Spurauswahl fehlgeschlagen",
+      no_safe_switch:"keine sichere automatische Wahl",observed:"nur Diagnose"};
+    return label+" · "+(labels[detail.status]||"Status unbekannt");
+  }
+  
   function createSamsungRecordingPlayer(environment) {
     var api = environment && environment.webapis && environment.webapis.avplay;
     var generation = 0;
@@ -1307,6 +1398,8 @@
             api.play();
             active = true;
             onState("playing");
+            // Only PLAYING permits an AUDIO track selection on Tizen 5.5.
+            if (token===generation) onState("audio",inspectSamsungAudio(api));
           } catch (_) {onState("error",{stage:"play"});}
         },function (error) {
           if (token !== generation) return;
@@ -1494,6 +1587,7 @@
     var recordingHtml5Video = document.getElementById("recording-html5-video");
     var recordingAvplayObject = document.getElementById("recording-avplay-object");
     var recordingRemoteHint = document.getElementById("recording-remote-hint");
+    var recordingAudioHint = document.getElementById("recording-audio-hint");
     var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
     var recordingPlayerMode = "avplay";
     // Samsung native AVPlay requires a viewport-level object, not one clipped by
@@ -2325,6 +2419,9 @@
             return;
           }
           recordingPlayerMode = mode;
+          if (recordingAudioHint) recordingAudioHint.textContent =
+            mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
+              "Audio · HTML5 ohne AVPlay-Spurdiagnose";
           if (recordingRemoteHint) recordingRemoteHint.textContent =
             "Fernbedienung · OK/PLAY-PAUSE pausiert · STOP/ZURÜCK beendet · Taste: keine";
           if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
@@ -2342,6 +2439,9 @@
             if (state === "playing") {
               recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
                 " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+            } else if (state === "audio" && mode === "avplay") {
+              if (recordingAudioHint)
+                recordingAudioHint.textContent = describeSamsungAudio(detail);
             } else if (state === "preparing" || state === "buffering") {
               recordingStatus("loading",mode === "html5" ? "HTML5-Video startet" : "Samsung AVPlay startet",rec.title +
                 " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
