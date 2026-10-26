@@ -25,6 +25,13 @@ function scenario(native,cookie=bearer) {
    mediaPath:"/vdr-suite/api/v1/media/sessions/"+id+"/hls/master.m3u8"},
    nativeMediaAccess:{transport:"http-cookie",cookie}});
  xhr.onload();
+ if (calls.length===2) {
+   const stopped=calls[1];
+   assert.match(stopped.url,/\/recording-playback-sessions\/ms_[0-9a-f]{32}\/stop$/);
+   assert.equal(stopped.body.operation,"stop");
+   stopped.responseURL=stopped.url;stopped.status=200;
+   stopped.responseText=JSON.stringify({state:"stopped"});stopped.onload();
+ }
  return {xhr,result};
 }
 test("S5.4 universal Device media transport requires explicit native opt-in",()=>{
