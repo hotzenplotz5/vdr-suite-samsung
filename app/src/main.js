@@ -57,6 +57,7 @@ function boot() {
   var recordingHtml5Video = document.getElementById("recording-html5-video");
   var recordingAvplayObject = document.getElementById("recording-avplay-object");
   var recordingRemoteHint = document.getElementById("recording-remote-hint");
+  var recordingAudioHint = document.getElementById("recording-audio-hint");
   var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
   var recordingPlayerMode = "avplay";
   // Samsung native AVPlay requires a viewport-level object, not one clipped by
@@ -888,6 +889,9 @@ function boot() {
           return;
         }
         recordingPlayerMode = mode;
+        if (recordingAudioHint) recordingAudioHint.textContent =
+          mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
+            "Audio · HTML5 ohne AVPlay-Spurdiagnose";
         if (recordingRemoteHint) recordingRemoteHint.textContent =
           "Fernbedienung · OK/PLAY-PAUSE pausiert · STOP/ZURÜCK beendet · Taste: keine";
         if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
@@ -905,6 +909,9 @@ function boot() {
           if (state === "playing") {
             recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
               " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+          } else if (state === "audio" && mode === "avplay") {
+            if (recordingAudioHint)
+              recordingAudioHint.textContent = describeSamsungAudio(detail);
           } else if (state === "preparing" || state === "buffering") {
             recordingStatus("loading",mode === "html5" ? "HTML5-Video startet" : "Samsung AVPlay startet",rec.title +
               " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
