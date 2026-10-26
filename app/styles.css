@@ -313,3 +313,18 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .recording-row strong { font-size: 16px; }
   .recording-row span { font-size: 12px; }
 }
+
+/* S6.4 – read-only Public-v1 EPG and authenticated recording detail. */
+.live-epg, .recording-detail {
+  margin-top: 15px; padding: 14px 18px; border-radius: 12px;
+  background: #10243c; border: 1px solid #2b4a6e;
+  font-size: 17px; line-height: 1.55;
+}
+.live-epg-events {padding:0; margin:10px 0 0; list-style:none;
+  max-height:240px; overflow-y:auto;}
+.live-epg-events li {padding:7px 0; border-bottom:1px solid #27425d;}
+.recording-detail {display:flex; align-items:flex-start; gap:18px;}
+.recording-detail p {flex:1; white-space:pre-wrap; overflow-wrap:anywhere;}
+.recording-detail img {width:128px; max-height:190px; object-fit:contain;
+  border:1px solid #345571; border-radius:8px;}
+.recording-detail img[hidden] {display:none;}
