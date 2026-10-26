@@ -189,3 +189,42 @@ test("S6.7 EPG source event IDs accept backend-compatible colon syntax",()=>{
  assert.equal(out.ok,true);
  assert.equal(out.value.description,"Native Detailinformation");
 });
+
+test("S6.8 EPG artwork uses only bounded authenticated image bytes",()=>{
+ const h=mock(),client=createPublicMediaMetadata(h.env);let out;
+ client.epgPreferredArtwork(credential,"home",cid,"native-event:1234",r=>out=r);
+ assert.equal(h.calls.length,1);
+ assert.equal(h.calls[0].method,"GET");
+ assert.equal(h.calls[0].url,credential.base+
+   "/api/v1/epg/preferred-artwork?backendId=home&channelId="+cid+
+   "&eventId=native-event:1234");
+ assert.equal(h.calls[0].headers.Authorization,
+   "VDR-Suite-Device cred-one.a_very_long_test_secret_123");
+ assert.equal(h.calls[0].responseType,"arraybuffer");
+ assert.equal(h.calls[0].withCredentials,false);
+ h.reply(0,200,new Uint8Array([1,2,3]).buffer,"image/png");
+ assert.equal(out.ok,true);
+ assert.equal(out.value.contentType,"image/png");
+ client.epgDirectArtwork(credential,"home",cid,"81234",r=>out=r);
+ assert.match(h.calls[1].url,/\/api\/v1\/epg\/artwork\?/);
+ h.reply(1,404,{code:"not_found"});
+ assert.equal(out.kind,"http");assert.equal(out.status,404);
+ client.epgPreferredArtwork(credential,"home",cid,"../bad",r=>out=r);
+ assert.equal(out.kind,"bad_request");
+ assert.equal(h.calls.length,2);
+});
+
+test("S6.8 EPG poster GET refuses wrong image type, large body and redirects",()=>{
+ const h=mock(),client=createPublicMediaMetadata(h.env);let out;
+ client.epgPreferredArtwork(credential,"home",cid,"81234",r=>out=r);
+ h.reply(0,200,new Uint8Array([1]).buffer,"text/html");
+ assert.equal(out.kind,"response");
+ client.epgPreferredArtwork(credential,"home",cid,"81234",r=>out=r);
+ h.reply(1,200,new Uint8Array(2*1024*1024+1).buffer,"image/jpeg");
+ assert.equal(out.kind,"response");
+ client.epgPreferredArtwork(credential,"home",cid,"81234",r=>out=r);
+ h.calls[2].status=200;h.calls[2].mime="image/jpeg";
+ h.calls[2].responseURL="https://foreign.invalid/picture";
+ h.calls[2].response=new Uint8Array([1]).buffer;h.calls[2].onload();
+ assert.equal(out.kind,"response");
+});
