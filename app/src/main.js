@@ -14,7 +14,7 @@ import { createRecordingCatalog, recordingCatalogError } from "./api/recording-c
 import { createPublicMediaMetadata, mediaMetadataError } from "./api/media-metadata.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
-import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis, describeSamsungAudio } from "./platform/recording-player.js";
+import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis, describeSamsungAudio, samsungTvSoundStatus } from "./platform/recording-player.js";
 import { createHtml5RecordingPlayer, html5PlaybackDiagnosis } from "./platform/html5-recording-player.js";
 
 // Every control is in exactly one row per visible route. Navigation never
@@ -1422,7 +1422,8 @@ function boot() {
             }
           } else if (state === "audio" && mode === "avplay") {
             if (recordingAudioHint)
-              recordingAudioHint.textContent = describeSamsungAudio(detail);
+              recordingAudioHint.textContent = describeSamsungAudio(detail)+
+                " | "+samsungTvSoundStatus(window);
           } else if (state === "preparing" || state === "buffering") {
             if (recordingLifecycleHint) recordingLifecycleHint.textContent =
               (mode === "html5" ? "HTML5" : "AVPlay") + " · " +
@@ -2002,7 +2003,8 @@ function boot() {
         }
         var sound=recordingPlayer.cycleAudioTrack();
         if (recordingAudioHint) recordingAudioHint.textContent =
-          describeSamsungAudio(sound);
+          describeSamsungAudio(sound)+
+          " | "+samsungTvSoundStatus(window);
         if (recordingRemoteHint)
           recordingRemoteHint.textContent="Fernbedienung · BLAU (Code "+
             (event.keyCode || event.which || "?")+") · Tonspur wechseln";
