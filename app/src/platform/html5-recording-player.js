@@ -17,7 +17,7 @@ export function html5PlaybackDiagnosis(detail) {
 }
 
 export function createHtml5RecordingPlayer(video, environment) {
-  var generation=0,active=false,phase="idle",watchdog=null;
+  var generation=0,active=false,phase="idle",watchdog=null,notifyFailure=null;
   var env=environment || {};
   var setTimer=typeof env.setTimeout==="function" ?
     function(fn,ms){return env.setTimeout(fn,ms);} : null;
@@ -46,6 +46,7 @@ export function createHtml5RecordingPlayer(video, environment) {
     active=false;
     phase="stopped";
     cancelWatchdog();
+    notifyFailure=null;
     if (!video) return;
     try {video.pause();} catch (_) {}
     video.onplaying=null;video.oncanplay=null;video.onwaiting=null;
@@ -68,6 +69,7 @@ export function createHtml5RecordingPlayer(video, environment) {
       cancelWatchdog();
       onState("error",{stage:"html5",code:code});
     }
+    notifyFailure=fail;
     video.onplaying=function () {
       if (token!==generation || phase==="failed" || phase==="finished") return;
       phase="playing";
@@ -112,7 +114,7 @@ export function createHtml5RecordingPlayer(video, environment) {
       onState("preparing");
       // Catches the real-device black-screen case where neither canplay nor
       // error is emitted; does not assert that the codec is the root cause.
-      armWatchdog(token,12000,"startup_timeout",onState);
+      if (phase==="preparing") armWatchdog(token,12000,"startup_timeout",onState);
       return true;
     } catch (_) {stop();onState("error",{stage:"html5",code:"load_failed"});return false;}
   }
@@ -128,19 +130,15 @@ export function createHtml5RecordingPlayer(video, environment) {
       var token=generation;
       var attempt=video.play();
       phase="buffering";
-      armWatchdog(token,20000,"stall_timeout",function(state,detail){
-        // Error callback for this player belongs to the start call; pause
-        // recovery is observed by onplaying/onerror, never silently swallowed.
-        if (state==="error" && token===generation) {
-          video.onerror && video.onerror();
-        }
-      });
-      if (attempt && typeof attempt.catch==="function")
-        attempt.catch(function(){if (token===generation) {
-          // Keep the existing callback path: browser media error may arrive
-          // independently, do not report a fictitious successful resume.
-          phase="failed";active=false;cancelWatchdog();
-        }});
+      if (notifyFailure) {
+        var failure=notifyFailure;
+        armWatchdog(token,20000,"stall_timeout",function(state,detail){
+          if (state==="error") failure(detail.code);
+        });
+        if (attempt && typeof attempt.catch==="function")
+          attempt.catch(function(){if (token===generation)failure("play_rejected");});
+      }
+      // This is a play request, not proof of frames: onplaying confirms it.
       return "playing";
     } catch (_) {return "error";}
   }
