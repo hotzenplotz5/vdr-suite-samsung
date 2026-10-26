@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.3","build":"ce049f431e47","label":"Samsung v0.1.0 · S6.3 · bce049f431e47"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.3","build":"9e2a0e630d15","label":"Samsung v0.1.0 · S6.3 · b9e2a0e630d15"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -2196,7 +2196,15 @@
       liveFocusIds = [];
       liveCurrentChannels = [];
       liveRows = 0;
-      if (rowMemory.live) rowMemory.live = {};
+      // Drop stale dynamic channel-row memories, but preserve the user's last
+      // focus on the static Live action row (e.g. Sender laden).
+      if (rowMemory.live) {
+        var lastAction = rowMemory.live[1];
+        rowMemory.live = {};
+        if (["detail-live-home","detail-live-preview","detail-live-more",
+             "detail-live-backend"].indexOf(lastAction) !== -1)
+          rowMemory.live[1] = lastAction;
+      }
       if (liveList) {
         liveList.textContent = "";
         liveList.hidden = true;
