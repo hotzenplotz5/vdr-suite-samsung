@@ -124,6 +124,7 @@ function boot() {
   var liveEpgStatus = document.getElementById("live-epg-status");
   var liveEpgList = document.getElementById("live-epg-list");
   var liveEpgDetail = document.getElementById("live-epg-detail");
+  var liveEpgScrollActions = document.getElementById("live-epg-scroll-actions");
   var liveEpgDetailTime = document.getElementById("live-epg-detail-time");
   var liveEpgDetailTitle = document.getElementById("live-epg-detail-title");
   var liveEpgDetailSubtitle = document.getElementById("live-epg-detail-subtitle");
@@ -167,6 +168,8 @@ function boot() {
         if (liveEpgFocusIds[i]) cells.push(liveEpgFocusIds[i]);
         if (cells.length) liveFocusRows.push(cells);
       }
+      if (liveEpgScrollActions && !liveEpgScrollActions.hidden)
+        liveFocusRows.push(["live-epg-scroll-up","live-epg-scroll-down"]);
       return liveFocusRows;
     }
     if (currentView === "recordings") {
@@ -621,6 +624,7 @@ function boot() {
     clearEpgArtwork();
     liveEpgDetailRun+=1;
     if (liveEpgDetail) liveEpgDetail.hidden=true;
+    if (liveEpgScrollActions) liveEpgScrollActions.hidden=true;
   }
   function clearLiveEpg() {
     liveMetadata.cancel();
@@ -660,6 +664,8 @@ function boot() {
     var date=isFinite(start.getTime()) ?
       start.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"}) : "";
     liveEpgDetail.hidden=false;
+    liveEpgDetail.scrollTop=0;
+    if (liveEpgScrollActions) liveEpgScrollActions.hidden=false;
     if (liveEpgDetailTime) liveEpgDetailTime.textContent =
       date+" · "+clock(start)+"–"+clock(end);
     if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=item.title.slice(0,512);
@@ -1827,6 +1833,16 @@ function boot() {
       editingServerAddress = true;
       if (serverInput) {
         try { serverInput.focus(); } catch (_) {}
+      }
+      return;
+    }
+    var epgScroll=item.getAttribute("data-epg-scroll");
+    if (epgScroll!==null && currentView==="live") {
+      if (liveEpgDetail && !liveEpgDetail.hidden) {
+        var direction=epgScroll==="-1" ? -1 : epgScroll==="1" ? 1 : 0;
+        // No focus scroll-out and no extra global key listener.
+        if (direction) liveEpgDetail.scrollTop=Math.max(0,
+          liveEpgDetail.scrollTop+direction*230);
       }
       return;
     }
