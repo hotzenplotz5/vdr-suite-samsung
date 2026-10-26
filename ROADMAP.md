@@ -144,3 +144,16 @@ setzt nur diese vorhandene MediaSession-Berechtigung über die offizielle
 Cookie-Auslesung via document.cookie, keine Passwörter in Medien-URLs, kein
 neuer Service/DB. Bestehender Browser-/HTML5-Pfad bleibt `HttpOnly`.
 Backend- und Samsung-Hardware-Abnahme offen.
+
+
+## S6.5 Re-Test: echte Samsung-Hardware – blockierende Ergebnisse (26.10.2026)
+
+**S6.5 ist nicht hardware-abgenommen.** Nach grünem Quell-/CI-Test meldet der Besitzer des Samsung GU43TU6979UXZG: weiterhin keinen Ton, Schwarzbild bei einem Teil der Aufnahmeformate, wirkungslose PLAY/PAUSE/STOP-Tasten, dauerhaft eingefrorenes Bild nach OK; BACK funktioniert. Die navigierbaren EPG-Modi Jetzt/Nächste und 24h liefern derzeit keine sichtbar nutzbaren Programminformationen (Foto angekündigt). Aufnahme-Poster erscheinen nach Nutzerbeobachtung verspätet erst bei der Wiedergabeaktion, während das Datum offenbar korrekt dargestellt wird. Die Informationsarchitektur des Layouts wurde abgelehnt; Farben und Schriftarten sind ausdrücklich nicht betroffen. **Die exakte installierte Buildkennung muss im nächsten Hardware-Gate bestätigt werden.**
+
+**Reihenfolge auf dem bestehenden Branch `work/s6-tv-api-v1`:**
+
+- **Blocker A – Player:** Empfangene KeyCodes von AVPlay-State und fortschreitenden Bild-/Zeit-Ereignissen getrennt prüfen; native Audio-Tracks/Codec/Kanäle und geschütztes MediaSession-Format je funktionierender bzw. schwarzer Aufnahme vergleichen. Erst danach gerichtete Korrektur mit Tests; keine riskanten Media-Cookie- oder Transcode-Abkürzungen.
+- **Blocker B – EPG/Poster:** Nach Hardwarefoto Sichtbarkeit/Status/Response prüfen, Poster-Regression und asynchronen Auswahlwechsel gezielt korrigieren; echte Metadaten am TV abnehmen.
+- **Blocker C – TV-Informationsarchitektur:** Das bestehende VDR-Suite-Webfrontend als Referenz für Anordnung, Hierarchie und Medienbibliothek verwenden, ohne dessen Browser-Interna/API zu kopieren und ohne komplette Neuentwicklung. TV-Fokus und D-Pad bleiben einheitlich. Bestehende Farben/Schrift nicht grundlos ersetzen.
+
+**Merge-Gate:** PR #33 verbleibt als Draft. Weder Source-Tests noch CI allein dürfen die Hardwarefehler auf PASS setzen. Kein Merge nach `main`, keine zusätzliche Branch-Erstellung, keine automatische Neuinstallation/Pairing, produktive App `VDRSuiteTV` bleibt unangetastet. Vollständige Beobachtungen und Einzelgates: `docs/hardware-acceptance.md`.
