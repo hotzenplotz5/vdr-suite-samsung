@@ -65,7 +65,12 @@ function simulate(options = {}) {
     "live-epg-detail-time":{textContent:""},
     "live-epg-detail-title":{textContent:""},
     "live-epg-detail-subtitle":{textContent:"",hidden:true},
-    "live-epg-detail-description":{textContent:""}
+    "live-epg-detail-description":{textContent:""},
+    "live-epg-artwork-status":{textContent:""},
+    "live-epg-detail-poster":{
+      hidden:true,src:"",onload:null,onerror:null,
+      removeAttribute(name){if(name==="src")this.src="";}
+    }
   };
   const recordingList = {
     hidden:true, children:[], scrollTop:0, _text:"",
@@ -184,6 +189,10 @@ function simulate(options = {}) {
   if (options.localBase !== undefined) window.VDR_SUITE_SERVER_BASE = options.localBase;
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
+  if (options.artworkApi) {
+    window.URL=options.artworkApi;
+    window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
+  }
   runInNewContext(runtime, { document, window, URL });
   return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
@@ -1010,4 +1019,80 @@ test("S6.7 missing or ambiguous native EPG IDs never cause guessed detail reques
     items:[{...entry,eventId:"81234"}],
     page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
   assert.equal(h.calls.length,8,"stale callback must not start detail after navigation");
+});
+
+test("S6.8 authorized EPG preferred poster is shown and freed when leaving Live-TV",()=>{
+  const h=liveTransport(),urls=[],revoked=[];
+  const api={
+    createObjectURL(blob) {
+      assert.equal(blob.type,"image/jpeg");
+      const url="blob:epg-"+(urls.length+1);urls.push(url);return url;
+    },
+    revokeObjectURL(url){revoked.push(url);}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,artworkApi:api});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const evt={channelId:channel.channelId,eventId:"13739",title:"Tagesschau",
+    subtitle:"Nachrichten",startTime:from,endTime:String(Number(from)+900),durationSeconds:900};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[evt],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/event\?/);
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"13739",title:"Tagesschau",subtitle:"Nachrichten",
+    description:"Nachrichten",startTime:evt.startTime,
+    endTime:evt.endTime,durationSeconds:900});
+  assert.match(h.calls[5].url,/\/api\/v1\/epg\/preferred-artwork\?/);
+  assert.equal(h.calls[5].responseType,"arraybuffer");
+  assert.match(h.calls[5].headers.Authorization,/^VDR-Suite-Device /);
+  h.calls[5].status=200;h.calls[5].response=new Uint8Array([1,2,3]).buffer;
+  h.calls[5].mime="image/jpeg";h.calls[5].responseURL=h.calls[5].url;h.calls[5].onload();
+  const img=sim.epgDetailNodes["live-epg-detail-poster"];
+  assert.equal(img.hidden,false);assert.equal(img.src,"blob:epg-1");
+  sim.nodes["nav-recordings"].click();
+  assert.equal(img.hidden,true);assert.equal(img.src,"");
+  assert.deepEqual(revoked,["blob:epg-1"]);
+});
+
+test("S6.8 EPG 404 preferred falls back to direct and stale images cannot appear",()=>{
+  const h=liveTransport(),urls=[];
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    artworkApi:{createObjectURL(){urls.push("blob:stale");return "blob:stale";},
+      revokeObjectURL(){}}});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const evt={channelId:channel.channelId,eventId:"9",title:"Film",subtitle:"",
+    startTime:from,endTime:String(Number(from)+900),durationSeconds:900};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[evt],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"9",title:"Film",subtitle:"",description:"Beschreibung",
+    startTime:evt.startTime,endTime:evt.endTime,durationSeconds:900});
+  h.reply(5,404,{code:"not_found"});
+  assert.match(h.calls[6].url,/\/api\/v1\/epg\/artwork\?/);
+  h.reply(6,404,{code:"not_found"});
+  assert.match(sim.epgDetailNodes["live-epg-artwork-status"].textContent,/Kein Sendungsbild/);
+  assert.equal(urls.length,0);
+  key(13); // fetch again, then navigate away before its preferred response.
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"9",title:"Film",subtitle:"",description:"Beschreibung",
+    startTime:evt.startTime,endTime:evt.endTime,durationSeconds:900});
+  sim.nodes["nav-recordings"].click();
+  assert.equal(h.calls[8].aborted,true);
+  h.calls[8].status=200;h.calls[8].response=new Uint8Array([1]).buffer;
+  h.calls[8].mime="image/jpeg";h.calls[8].responseURL=h.calls[8].url;h.calls[8].onload();
+  assert.equal(urls.length,0,"stale response never creates poster URL");
+  assert.equal(sim.epgDetailNodes["live-epg-detail-poster"].hidden,true);
 });
