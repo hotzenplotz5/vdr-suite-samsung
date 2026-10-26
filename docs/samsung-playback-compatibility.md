@@ -197,3 +197,13 @@ Bild/Ton bei MP4/TS/HLS wiedergibt. Die 2020er Codec-Grenzen sind eigenständig.
 Quellen:
 - [Samsung AVPlay COOKIE](https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html)
 - [VDR-Suite allgemeiner Device-Medienvertrag](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-device-recording-playback.md)
+
+
+## S6.1 – Native Audiotracks auf Tizen 5.5 (Source)
+
+Samsung AVPlay bietet getTotalTrackInfo(), getCurrentStreamInfo() und setSelectTrack("AUDIO", index). Die Samsung-FAQ beschreibt fehlenden Ton bei Streams mit mehreren Audiospuren und fordert die Auswahl einer Tonspur während PLAYING. getTotalTrackInfo() kann in verschiedenen AVPlay-Zuständen zulässig sein, der Audio-Track-Wechsel aber regulär erst in PLAYING (READY nur bei Smooth Streaming).
+
+- https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html
+- https://developer.samsung.com/smarttv/develop/faq/multimedia.html
+
+Der Samsung-Adapter wählt ausschließlich echte AVPlay-AUDIO-Indices. Metadaten werden begrenzt und nicht roh ausgegeben. Nur AAC mit bekannter, höchstens zweikanaliger Tonspur ist Kandidat für automatische Auswahl bei mehreren Tracks. Keine vermeintliche Erfolgsmeldung, bevor echte Audioausgabe am Samsung gehört wurde.
