@@ -62,4 +62,5 @@ test("S6.0: one capture-phase keydown owner routes playback keys and shows a bou
   assert.match(main,/recordingRemoteHint\.textContent = "Fernbedienung · Taste " \+ key/);
   assert.match(main,/\}, true\);/);
   assert.match(html,/id="recording-remote-hint"[^>]*class="recording-player-hint"/);
+  assert.match(html,/id="recording-audio-hint"[^>]*class="recording-audio-hint"/);
 });
