@@ -185,7 +185,9 @@ function simulate(options = {}) {
   };
   const exits = { count: 0 };
   const window = {
-    tizen: { tvinputdevice: { registerKey() {} }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
+    tizen: { tvinputdevice: { registerKey(name) {
+      if (options.blockMediaKeys && /^(Media|Color)/.test(name)) throw Error("SecurityError");
+    } }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
     webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
   if (options.keymanager) window.tizen.keymanager = options.keymanager;
@@ -220,7 +222,7 @@ test("S2.1 runtime boots original intro, capability probes and D-pad navigation"
   const sim = simulate();
   assert.equal(sim.textNodes["tizen-status"].textContent, "vorhanden");
   assert.equal(sim.textNodes["avplay-status"].textContent, "vorhanden");
-  assert.equal(sim.textNodes["remote-status"].textContent, "vorhanden");
+  assert.match(sim.textNodes["remote-status"].textContent,/PLAY\/PAUSE\/STOP\/BLAU registriert/);
   assert.equal(sim.video.src, "./assets/branding/startvideo.mp4");
   assert.equal(sim.overlay.hidden, false);
   // Finish splash and exercise remote on HOME, other views and back.
@@ -1170,4 +1172,45 @@ test("S6.10 EPG long synopsis can be scrolled with focusable D-pad actions",()=>
   sim.nodes["nav-recordings"].click();
   assert.equal(sim.epgScrollActions.hidden,true);
   assert.equal(sim.epgDetailNodes["live-epg-detail"].hidden,true);
+});
+
+test("S6.12 registered remote keys require explicit TV privilege",()=>{
+  const config=readFileSync("app/config.xml","utf8");
+  assert.match(config,/<tizen:privilege name="http:\/\/tizen.org\/privilege\/tv.inputdevice"\/>/);
+  const registered=simulate();
+  assert.match(registered.textNodes["remote-status"].textContent,
+    /PLAY\/PAUSE\/STOP\/BLAU registriert/);
+  const blocked=simulate({blockMediaKeys:true});
+  assert.match(blocked.textNodes["remote-status"].textContent,
+    /nicht registriert: MediaPlay, MediaPause, MediaStop, ColorF3Blue/);
+  assert.equal(blocked.panels.find(p=>p.route==="home").hidden,false);
+});
+
+test("S6.12 EPG DOWN from last programme focuses its scroll action immediately",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const selected=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:selected.channelId,
+    items:[{channelId:selected.channelId,title:"Jetzt",subtitle:"",
+      startTime:from,endTime:String(Number(from)+900),durationSeconds:900},
+      {channelId:selected.channelId,title:"Danach",subtitle:"",
+      startTime:String(Number(from)+900),endTime:String(Number(from)+1800),
+      durationSeconds:900}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(40);
+  assert.equal(sim.liveEpgList.children[1].isFocused,true);
+  key(40);
+  assert.equal(sim.nodes["live-epg-scroll-down"].isFocused,true);
+  key(13);
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,230);
+  key(38);
+  assert.equal(sim.liveEpgList.children[1].isFocused,true);
+  assert.equal(h.calls.length,4,"scroll navigation never fetches metadata");
 });
