@@ -450,3 +450,28 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   #detail-state-live.live-epg-panel .live-epg-detail h2 {font-size:23px;}
   #detail-state-live.live-epg-panel .live-epg-detail p {font-size:16px;}
 }
+
+/* S6.8: native Device EPG preferred artwork, only after confirmed event selection.
+   The image is optional: a missing image must never waste the text column. */
+#detail-state-live.live-epg-panel .live-epg-detail[hidden],
+#detail-state-live.live-epg-panel .live-epg-detail-poster[hidden] {display:none!important;}
+#detail-state-live.live-epg-panel .live-epg-detail-content {
+  display:flex; align-items:flex-start; gap:20px; min-width:0;
+}
+#detail-state-live.live-epg-panel .live-epg-detail-copy {
+  flex:1 1 auto; min-width:0; overflow-wrap:anywhere;
+}
+#detail-state-live.live-epg-panel .live-epg-detail-poster:not([hidden]) {
+  display:block; flex:0 0 176px; width:176px; max-height:265px;
+  object-fit:contain; border-radius:9px;
+  background:#0b1930; border:1px solid #3a658f;
+}
+#detail-state-live.live-epg-panel .live-epg-artwork-status {
+  font-size:14px; color:#9bb7d7; line-height:1.35; margin-top:14px;
+}
+@media(max-width:1380px) {
+  #detail-state-live.live-epg-panel .live-epg-detail-content {gap:12px;}
+  #detail-state-live.live-epg-panel .live-epg-detail-poster:not([hidden]) {
+    width:126px; flex-basis:126px; max-height:196px;
+  }
+}
