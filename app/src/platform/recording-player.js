@@ -157,7 +157,9 @@ export function createSamsungRecordingPlayer(environment) {
       if (typeof api.setListener === "function")
         api.setListener({
           onbufferingstart:function () {if (token === generation) onState("buffering");},
-          onbufferingcomplete:function () {if (token === generation) onState("ready");},
+          onbufferingcomplete:function () {
+            if (token === generation) onState("ready");
+          },
           onstreamcompleted:function () {if (token === generation) onState("finished");},
           onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
         });
