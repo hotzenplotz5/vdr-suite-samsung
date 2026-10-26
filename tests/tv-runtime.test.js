@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
+import { createSamsungRecordingPlayer } from "../app/src/platform/recording-player.js";
 
 const html = readFileSync("app/index.html", "utf8");
 const runtime = readFileSync("app/tv-runtime.js", "utf8");
@@ -24,7 +25,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-epg-action", "data-recordings-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-epg-action", "data-epg-scroll", "data-recordings-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -60,8 +61,9 @@ function simulate(options = {}) {
     get textContent(){return this._text;},
     appendChild(node){this.children.push(node);}
   };
+  const epgScrollActions={hidden:true};
   const epgDetailNodes = {
-    "live-epg-detail":{hidden:true},
+    "live-epg-detail":{hidden:true,scrollTop:0},
     "live-epg-detail-time":{textContent:""},
     "live-epg-detail-title":{textContent:""},
     "live-epg-detail-subtitle":{textContent:"",hidden:true},
@@ -145,6 +147,7 @@ function simulate(options = {}) {
       if (id === "live-backend-name") return liveBackendName;
       if (id === "live-epg-status") return liveEpgStatus;
       if (id === "live-epg-list") return liveEpgList;
+      if (id === "live-epg-scroll-actions") return epgScrollActions;
       if (epgDetailNodes[id]) return epgDetailNodes[id];
       if (id === "recording-list") return recordingList;
       if (id === "recording-player-surface") return playerSurface;
@@ -194,7 +197,7 @@ function simulate(options = {}) {
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -1098,4 +1101,71 @@ test("S6.8 EPG 404 preferred falls back to direct and stale images cannot appear
   h.calls[8].mime="image/jpeg";h.calls[8].responseURL=h.calls[8].url;h.calls[8].onload();
   assert.equal(urls.length,0,"stale response never creates poster URL");
   assert.equal(sim.epgDetailNodes["live-epg-detail-poster"].hidden,true);
+});
+
+test("S6.10 native AVPlay clock diagnosis is bounded and invalidated on stop",()=>{
+  const evidence=[],mock={
+    state:"IDLE",time:0,listener:null,
+    open(){this.state="IDLE";},
+    setListener(handler){this.listener=handler;},
+    prepareAsync(success){this.state="READY";success();},
+    play(){this.state="PLAYING";},
+    pause(){this.state="PAUSED";},
+    stop(){this.state="IDLE";},
+    close(){this.state="NONE";},
+    getState(){return this.state;},
+    getCurrentTime(){return this.time;},
+    getTotalTrackInfo(){return [];},
+    getCurrentStreamInfo(){return [];}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:mock}});
+  assert.equal(player.start("https://tv.example.test/stream.ts",
+    (state,detail)=>evidence.push({state,detail})),true);
+  mock.listener.oncurrentplaytime(1000);
+  mock.listener.oncurrentplaytime(3900);
+  mock.time=3900;
+  assert.equal(player.inspectPlayback().state,"PLAYING");
+  assert.equal(player.inspectPlayback().seconds,3);
+  assert.equal(player.inspectPlayback().deltaSeconds,2);
+  assert.ok(evidence.some(x=>x.state==="progress"&&x.detail.advanced));
+  assert.equal(player.pauseOrResume("pause"),"paused");
+  assert.equal(player.inspectPlayback().state,"PAUSED");
+  assert.equal(player.pauseOrResume("play"),"resume_requested");
+  assert.equal(player.inspectPlayback().state,"PLAYING");
+  const previous=evidence.length,callback=mock.listener.oncurrentplaytime;
+  callback(-10);callback(Infinity);callback("secret");
+  assert.equal(evidence.length,previous,"bad callback data is dropped");
+  player.stop();callback(9999000);
+  assert.equal(player.inspectPlayback().state,"unavailable");
+  assert.equal(player.inspectPlayback().deltaSeconds,0);
+  assert.equal(evidence.length,previous,"stale callbacks cannot update UI");
+  assert.doesNotMatch(JSON.stringify(evidence),/https:|Cookie|secret/);
+});
+
+test("S6.10 EPG long synopsis can be scrolled with focusable D-pad actions",()=>{
+  assert.match(html,/data-focus-id="live-epg-scroll-down"/);
+  assert.match(html,/data-epg-scroll="1"/);
+  assert.match(html,/data-epg-scroll="-1"/);
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[{channelId:channel.channelId,title:"SOKO Potsdam",subtitle:"Running Dinner",
+      startTime:from,endTime:String(Number(from)+3000),durationSeconds:3000}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.epgScrollActions.hidden,false);
+  sim.nodes["live-epg-scroll-down"].click();
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,230);
+  sim.nodes["live-epg-scroll-down"].click();
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,460);
+  sim.nodes["live-epg-scroll-up"].click();
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,230);
+  sim.nodes["nav-recordings"].click();
+  assert.equal(sim.epgScrollActions.hidden,true);
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].hidden,true);
 });
