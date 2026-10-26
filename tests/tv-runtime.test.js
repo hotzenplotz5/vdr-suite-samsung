@@ -60,6 +60,13 @@ function simulate(options = {}) {
     get textContent(){return this._text;},
     appendChild(node){this.children.push(node);}
   };
+  const epgDetailNodes = {
+    "live-epg-detail":{hidden:true},
+    "live-epg-detail-time":{textContent:""},
+    "live-epg-detail-title":{textContent:""},
+    "live-epg-detail-subtitle":{textContent:"",hidden:true},
+    "live-epg-detail-description":{textContent:""}
+  };
   const recordingList = {
     hidden:true, children:[], scrollTop:0, _text:"",
     set textContent(value) {this._text=value;if(value==="") this.children=[];},
@@ -133,6 +140,7 @@ function simulate(options = {}) {
       if (id === "live-backend-name") return liveBackendName;
       if (id === "live-epg-status") return liveEpgStatus;
       if (id === "live-epg-list") return liveEpgList;
+      if (epgDetailNodes[id]) return epgDetailNodes[id];
       if (id === "recording-list") return recordingList;
       if (id === "recording-player-surface") return playerSurface;
       if (id === "recording-remote-hint") return remoteHint;
@@ -177,7 +185,7 @@ function simulate(options = {}) {
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -904,3 +912,45 @@ test("S6.4 recording metadata normalizes VDR epoch dates and pipe genres",()=>{
   assert.doesNotMatch(sim.recordingDetailInfo.textContent,/1790837880|\[Western\|Drama\]/);
 });
 
+
+test("S6.6 EPG row OK opens a readable detail, never silently ignores key",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const first={channelId:channel.channelId,eventId:"81234",
+    title:"Die Rosenheim-Cops",subtitle:"Frostiger Tod",startTime:from,
+    endTime:String(Number(from)+3600),durationSeconds:3600};
+  const second={channelId:channel.channelId,title:"heute",
+    startTime:String(Number(from)+3600),endTime:String(Number(from)+4200),
+    durationSeconds:600};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[first,second],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const detail=sim.epgDetailNodes;
+  assert.equal(detail["live-epg-detail"].hidden,false);
+  assert.match(detail["live-epg-detail-title"].textContent,/Rosenheim-Cops/);
+  assert.equal(h.calls.length,4,"preview uses existing metadata, not network");
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/event\?/);
+  assert.equal(h.calls[4].method,"GET");
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"81234",title:"Die Rosenheim-Cops",subtitle:"Frostiger Tod",
+    description:"Ausführlicher Inhalt",startTime:first.startTime,
+    endTime:first.endTime,durationSeconds:3600});
+  assert.equal(detail["live-epg-detail-description"].textContent,"Ausführlicher Inhalt");
+  key(40);key(13);
+  assert.equal(h.calls.length,5,"no guessed event ID or private endpoint");
+  assert.match(detail["live-epg-detail-title"].textContent,/heute/);
+  assert.match(detail["live-epg-detail-description"].textContent,/keine bestätigte Event-ID/);
+  sim.nodes["nav-recordings"].click();
+  assert.equal(detail["live-epg-detail"].hidden,true);
+});
