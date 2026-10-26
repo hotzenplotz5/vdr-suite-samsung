@@ -29,6 +29,14 @@
 - README, ROADMAP und Abnahmeprotokoll aktualisieren, ohne ungeprüfte Hardware-Akzeptanz zu behaupten.
 - Kein Secret und kein absoluter privater Benutzerpfad in Doku/Test-Fixtures.
 
+## Pflicht vor Arbeit an der Samsung-TV-App (`app/`)
+
+- **`app/AGENTS.md` vor jedem App-Update, WITs-/Installationsbefehl oder TV-Hardware-PASS lesen.** Sie enthält die konkrete, verbindliche Reihenfolge für die bereits installierte und gekoppelte DEV-App.
+- Immer auch `docs/wits-isolated-development.md` und bei Windows-/Git-Updates `docs/windows-update-workflow.md` lesen, **bevor** ein Kommando vorgeschlagen wird. Bereits bestandene Tests und DEV-Vorbereitung nicht unnötig wiederholen.
+- **`build:tv`, `check`, `tv:dev:prepare`, `Copy-Item` und CI führen kein TV-Update aus.** Nur der nachweislich funktionierende WITs-Watch darf die vorhandene isolierte DEV-App ohne Neuinstallation synchronisieren; sichtbaren TV-Build oder dokumentierten `--smoke`-Marker beobachten.
+- Wenn am TV **keine Änderung sichtbar wird**, nicht Erfolg behaupten und nicht blind `wits --start`, `Run Project`, einen zweiten Watch, Prozess-Kills oder neue Kopplung vorschlagen. Die Watch-Ausgabe, den tatsächlichen Prozess und Staging/Reload gezielt prüfen. `wits --start` hat am echten Testgerät die DEV-Kopplung zerstört.
+- Das Hardware-Feedback korrekt weiterführen: INFO funktioniert, physische SETTINGS-Taste nicht; S6.16-Texteingabefix erst nach sichtbarer Übertragung als TV-PASS führen.
+
 ## Verbindlicher Windows-/Tizen-Update-Pfad
 
 - **Vor jedem Windows-Git-Pull oder Tizen-Build zuerst [docs/windows-update-workflow.md](docs/windows-update-workflow.md) lesen.** Der Workflow wurde am realen Windows-/VS-Code-Samsung-Setup mit 77/77 grünen Tests erprobt.
