@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"27f50ad0f5e2","label":"Samsung v0.1.0 · S5.1 · b27f50ad0f5e2"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"226675b93921","label":"Samsung v0.1.0 · S5.1 · b226675b93921"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1120,7 +1120,13 @@
             if (!access || access.transport !== "http-cookie" ||
                 typeof access.cookie !== "string" ||
                 !/^vdr_suite_media=mg_[0-9a-f]{32}\.[A-Za-z0-9._~-]{8,256}$/.test(access.cookie)) {
-              done({ok:false,kind:"response"}); return;
+              // A legacy backend may have created a session but omitted this
+              // opt-in projection. Close THAT session before reporting failure;
+              // never leave an avoidable active stream/lease behind.
+              stop(credential,backendId,session.id,function () {
+                done({ok:false,kind:"response"});
+              });
+              return;
             }
             nativeCookie = access.cookie;
           }
