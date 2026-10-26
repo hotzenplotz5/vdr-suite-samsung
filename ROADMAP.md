@@ -119,3 +119,15 @@ Der reale GU43TU6979UXZG öffnet jetzt den bildschirmfüllenden Player, aber AVP
 Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-ErrorCodes/Names und prüft nach einem Wiedergabefehler die geschützte Medienroute ausschließlich über einen Header-only GET/Range-Request, **vor** dem Session-Stop. Zusätzlich existiert eine bewusst vom Nutzer wählbare alternative **HTML5-MP4-Probe** für vom Server gewählte progressive MP4-MediaSessions. Kein Credentials-/Token-in-URL, keine zweite Kopplung oder Installation, keine unbelegte Browser-/AVPlay-Cookieannahme. Vollständige Quelle-/Sicherheits-/TV-Gates: [Samsung-Playback-Kompatibilität](docs/samsung-playback-compatibility.md).
 
 **Hardware-PASS erst nach einem wirklich abspielbaren Bild/Ton, STOP/Cleanup und identischer bestehender Geräte-Kopplung.** Source-only- und CI-Abnahme genügt nicht.
+
+
+### S5.4 – Generischer nativer Device-Medienzugang (QUELLKANDIDAT)
+
+Der bereits existierende Public-v1-Device-MediaSession-Vertrag wird (im
+separaten VDR-Suite-Backend) für alle nativen TV-/Kodi-Clients um eine
+ausdrückliche, sessionbezogene HTTP-Cookie-Übergabe erweitert. Samsung AVPlay
+setzt nur diese vorhandene MediaSession-Berechtigung über die offizielle
+`COOKIE`-Streaming-Property im IDLE-Zustand. Kein neues Pairing, keine
+Cookie-Auslesung via document.cookie, keine Passwörter in Medien-URLs, kein
+neuer Service/DB. Bestehender Browser-/HTML5-Pfad bleibt `HttpOnly`.
+Backend- und Samsung-Hardware-Abnahme offen.
