@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"369881797eba","label":"Samsung v0.1.0 · S6.4 · b369881797eba"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"ea06b0787099","label":"Samsung v0.1.0 · S6.4 · bea06b0787099"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1633,6 +1633,8 @@
     // Some 2020 AVPlay implementations report PLAYING transiently after pause().
     // Remember the last explicit pause command, not a guessed decoder result.
     var pauseRequested = false;
+    // Bounded, non-secret AVPlay telemetry; clock progress does not prove frames or audio.
+    var lastPlaybackMs = null, progressedSeconds = 0;
     function available() {
       return !!(api && typeof api.open === "function" &&
         typeof api.prepareAsync === "function" && typeof api.play === "function");
@@ -1641,6 +1643,8 @@
       generation += 1;
       active = false;
       pauseRequested = false;
+      lastPlaybackMs = null;
+      progressedSeconds = 0;
       if (!api) return;
       try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
       try { if (typeof api.close === "function") api.close(); } catch (_) {}
@@ -1679,6 +1683,18 @@
               if (token === generation) onState("ready");
             },
             onstreamcompleted:function () {if (token === generation) onState("finished");},
+            oncurrentplaytime:function(ms) {
+              if (token!==generation || !active || typeof ms!=="number" ||
+                  !isFinite(ms) || ms<0 || ms>4294967295 ||
+                  Math.floor(ms)!==ms) return;
+              var previous=lastPlaybackMs;
+              if (previous!==null && ms>previous)
+                progressedSeconds+=Math.min(30,Math.floor((ms-previous)/1000));
+              lastPlaybackMs=ms;
+              onState("progress",{seconds:Math.floor(ms/1000),
+                advanced:previous!==null && ms>previous,
+                deltaSeconds:progressedSeconds});
+            },
             onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
           });
         api.prepareAsync(function () {
@@ -1743,12 +1759,28 @@
       } catch (_) {return "error";}
       return "unavailable";
     }
+    // Read-only, bounded evidence after a real remote command.
+    function inspectPlayback() {
+      var state="unavailable",timeSeconds=null;
+      if (!active || !api) return {state:state,seconds:null,deltaSeconds:progressedSeconds};
+      try {
+        var raw=typeof api.getState==="function" ? api.getState() : "";
+        if (["NONE","IDLE","READY","PLAYING","PAUSED"].indexOf(raw)>=0)
+          state=raw;
+      } catch (_) {}
+      try {
+        var ms=typeof api.getCurrentTime==="function" ? api.getCurrentTime() : null;
+        if (typeof ms==="number" && isFinite(ms) && ms>=0 &&
+            ms<=4294967295 && Math.floor(ms)===ms) timeSeconds=Math.floor(ms/1000);
+      } catch (_) {}
+      return {state:state,seconds:timeSeconds,deltaSeconds:progressedSeconds};
+    }
     function cycleAudioTrack() {
       if (!active || !api) return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
       return cycleSamsungAudio(api);
     }
     return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
-      cycleAudioTrack:cycleAudioTrack};
+      cycleAudioTrack:cycleAudioTrack,inspectPlayback:inspectPlayback};
   }
   // Advertise only the narrow H.264/AAC path observed via a TV decoder probe.
   // This is not proof that all VDR recordings are decodable.
@@ -2063,6 +2095,7 @@
     var liveEpgStatus = document.getElementById("live-epg-status");
     var liveEpgList = document.getElementById("live-epg-list");
     var liveEpgDetail = document.getElementById("live-epg-detail");
+    var liveEpgScrollActions = document.getElementById("live-epg-scroll-actions");
     var liveEpgDetailTime = document.getElementById("live-epg-detail-time");
     var liveEpgDetailTitle = document.getElementById("live-epg-detail-title");
     var liveEpgDetailSubtitle = document.getElementById("live-epg-detail-subtitle");
@@ -2106,6 +2139,8 @@
           if (liveEpgFocusIds[i]) cells.push(liveEpgFocusIds[i]);
           if (cells.length) liveFocusRows.push(cells);
         }
+        if (liveEpgScrollActions && !liveEpgScrollActions.hidden)
+          liveFocusRows.push(["live-epg-scroll-up","live-epg-scroll-down"]);
         return liveFocusRows;
       }
       if (currentView === "recordings") {
@@ -2560,6 +2595,7 @@
       clearEpgArtwork();
       liveEpgDetailRun+=1;
       if (liveEpgDetail) liveEpgDetail.hidden=true;
+      if (liveEpgScrollActions) liveEpgScrollActions.hidden=true;
     }
     function clearLiveEpg() {
       liveMetadata.cancel();
@@ -2599,6 +2635,8 @@
       var date=isFinite(start.getTime()) ?
         start.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"}) : "";
       liveEpgDetail.hidden=false;
+      liveEpgDetail.scrollTop=0;
+      if (liveEpgScrollActions) liveEpgScrollActions.hidden=false;
       if (liveEpgDetailTime) liveEpgDetailTime.textContent =
         date+" · "+clock(start)+"–"+clock(end);
       if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=item.title.slice(0,512);
@@ -3343,6 +3381,16 @@
                   "AVPlay · play() ausgeführt · Bild/Ton prüfen";
               recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
                 " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+            } else if (state === "progress" && mode === "avplay") {
+              // Samsung timeline callbacks measure the demux clock, not video
+              // frames or audibility; report exactly what the TV observed.
+              if (recordingLifecycleHint && detail &&
+                  typeof detail.seconds==="number") {
+                recordingLifecycleHint.textContent="AVPlay-Zeit " +
+                  Math.floor(detail.seconds/60)+":"+
+                  ("0"+detail.seconds%60).slice(-2)+
+                  " · Fortschritt "+detail.deltaSeconds+"s · Bild/Ton separat prüfen";
+              }
             } else if (state === "audio" && mode === "avplay") {
               if (recordingAudioHint)
                 recordingAudioHint.textContent = describeSamsungAudio(detail);
@@ -3759,6 +3807,16 @@
         }
         return;
       }
+      var epgScroll=item.getAttribute("data-epg-scroll");
+      if (epgScroll!==null && currentView==="live") {
+        if (liveEpgDetail && !liveEpgDetail.hidden) {
+          var direction=epgScroll==="-1" ? -1 : epgScroll==="1" ? 1 : 0;
+          // No focus scroll-out and no extra global key listener.
+          if (direction) liveEpgDetail.scrollTop=Math.max(0,
+            liveEpgDetail.scrollTop+direction*230);
+        }
+        return;
+      }
       var epgAction = item.getAttribute("data-live-epg-action");
       if (epgAction) {loadSelectedEpg(epgAction);return;}
       var epgIndex=item.getAttribute("data-epg-index");
@@ -3914,9 +3972,15 @@
         if (action === "play" || action === "pause" || action === "toggle") {
           var playbackState = (recordingPlayerMode === "html5" ?
             recordingHtml5Player : recordingPlayer).pauseOrResume(action);
-          if (recordingRemoteHint)
-            recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
-              " · Player: " + playbackState;
+          if (recordingRemoteHint) {
+            var evidence=recordingPlayerMode==="avplay" ?
+              recordingPlayer.inspectPlayback() : null;
+            recordingRemoteHint.textContent = "Fernbedienung · "+key+
+              " · Aktion "+playbackState+(evidence ?
+                " · AVPlay "+evidence.state+
+                (evidence.seconds===null ? "" : " · Zeit "+evidence.seconds+"s")+
+                " · Delta "+evidence.deltaSeconds+"s" : "");
+          }
           if (playbackState === "paused" || playbackState === "already_paused")
             recordingStatus("ready","Wiedergabe pausiert",
               "PLAY setzt fort · OK oder PLAY/PAUSE schaltet um · STOP beendet.");
