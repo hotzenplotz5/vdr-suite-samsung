@@ -146,3 +146,27 @@ test("S6.4 EPG, detail and artwork never use insecure origins or accept stale ca
  h.reply(1,200,detail);
  assert.equal(count,0);
 });
+
+test("S6.6 EPG OK resolves native event details over protected Public v1",()=>{
+  const h=mock(),client=createPublicMediaMetadata(h.env);let out;
+  client.eventDetail(credential,"home",cid,"81234",r=>out=r);
+  assert.equal(h.calls[0].method,"GET");
+  assert.equal(h.calls[0].url,credential.base+
+    "/api/v1/epg/event?backendId=home&channelId="+cid+"&eventId=81234");
+  assert.equal(h.calls[0].headers.Authorization,
+    "VDR-Suite-Device cred-one.a_very_long_test_secret_123");
+  h.reply(0,200,{backendId:"home",channelId:cid,eventId:"81234",
+    title:"Die Rosenheim-Cops",subtitle:"Frostiger Tod",
+    description:"Echte Sendungsbeschreibung",startTime:String(from),
+    endTime:String(from+3600),durationSeconds:3600});
+  assert.equal(out.ok,true);
+  assert.equal(out.value.description,"Echte Sendungsbeschreibung");
+  client.eventDetail(credential,"other",cid,"81234",r=>out=r);
+  h.reply(1,200,{backendId:"home",channelId:cid,eventId:"81234",
+    title:"Nicht zugänglich",subtitle:"",description:"",startTime:String(from),
+    endTime:String(from+3600),durationSeconds:3600});
+  assert.equal(out.kind,"response","foreign backend detail is rejected");
+  client.eventDetail(credential,"home",cid,"../../cookie",r=>out=r);
+  assert.equal(out.kind,"bad_request");
+  assert.equal(h.calls.length,2);
+});
