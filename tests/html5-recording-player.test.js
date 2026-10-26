@@ -25,7 +25,7 @@ test("S5.3: HTML5 MP4 path plays via browser without Device secret or native AVP
   v.onplaying();
   assert.ok(states.includes("playing"));
   assert.equal(player.pauseOrResume(),"paused");
-  assert.equal(player.pauseOrResume(),"playing");
+  assert.equal(player.pauseOrResume(),"resume_requested");
   player.stop();
   assert.equal(v.src,"");
 });
@@ -151,7 +151,7 @@ test("S6.2: pause clears buffering timer; resumed playing has a bounded recovery
   v.onwaiting();assert.equal(clock.count,1);
   assert.equal(player.pauseOrResume(),"paused");
   assert.equal(clock.count,0);
-  assert.equal(player.pauseOrResume(),"playing");
+  assert.equal(player.pauseOrResume(),"resume_requested");
   assert.equal(clock.count,1);
   v.onplaying();
   assert.equal(clock.count,0);
@@ -179,4 +179,17 @@ test("S6.2: synchronous HTML5 load error never gets reclassified as preparing",(
   assert.deepEqual(events,[{state:"error",detail:{stage:"html5",code:"4"}}]);
   assert.equal(clock.count,0);
   assert.doesNotMatch(JSON.stringify(events),/private media URL/);
+});
+
+test("S6.5: HTML5 transport controls do not toggle the wrong way",()=>{
+  const v=fakeVideo(),player=createHtml5RecordingPlayer(v),states=[];
+  player.start(url,(state)=>states.push(state));v.oncanplay();v.onplaying();
+  assert.equal(player.pauseOrResume("play"),"already_playing");
+  assert.equal(player.pauseOrResume("pause"),"paused");
+  assert.equal(player.pauseOrResume("pause"),"already_paused");
+  assert.equal(player.pauseOrResume("play"),"resume_requested");
+  v.onplaying();
+  assert.equal(player.pauseOrResume("toggle"),"paused");
+  player.stop();
+  assert.equal(player.pauseOrResume("play"),"unavailable");
 });
