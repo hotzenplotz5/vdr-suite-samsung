@@ -181,6 +181,7 @@ test("S6.7 EPG source event IDs accept backend-compatible colon syntax",()=>{
  assert.equal(out.ok,true);
  assert.equal(out.value.items[0].eventId,nativeId);
  client.eventDetail(credential,"home",cid,nativeId,r=>out=r);
+ assert.match(h.calls[1].url,/eventId=native-event:1234$/);
  assert.equal(new URL(h.calls[1].url).searchParams.get("eventId"),nativeId);
  h.reply(1,200,{backendId:"home",channelId:cid,eventId:nativeId,
    title:"Heute",subtitle:"",description:"Native Detailinformation",
