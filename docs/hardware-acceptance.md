@@ -591,7 +591,7 @@ Die DEV-Oberfläche zeigt unten rechts **Samsung v0.1.1 · S6.4** (die vom lokal
 
 ## S6.15 – Zusatz-Tasten und DEV-KeyManager (26.10.2026)
 
-**Bestätigte TV-Tastenerkennung PASS:** Farb-Keys, Play, Pause, Stop, OK, Links/Rechts/Hoch/Runter und Return. **Noch nicht funktionierende/noch nicht getestete zusätzliche Keys OPEN:** Ziffern 0–9, TTX/MIX, PreCH, CH Up/Down, Settings, Info, Rewind/FastForward.
+**Erstbericht vor S6.15:** Farb-Keys, Play, Pause, Stop, OK, D-Pad und Return PASS, weitere optionale Tasten zunächst OPEN. **Nutzer-Korrektur nach S6.15:** Die zuvor fehlenden Tasten einschließlich INFO funktionieren; **nur die physische SETTINGS-Taste nicht**. INFO darf nicht mehr als Hardware-FAIL geführt werden. Diese Aussage belegt Tastenerkennung, nicht automatisch vollständige Teletext-/Seek-Funktion.
 
 **Wichtiger negativer Hardwaretest:** Nach der erneuten DEV-WITs-Installation per `wits --start` wurde der Testschriftzug bzw. neue DEV-Build sichtbar, die DEV-Gerätekopplung ging laut Nutzer aber verloren. Deshalb `wits --start` ausdrücklich **nicht** als datenbewahrendes Routineupdate bezeichnen! Der Host kann vor der Neuinstallation deinstalliert werden und den Tizen-KeyManager-Eintrag verlieren. Kein erneutes Pairing, keine Deinstallation und kein neuer Installationsvorschlag im laufenden Tasten-Slice. Produktive App `VDRSuiteTV` ist strikt getrennt und bleibt unangetastet.
 
@@ -600,11 +600,11 @@ Die DEV-Oberfläche zeigt unten rechts **Samsung v0.1.1 · S6.4** (die vom lokal
 
 ### S6.15 INFO – differenzierter Hardwarebefund (26.10.2026)
 
-**Nutzer-Hardwaretest:** Nach Übertragung von S6.15 meldet der Nutzer, dass alle zuvor fehlenden Tasten bis auf `INFO` funktionieren. Das ist ein Hardware-PASS für die anderen Tastengruppen, aber kein Nachweis dafür, dass `INFO` überhaupt einen DOM-Keydown erzeugt. Herstellerdokumentation: `Info` hat den Keycode `457` und muss als optionale Taste über `tvinputdevice.registerKey("Info")` angemeldet werden; die konkrete Verfügbarkeit ist geräte-/firmwareabhängig.
+**Korrigierter Nutzer-Hardwaretest:** Zuerst wurde irrtümlich `INFO` als Ausnahme gemeldet; anschließend präzisierte der Nutzer ausdrücklich, dass **SETTINGS** die nicht funktionierende Taste ist. `INFO` funktioniert laut Nutzer. Samsung dokumentiert `Info`/457 und `Menu`/18, aber keinen eigenständigen `Settings`-Eintrag. Ob die physische SETTINGS-Taste bei diesem Gerät vom TV-System reserviert wird oder einen an die App weitergegebenen Tastencode besitzt, ist offen; keine fiktiven Keycodes ergänzen.
 
 **Ursache im bisherigen S6.15-Quellstand:** Der Key wurde bereits registriert und normalisiert, aber nur als Statusmeldung ohne funktionale Detailaktion behandelt. **Quelle-Korrektur:** Bei selektiertem Live-Sender löst INFO nun die vorhandene autorisierte Jetzt/Nächste-EPG-Anfrage aus; bei fokussierter EPG-Sendung den vorhandenen Detailhandler. Bei fokussierter Aufnahme zeigt INFO vorhandene Aufnahmedetails. Im aktiven AVPlay-Player zeigt INFO nur die sichere read-only Zustands-/Zeitdiagnose. Keine neue API, kein AVPlay-Seek und keine implizite Wiedergabe.
 
-**Hardware noch offen:** Erscheint auf der realen DEV-App bei INFO wirklich ein sichtbares Event/eine Detailansicht? Wenn nicht, ist separat `getSupportedKeys()` / `registerKey()` für `Info` auf dem installierten Host und ein tatsächlicher Keydown-Code zu prüfen. Niemals `wits --start` oder `Run Project` zur reinen Tastendiagnose aufrufen: Beim letzten DEV-Host-Reinstall ging die Kopplung verloren. PROD unverändert; PR #33 Draft.
+**Hardware noch offen:** Die physische SETTINGS-Taste ist nicht nachgewiesen; `Menu`/18 ist bereits im Quellcode registriert und auf die VDR-Suite-Einstellungen abgebildet. Ohne nachgewiesenes DOM-Keyevent wäre ein Code-Fix reine Spekulation. Die spätere INFO-Detailaktion und S6.16-IME-Korrektur sind wegen noch nicht nachgewiesenem WITs-Dateitransfer separat TV-OPEN. Niemals `wits --start` oder `Run Project` zur Tastendiagnose aufrufen: Beim letzten DEV-Reinstall ging die Kopplung verloren. PROD unverändert; PR #33 Draft.
 
 
 ## S6.16 – Native Samsung-IME darf nicht vom globalen Key-Owner übersteuert werden
