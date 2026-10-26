@@ -49,6 +49,7 @@ function boot() {
   var channelCatalog = createChannelCatalog(window);
   var recordingCatalog = createRecordingCatalog(window);
   var liveMetadata = createPublicMediaMetadata(window);
+  var liveDetailMetadata = createPublicMediaMetadata(window);
   var recordingMetadata = createPublicMediaMetadata(window);
   var recordingPlaybackClient = createRecordingPlaybackClient(window);
   var recordingPlayer = createSamsungRecordingPlayer(window);
@@ -95,6 +96,8 @@ function boot() {
   var liveRows = 0;
   var liveFocusIds = [];
   var liveEpgFocusIds = [];
+  var liveEpgRows = [];
+  var liveEpgDetailRun = 0;
   var liveCurrentChannels = [];
   var selectedLiveChannel = null;
   var liveEpgRun = 0;
@@ -118,6 +121,11 @@ function boot() {
   var liveBackendName = document.getElementById("live-backend-name");
   var liveEpgStatus = document.getElementById("live-epg-status");
   var liveEpgList = document.getElementById("live-epg-list");
+  var liveEpgDetail = document.getElementById("live-epg-detail");
+  var liveEpgDetailTime = document.getElementById("live-epg-detail-time");
+  var liveEpgDetailTitle = document.getElementById("live-epg-detail-title");
+  var liveEpgDetailSubtitle = document.getElementById("live-epg-detail-subtitle");
+  var liveEpgDetailDescription = document.getElementById("live-epg-detail-description");
   var recordingList = document.getElementById("recording-list");
   var recordingBackendName = document.getElementById("recording-backend-name");
   var recordingDetailInfo = document.getElementById("recording-detail-info");
@@ -590,6 +598,10 @@ function boot() {
       if (index!==-1) items.splice(index,1);
     });
     liveEpgFocusIds=[];
+    liveEpgRows=[];
+    liveDetailMetadata.cancel();
+    liveEpgDetailRun+=1;
+    if (liveEpgDetail) liveEpgDetail.hidden=true;
   }
   function clearLiveEpg() {
     liveMetadata.cancel();
@@ -612,6 +624,65 @@ function boot() {
     return label+clock(start)+"–"+clock(end)+" · "+item.title+
       (item.subtitle ? " · "+item.subtitle : "");
   }
+  // OK on a focusable EPG row must do something visible. A description
+  // can only be fetched if Public v1 advertises a proven native eventId.
+  function selectEpgEvent(item,loadDescription) {
+    liveDetailMetadata.cancel();
+    var token=++liveEpgDetailRun;
+    if (!item || !liveEpgDetail) return;
+    var start=new Date(Number(item.startTime)*1000);
+    var end=new Date(Number(item.endTime)*1000);
+    var clock=function(date) {
+      return isFinite(date.getTime()) ?
+        date.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+    };
+    var date=isFinite(start.getTime()) ?
+      start.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"}) : "";
+    liveEpgDetail.hidden=false;
+    if (liveEpgDetailTime) liveEpgDetailTime.textContent =
+      date+" · "+clock(start)+"–"+clock(end);
+    if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=item.title.slice(0,512);
+    if (liveEpgDetailSubtitle) {
+      liveEpgDetailSubtitle.textContent=(item.subtitle || "").slice(0,512);
+      liveEpgDetailSubtitle.hidden=!item.subtitle;
+    }
+    if (!liveEpgDetailDescription) return;
+    if (!loadDescription) {
+      liveEpgDetailDescription.textContent="OK: Sendungsinformationen anzeigen.";
+      return;
+    }
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(item.eventId || "")) {
+      liveEpgDetailDescription.textContent =
+        "Keine ausführliche Beschreibung abrufbar: Dieser EPG-Eintrag enthält keine bestätigte Event-ID.";
+      return;
+    }
+    var backend=liveBackends[liveBackendIndex];
+    var channel=selectedLiveChannel;
+    if (!backend || !channel || !liveCredential ||
+        channel.backendId!==backend.backendId || item.channelId!==channel.channelId)
+      return;
+    liveEpgDetailDescription.textContent="Lade Sendungsbeschreibung …";
+    liveDetailMetadata.eventDetail(liveCredential,backend.backendId,
+      channel.channelId,item.eventId,function(result) {
+        if (token!==liveEpgDetailRun || currentView!=="live" ||
+            !selectedLiveChannel ||
+            selectedLiveChannel.channelId!==channel.channelId ||
+            selectedLiveChannel.backendId!==channel.backendId) return;
+        if (!result.ok) {
+          liveEpgDetailDescription.textContent =
+            "Sendungsdetails: "+mediaMetadataError(result);
+          return;
+        }
+        var info=result.value;
+        if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=info.title;
+        if (liveEpgDetailSubtitle) {
+          liveEpgDetailSubtitle.textContent=info.subtitle || "";
+          liveEpgDetailSubtitle.hidden=!info.subtitle;
+        }
+        liveEpgDetailDescription.textContent=info.description ||
+          "Für diese Sendung ist keine ausführliche Beschreibung hinterlegt.";
+      });
+  }
   function showEpgRows(rows,append,nowNext) {
     if (!liveEpgList) return;
     if (!append) {
@@ -626,16 +697,23 @@ function boot() {
       node.tabIndex=-1;
       node.setAttribute("role","button");
       node.setAttribute("data-focus-id",id);
+      node.setAttribute("data-epg-index",String(eventIndex));
       node.setAttribute("aria-label",epgRow(item,index,!!nowNext).slice(0,400));
       node.textContent=epgRow(item,index,!!nowNext).slice(0,550);
       controls[id]=node;
       items.push(node);
       liveEpgFocusIds.push(id);
+      liveEpgRows.push(item);
       liveEpgList.appendChild(node);
-      node.addEventListener("click",function(){setFocus(id);});
+      node.addEventListener("click",function(){
+        if (setFocus(id)) selectEpgEvent(item,true);
+      });
     });
     liveEpgList.hidden=!liveEpgList.children.length;
-    if (!append) liveEpgList.scrollTop=0;
+    if (!append) {
+      liveEpgList.scrollTop=0;
+      if (rows.length) selectEpgEvent(rows[0],false);
+    }
   }
   function loadSelectedEpg(action) {
     if (!selectedLiveChannel || !liveCredential || !liveBackends.length) {
@@ -1623,6 +1701,12 @@ function boot() {
     }
     var epgAction = item.getAttribute("data-live-epg-action");
     if (epgAction) {loadSelectedEpg(epgAction);return;}
+    var epgIndex=item.getAttribute("data-epg-index");
+    if (epgIndex!==null && currentView==="live") {
+      var epgItem=liveEpgRows[Number(epgIndex)];
+      if (epgItem) selectEpgEvent(epgItem,true);
+      return;
+    }
     var liveAction = item.getAttribute("data-live-action");
     if (liveAction) {
       loadLiveChannels(liveAction);
