@@ -526,3 +526,16 @@ Die DEV-Oberfläche zeigt unten rechts **Samsung v0.1.1 · S6.4** (die vom lokal
 **Sichtbarer UX-Mangel:** Das Bild bleibt im schmalen Detailbereich klein, die lange Beschreibung und Darstellerliste laufen unter den Bildschirmrand, während die Zweispalten-Bildschirmaufteilung nicht die Hierarchie des vorhandenen VDR-Suite-Webfrontends abbildet. Nächste TV-Layout-Aufgabe: Poster/Text in einem großzügigen Detailbereich anordnen, D-Pad-Fokus und Scrollbarkeit für lange Event-Texte nachweisen, Listen- und Detailanzeige klar trennen. Farben und Schriftfamilie ausdrücklich **nicht** neu erfinden. Keine UI-Verschönerung als Ersatz für blockierenden AVPlay-Ton, Schwarzbild, PLAY/PAUSE/STOP und OK-Freeze deklarieren.
 
 **Status:** PR #33 bleibt Draft, kein Merge nach `main`, keine produktive App-Installation, kein neues Pairing. DEV läuft weiterhin über das isolierte `VDRSuitDev`-WITs-Projekt. `S6.8` Poster **HARDWARE PASS (eine ZDF-Sendung)**, universelle Artwork-Verfügbarkeit/Fehlerfälle/Back-Cleanup **OPEN**, S6.9 strukturierte Metadaten **OPEN**, Player **HARDWARE FAIL**.
+
+
+## S6.10 – Player-Evidenz und TV-EPG-Scroll (Quellabnahme, 26.10.2026)
+
+**Quelle des nächsten Retests:** Bisherige echte Hardwarebilder zeigen für `SOKO Potsdam – Running Dinner` ein geladenes Artwork, Titel, Untertitel und langen Text mit Darstellerliste, welcher am TV unten nicht mehr lesbar ist; Aufnahme-Playback weiter Ton=FAIL, teilweise Schwarzbild=FAIL, Tastensteuerung=FAIL. S6.10 verändert nur den Client/DEV-Code, nicht den installierten Samsung oder Server.
+
+**Source/CI PASS:** Native AVPlay oncurrentplaytime-Millisekunden werden bei tatsächlich laufender AVPlay-Sitzung als begrenzte Fortschrittsdiagnose angezeigt und durch `generation`/Stop entwertet. Nach PLAY/PAUSE/OK wird ein rein lesender `getState`/`getCurrentTime`-Snapshot neben der Key-Aktion angezeigt, wenn verfügbar. Ein AVPlay-Zeitdelta ist ausdrücklich **nicht gleichbedeutend** mit bewegtem Bild oder hörbarem Ton. Die native AVPlay-Quelle, MediaSession und Audio-Berechtigung sind unverändert; ohne Real-TV-Beobachtung kein Player-Fix/Hardware-PASS.
+
+**Source/CI PASS:** Im Live-EPG werden lange Sendungsdetails in der vorhandenen Scrollfläche per `Text ▲/▼`-Buttons im bestehenden Fokusowner lesbar, mit Reset bei Auswahlwechsel und versteckten Controls bei Wechsel zur anderen Seite. Poster/Text haben mehr Raum. Bestehende Farbpalette, Font und Device-Credentials unverändert. **Hardware OPEN:** Auf realem 2020er Tizen 5.5 fokussieren/scrollen, lange Beschreibung und Poster prüfen; auf kleinen TV-Höhen/Overflow und D-Pad-Fokus achten. Weniger Listenhöhe darf die 24h-EPG-Paginierung nicht blockieren.
+
+**S6.11 Metadatenstatus:** native Beschreibung/Poster HARDWARE PASS für einzelne Sendungen; strukturierte Genre/Personen/TVScraper-Daten PARITY OPEN und serverseitiger Public-v1-Wire-Contract notwendig. Keine Browser-privaten Routen und keine erfundenen Meta-Felder.
+
+**Merge-Sperre:** PR #33 bleibt Draft, nicht nach `main` mergen. Kein automatischer DEV-Bootstrap und kein Update der produktiven Samsung-App.
