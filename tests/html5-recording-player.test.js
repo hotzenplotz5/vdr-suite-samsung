@@ -158,3 +158,25 @@ test("S6.2: pause clears buffering timer; resumed playing has a bounded recovery
   clock.flush(20000);
   assert.equal(events.filter(e=>e.s==="error").length,0);
 });
+
+test("S6.2: intentionally paused HTML5 video ignores incidental waiting/stalled events",()=>{
+  const v=fakeVideo(),clock=fakeClock(),events=[],p=createHtml5RecordingPlayer(v,clock);
+  p.start(url,(state,detail)=>events.push({state,detail}));
+  v.oncanplay();v.onplaying();
+  assert.equal(p.pauseOrResume(),"paused");
+  assert.equal(clock.count,0);
+  v.onwaiting();v.onstalled();
+  assert.equal(clock.count,0);
+  assert.equal(events.filter(x=>x.state==="buffering").length,0);
+});
+
+test("S6.2: synchronous HTML5 load error never gets reclassified as preparing",()=>{
+  const v=fakeVideo(),clock=fakeClock(),events=[];
+  v.load=function(){if(this.onerror)this.onerror();};
+  v.error={code:4,message:"private media URL"};
+  const p=createHtml5RecordingPlayer(v,clock);
+  assert.equal(p.start(url,(state,detail)=>events.push({state,detail})),true);
+  assert.deepEqual(events,[{state:"error",detail:{stage:"html5",code:"4"}}]);
+  assert.equal(clock.count,0);
+  assert.doesNotMatch(JSON.stringify(events),/private media URL/);
+});
