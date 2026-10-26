@@ -651,36 +651,80 @@ function boot() {
       liveEpgDetailDescription.textContent="OK: Sendungsinformationen anzeigen.";
       return;
     }
-    if (!/^[A-Za-z0-9._-]{1,128}$/.test(item.eventId || "")) {
-      liveEpgDetailDescription.textContent =
-        "Keine ausführliche Beschreibung abrufbar: Dieser EPG-Eintrag enthält keine bestätigte Event-ID.";
-      return;
-    }
     var backend=liveBackends[liveBackendIndex];
     var channel=selectedLiveChannel;
     if (!backend || !channel || !liveCredential ||
         channel.backendId!==backend.backendId || item.channelId!==channel.channelId)
       return;
-    liveEpgDetailDescription.textContent="Lade Sendungsbeschreibung …";
-    liveDetailMetadata.eventDetail(liveCredential,backend.backendId,
-      channel.channelId,item.eventId,function(result) {
-        if (token!==liveEpgDetailRun || currentView!=="live" ||
-            !selectedLiveChannel ||
-            selectedLiveChannel.channelId!==channel.channelId ||
-            selectedLiveChannel.backendId!==channel.backendId) return;
+    function stillSelected() {
+      return token===liveEpgDetailRun && currentView==="live" &&
+        selectedLiveChannel && selectedLiveChannel.channelId===channel.channelId &&
+        selectedLiveChannel.backendId===channel.backendId;
+    }
+    function loadEventDetail(id) {
+      if (!stillSelected()) return;
+      liveEpgDetailDescription.textContent="Lade Sendungsbeschreibung …";
+      liveDetailMetadata.eventDetail(liveCredential,backend.backendId,
+        channel.channelId,id,function(result) {
+          if (!stillSelected()) return;
+          if (!result.ok) {
+            liveEpgDetailDescription.textContent =
+              "Sendungsdetails: "+mediaMetadataError(result);
+            return;
+          }
+          var info=result.value;
+          // Native IDs can be reused after a cache refresh. Show only the
+          // exact airing that the user selected, never a stale replacement.
+          if (info.startTime!==item.startTime || info.endTime!==item.endTime) {
+            liveEpgDetailDescription.textContent =
+              "Das EPG wurde aktualisiert. Bitte das Programm neu laden.";
+            return;
+          }
+          if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=info.title;
+          if (liveEpgDetailSubtitle) {
+            liveEpgDetailSubtitle.textContent=info.subtitle || "";
+            liveEpgDetailSubtitle.hidden=!info.subtitle;
+          }
+          liveEpgDetailDescription.textContent=info.description ||
+            "Für diese Sendung ist keine ausführliche Beschreibung hinterlegt.";
+        });
+    }
+    if (/^[A-Za-z0-9._:-]{1,160}$/.test(item.eventId || "")) {
+      loadEventDetail(item.eventId);
+      return;
+    }
+    // Public v1 now-next deliberately omits eventId even when the native
+    // EPG source has one. A single authorized window GET can expose a
+    // source-provenanced ID without guessing or using a Browser-only API.
+    var from=Number(item.startTime),until=Number(item.endTime);
+    if (!isFinite(from) || !isFinite(until) || from<1000000000 ||
+        until<=from || until-from>172800) {
+      liveEpgDetailDescription.textContent="Sendezeit nicht für Detailabfrage geeignet.";
+      return;
+    }
+    liveEpgDetailDescription.textContent="Prüfe Event-ID im EPG-Zeitfenster …";
+    liveDetailMetadata.epgWindow(liveCredential,backend.backendId,
+      channel.channelId,from,until,null,function(result) {
+        if (!stillSelected()) return;
         if (!result.ok) {
           liveEpgDetailDescription.textContent =
-            "Sendungsdetails: "+mediaMetadataError(result);
+            "EPG-Zeitfenster: "+mediaMetadataError(result);
           return;
         }
-        var info=result.value;
-        if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=info.title;
-        if (liveEpgDetailSubtitle) {
-          liveEpgDetailSubtitle.textContent=info.subtitle || "";
-          liveEpgDetailSubtitle.hidden=!info.subtitle;
+        var candidates=result.value.items.filter(function(e) {
+          return e.channelId===item.channelId &&
+            e.startTime===item.startTime && e.endTime===item.endTime &&
+            e.title===item.title &&
+            (e.subtitle || "")===(item.subtitle || "") &&
+            e.durationSeconds===item.durationSeconds;
+        });
+        if (result.value.page.hasMore || candidates.length!==1 ||
+            !/^[A-Za-z0-9._:-]{1,160}$/.test(candidates[0].eventId || "")) {
+          liveEpgDetailDescription.textContent =
+            "Die Public-v1-EPG-Antwort liefert keine eindeutig belegte native Event-ID für diese Sendung.";
+          return;
         }
-        liveEpgDetailDescription.textContent=info.description ||
-          "Für diese Sendung ist keine ausführliche Beschreibung hinterlegt.";
+        loadEventDetail(candidates[0].eventId);
       });
   }
   function showEpgRows(rows,append,nowNext) {
