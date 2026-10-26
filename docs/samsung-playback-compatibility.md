@@ -207,3 +207,12 @@ Samsung AVPlay bietet getTotalTrackInfo(), getCurrentStreamInfo() und setSelectT
 - https://developer.samsung.com/smarttv/develop/faq/multimedia.html
 
 Der Samsung-Adapter wählt ausschließlich echte AVPlay-AUDIO-Indices. Metadaten werden begrenzt und nicht roh ausgegeben. Nur AAC mit bekannter, höchstens zweikanaliger Tonspur ist Kandidat für automatische Auswahl bei mehreren Tracks. Keine vermeintliche Erfolgsmeldung, bevor echte Audioausgabe am Samsung gehört wurde.
+
+
+## S6.2 – Player-Zustände und HTML5-MP4-Negativdiagnose
+
+Der Samsung-Client prüft den tatsächlichen HDMI-/Decoder-Erfolg nicht indirekt aus `AVPlay.play()`, sondern betrachtet dessen Rückmeldung ausdrücklich nur als *Play-Aufruf*. HTML5 gilt erst mit `onplaying` als gestartete Videowiedergabe; auch das beweist allein noch keine hörbare Tonausgabe.
+
+Bei der freiwilligen progressiven HTML5-MP4-Probe verhindern zwei begrenzte Watchdogs ein endloses schwarzes Bild ohne Fehlermeldung: 12 Sekunden für den Videostart und 20 Sekunden für eine spätere festhängende Pufferung. Video-`MediaError`-Codes, Ablehnung von `play()` und fehlende Ereignisse werden unterschiedlich erklärt, ohne eine unbewiesene Codec-Ursache zu behaupten. `stop()` entkräftet alte Callback-Generationen und Timer; es gibt weder automatischen Protokoll-/Player-Fallback noch Credential-/Cookie-Logging. Später Session-Stop-Timeout bleibt eine *sekundäre Cleanup-Diagnose*, niemals Ersatz für den primären Videofehler.
+
+**Real TV:** Für S6.0, S6.1 und S6.2 weiterhin offen. Keine Backend-Medienprofil-/Codecänderung ohne tatsächliche Audio- und Playerbefunde.
