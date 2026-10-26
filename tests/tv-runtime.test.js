@@ -473,6 +473,9 @@ function liveTransport() {
   XHR.prototype.setRequestHeader=function(name,value){this.headers[name]=value;};
   XHR.prototype.send=function(body){this.body=body;};
   XHR.prototype.abort=function(){this.aborted=true;};
+  XHR.prototype.getResponseHeader=function(name){
+    return name==="Content-Type" ? (this.mime || null) : null;
+  };
   function reply(i,status,value) {
     calls[i].status=status;calls[i].responseURL=calls[i].url;
     calls[i].responseText=JSON.stringify(value);
@@ -957,17 +960,17 @@ test("S6.6 EPG row OK opens a readable detail, never silently ignores key",()=>{
     endTime:first.endTime,durationSeconds:3600});
   assert.equal(detail["live-epg-detail-description"].textContent,"Ausführlicher Inhalt");
   key(40);key(13);
-  assert.equal(h.calls.length,6,"now-next without native ID requests only a scoped window");
-  assert.match(h.calls[5].url,/\/api\/v1\/epg\/window\?/);
-  const params=new URL(h.calls[5].url).searchParams;
+  assert.equal(h.calls.length,7,"detail response starts image GET before next EPG window");
+  assert.match(h.calls[6].url,/\/api\/v1\/epg\/window\?/);
+  const params=new URL(h.calls[7].url).searchParams;
   assert.equal(params.get("fromTime"),second.startTime);
   assert.equal(params.get("untilTime"),second.endTime);
   assert.match(detail["live-epg-detail-title"].textContent,/heute/);
-  h.reply(5,200,{backendId:"home",channelId:channel.channelId,
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
     items:[{...second,eventId:"13739"}],
     page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
-  assert.equal(h.calls.length,7,"verified ID triggers native detail GET");
-  assert.match(h.calls[6].url,/\/api\/v1\/epg\/event\?/);
+  assert.equal(h.calls.length,8,"verified ID triggers native detail GET");
+  assert.match(h.calls[7].url,/\/api\/v1\/epg\/event\?/);
   assert.equal(new URL(h.calls[6].url).searchParams.get("eventId"),"13739");
   h.reply(6,200,{backendId:"home",channelId:channel.channelId,
     eventId:"13739",title:"heute",subtitle:"",
