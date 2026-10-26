@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"3fc8cee7c40e","label":"Samsung v0.1.0 · S5.1 · b3fc8cee7c40e"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"27f50ad0f5e2","label":"Samsung v0.1.0 · S5.1 · b27f50ad0f5e2"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -2302,6 +2302,13 @@
               "Der Server hat kein progressives MP4 ausgewählt. Bitte eine passende Aufnahme wählen.");
             return;
           }
+          if (mode === "avplay" && !result.nativeCookie) {
+            stopRecordingPlayback("failure");
+            recordingStatus("error","Nativer Medienzugang fehlt",
+              "Backend liefert noch keinen Device-MediaSession-Cookie. " +
+              "Server- und Samsung-Version prüfen.");
+            return;
+          }
           recordingPlayerMode = mode;
           if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
           if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
@@ -2341,9 +2348,9 @@
               stopRecordingPlayback("finished");
               recordingStatus("ready","Aufnahme beendet",rec.title);
             }
-          });
+          },mode === "avplay" ? result.nativeCookie : null);
           if (!started && recordingPlaybackSession) stopRecordingPlayback();
-        });
+        },mode === "avplay");
     }
   
     function fetchRecordingFolderPage(run, folderId, offset) {
