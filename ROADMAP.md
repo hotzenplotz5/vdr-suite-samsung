@@ -200,7 +200,7 @@ Backend- und Samsung-Hardware-Abnahme offen.
 
 ## S6.15 – Erweiterte Samsung-Tasten (26.10.2026)
 
-**Realer Samsung GU43TU6979UXZG, Nutzerbefund:** Rot/Grün/Gelb/Blau, PLAY/PAUSE/STOP, OK, D-Pad und Return reagieren am Gerät. Ziffern, TTX/MIX, PreCH, CH+/CH−, Settings, Info, Rewind und FastForward sind noch nicht nutzbar.
+**Realer Samsung GU43TU6979UXZG, ursprünglicher Nutzerbefund vor S6.15:** Rot/Grün/Gelb/Blau, PLAY/PAUSE/STOP, OK, D-Pad und Return reagierten; Ziffern, TTX/MIX, PreCH, CH+/CH−, Settings, Info, Rewind und FastForward noch nicht. **Nach S6.15 ausdrücklich korrigiert:** Die neu erweiterten Tasten einschließlich INFO funktionieren laut Nutzer; **SETTINGS bleibt die Ausnahme**. Kein nachgewiesener TV-Test der S6.16-IME-Korrektur, da DEV-Dateitransfer noch nicht bestätigt ist.
 
 **GitHub-Implementierung:** `app/src/platform/keys.js` registriert weitere Gerätetasten nur soweit vom Tizen-TV unterstützt; Fehler einer einzelnen Taste blockieren keine andere. `app/src/navigation/remote.js` kennt nun Samsungs dokumentierte Keycodes. CH+/CH− navigiert ausschließlich innerhalb der geladenen Senderliste, Ziffern fokussieren Treffer in der bereits geladenen Senderseite, Menu öffnet die VDR-Suite-Einstellungen. INFO/PreCH/Tools/Teletext werden erkannt, ohne ungesicherte Zusatzfunktionen aufzurufen. Rewind/FastForward werden im Player erkannt, aber **Seek bleibt deaktiviert**, bis AVPlay/MediaSession sicher funktioniert. Keine Änderung an API, Grants oder Datenbank.
 
