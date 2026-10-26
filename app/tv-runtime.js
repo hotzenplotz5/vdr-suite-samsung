@@ -4,41 +4,47 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"e82a6907c4c2","label":"Samsung v0.1.0 · S6.4 · be82a6907c4c2"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"1d382274e9af","label":"Samsung v0.1.0 · S6.4 · b1d382274e9af"});
 
   // BEGIN app/src/navigation/remote.js
-  // Samsung key events normalized once, before views consume them.
+  // Normalize Samsung Tizen remote events exactly once for the client.
   const KEY_CODES = Object.freeze({
-    37: "LEFT", 38: "UP", 39: "RIGHT", 40: "DOWN",
-    13: "OK", 8: "BACK", 27: "BACK", 10009: "BACK",
-    415: "PLAY", 19: "PAUSE", 10252: "PLAY_PAUSE", 413: "STOP",
-    403: "RED", 404: "GREEN", 405: "YELLOW", 406: "BLUE"
+    37:"LEFT",38:"UP",39:"RIGHT",40:"DOWN",13:"OK",
+    8:"BACK",27:"BACK",10009:"BACK",
+    48:"DIGIT_0",49:"DIGIT_1",50:"DIGIT_2",51:"DIGIT_3",52:"DIGIT_4",
+    53:"DIGIT_5",54:"DIGIT_6",55:"DIGIT_7",56:"DIGIT_8",57:"DIGIT_9",
+    415:"PLAY",19:"PAUSE",10252:"PLAY_PAUSE",413:"STOP",
+    412:"REWIND",417:"FAST_FORWARD",10232:"TRACK_PREVIOUS",10233:"TRACK_NEXT",
+    403:"RED",404:"GREEN",405:"YELLOW",406:"BLUE",
+    427:"CHANNEL_UP",428:"CHANNEL_DOWN",10190:"PREVIOUS_CHANNEL",
+    457:"INFO",18:"SETTINGS",10135:"TOOLS",10200:"TELETEXT"
   });
-  
   const NAMED_KEYS = Object.freeze({
-    ArrowLeft: "LEFT", ArrowUp: "UP", ArrowRight: "RIGHT", ArrowDown: "DOWN",
-    Enter: "OK", Escape: "BACK", Backspace: "BACK", BrowserBack: "BACK",
-    MediaPlay: "PLAY", MediaPause: "PAUSE", MediaPlayPause: "PLAY_PAUSE", MediaStop: "STOP",
-    ColorF0Red: "RED", ColorF1Green: "GREEN",
-    ColorF2Yellow: "YELLOW", ColorF3Blue: "BLUE"
+    ArrowLeft:"LEFT",ArrowUp:"UP",ArrowRight:"RIGHT",ArrowDown:"DOWN",
+    Enter:"OK",Escape:"BACK",Backspace:"BACK",BrowserBack:"BACK",
+    MediaPlay:"PLAY",MediaPause:"PAUSE",MediaPlayPause:"PLAY_PAUSE",MediaStop:"STOP",
+    MediaRewind:"REWIND",MediaFastForward:"FAST_FORWARD",
+    MediaTrackPrevious:"TRACK_PREVIOUS",MediaTrackNext:"TRACK_NEXT",
+    ColorF0Red:"RED",ColorF1Green:"GREEN",ColorF2Yellow:"YELLOW",ColorF3Blue:"BLUE",
+    ChannelUp:"CHANNEL_UP",ChannelDown:"CHANNEL_DOWN",PreviousChannel:"PREVIOUS_CHANNEL",
+    Info:"INFO",Menu:"SETTINGS",Tools:"TOOLS",Teletext:"TELETEXT"
   });
-  
   function normalizeRemoteKey(event) {
     if (!event) return null;
-    if (typeof event.key === "string" && NAMED_KEYS[event.key]) {
-      return NAMED_KEYS[event.key];
+    if (typeof event.key === "string") {
+      if (/^[0-9]$/.test(event.key)) return "DIGIT_" + event.key;
+      if (NAMED_KEYS[event.key]) return NAMED_KEYS[event.key];
     }
     return KEY_CODES[event.keyCode || event.which] || null;
   }
-  
-  // Route input only while a recording player owns the remote. Never move menu focus.
   function playbackRemoteAction(key) {
     if (key === "STOP" || key === "BACK") return "stop";
     if (key === "PLAY") return "play";
     if (key === "PAUSE") return "pause";
     if (key === "PLAY_PAUSE" || key === "OK") return "toggle";
-    // Explicit, user-initiated audio track inspection/selection during AVPlay.
     if (key === "BLUE") return "audio";
+    if (key === "REWIND") return "rewind";
+    if (key === "FAST_FORWARD") return "fastforward";
     return null;
   }
   // END app/src/navigation/remote.js
@@ -106,27 +112,34 @@
   // END app/src/platform/capabilities.js
 
   // BEGIN app/src/platform/keys.js
+  // Optional Tizen remote keys need tv.inputdevice in the installed host manifest.
   const OPTIONAL_KEYS = [
     "MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
-    "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue"
+    "MediaRewind", "MediaFastForward", "MediaTrackPrevious", "MediaTrackNext",
+    "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue",
+    "ChannelUp", "ChannelDown", "PreviousChannel",
+    "Info", "Menu", "Tools", "Teletext",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
   ];
-  
-  // Directions, Enter and Back are normally delivered without explicit registration.
+  // D-pad, Enter and Back are mandatory and must not be registered.
   function registerOptionalKeys(globals) {
     const api = globals && globals.tizen && globals.tizen.tvinputdevice;
-    if (!api) return { supported: false, registered: [] };
-    const registered = [];
-    if (typeof api.registerKey === "function") {
-      for (let i = 0; i < OPTIONAL_KEYS.length; i += 1) {
-        try {
-          api.registerKey(OPTIONAL_KEYS[i]);
-          registered.push(OPTIONAL_KEYS[i]);
-        } catch (_) {
-          // Some remote keys are not available on every Samsung TV.
-        }
-      }
+    if (!api || typeof api.registerKey !== "function")
+      return { supported: false, registered: [], unavailable: [], failed: [] };
+    const registered = [], unavailable = [], failed = [];
+    let available = null;
+    if (typeof api.getSupportedKeys === "function") {
+      try {
+        const keys = api.getSupportedKeys();
+        if (Array.isArray(keys)) available = new Set(keys.filter(k => k && typeof k.name === "string").map(k => k.name));
+      } catch (_) { /* Discovery is optional; try individual registrations. */ }
     }
-    return { supported: true, registered: registered };
+    for (const name of OPTIONAL_KEYS) {
+      if (available && !available.has(name)) { unavailable.push(name); continue; }
+      try { api.registerKey(name); registered.push(name); }
+      catch (_) { failed.push(name); }
+    }
+    return { supported: true, registered, unavailable, failed };
   }
   // END app/src/platform/keys.js
 
@@ -2052,6 +2065,8 @@
     var rowMemory = {};
     var previewStates = {};
     var editingServerAddress = false;
+    var remoteChannelDigits = "";
+    var remoteLastDigitAt = 0;
     var testingConnection = false;
     var discovery = createDiscoveryClient(window);
     var pairingClient = createPairingClient(window);
@@ -3937,6 +3952,14 @@
     var remoteSummary = missingRemote.length ?
       "Zusatz-Tasten nicht registriert: "+missingRemote.join(", ") :
       "PLAY/PAUSE/STOP/BLAU registriert (Empfang am TV noch prüfen)";
+    var extraKeys = ["MediaRewind","MediaFastForward","ChannelUp","ChannelDown",
+      "PreviousChannel","Info","Menu","Tools","Teletext",
+      "0","1","2","3","4","5","6","7","8","9"];
+    var activeExtra = extraKeys.filter(function(name) {
+      return optionalRemote.registered.indexOf(name)>=0;
+    });
+    remoteSummary += " · Weitere "+activeExtra.length+"/"+extraKeys.length+
+      " registriert (Empfang am TV prüfen)";
     document.getElementById("remote-status").textContent =
       caps.tvInputDevice ? remoteSummary : "TV-Eingabegerät nicht verfügbar";
     if (serverInput) {
@@ -4008,6 +4031,11 @@
         if (event.repeat && action) return;
         if (action === "stop") {
           stopRecordingPlayback("user"); return;
+        }
+        if (action === "rewind" || action === "fastforward") {
+          if (recordingRemoteHint) recordingRemoteHint.textContent =
+            "Fernbedienung · "+key+" erkannt · Spulen noch nicht freigeschaltet";
+          return; // No blind seek on a stalled/unverified AVPlay media stream.
         }
         if (action === "audio") {
           if (recordingPlayerMode !== "avplay") {
@@ -4091,6 +4119,43 @@
             " (Code "+(event.keyCode || event.which || "?")+")"+
             " · keine Wiedergabeaktion";
         return; // no focus movement under native full-screen player
+      }
+      if (key === "SETTINGS") {
+        navigateTo("settings","nav-settings");
+        return;
+      }
+      if (currentView === "live" && (key === "CHANNEL_UP" || key === "CHANNEL_DOWN")) {
+        if (!liveFocusIds.length) {
+          message.textContent = "CH+/CH− erkannt · zuerst Sender laden"; return;
+        }
+        var cursor = liveFocusIds.indexOf(focusedId);
+        var next = cursor<0 ? (key==="CHANNEL_UP" ? liveFocusIds.length-1 : 0) :
+          Math.max(0,Math.min(liveFocusIds.length-1,
+            cursor+(key==="CHANNEL_UP" ? -1 : 1)));
+        setFocus(liveFocusIds[next]);
+        return; // Only visible catalog entries; never auto-tune.
+      }
+      if (currentView === "live" && /^DIGIT_[0-9]$/.test(key)) {
+        var now = Date.now();
+        if (now-remoteLastDigitAt>1800) remoteChannelDigits="";
+        remoteChannelDigits=(remoteChannelDigits+key.slice(6)).slice(-5);
+        remoteLastDigitAt=now;
+        var matched=-1;
+        for (var ci=0;ci<liveCurrentChannels.length;ci++) {
+          if (String(liveCurrentChannels[ci].channelNumber)===
+              String(Number(remoteChannelDigits))) { matched=ci; break; }
+        }
+        if (matched>=0 && liveFocusIds[matched]) setFocus(liveFocusIds[matched]);
+        message.textContent="Sendernummer "+remoteChannelDigits+
+          (matched>=0 ? " · Sender fokussiert (OK zeigt EPG)" :
+            " · nur bereits geladene Katalogseite");
+        return;
+      }
+      if (key==="INFO") {
+        message.textContent="INFO erkannt · EPG-Details über OK öffnen"; return;
+      }
+      if (key==="PREVIOUS_CHANNEL" || key==="TELETEXT" || key==="TOOLS") {
+        message.textContent=key+" erkannt · Funktion noch nicht implementiert"; return;
       }
       if (currentView==="live" && liveEpgScrollActions &&
           !liveEpgScrollActions.hidden && liveEpgFocusIds.length) {
