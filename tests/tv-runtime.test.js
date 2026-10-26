@@ -901,6 +901,6 @@ test("S6.4 recording metadata normalizes VDR epoch dates and pipe genres",()=>{
     contentKind:"movie",genreText:"[Western|Drama]",overview:"Eine Geschichte"}});
   assert.match(sim.recordingDetailInfo.textContent,/Genre: Western · Drama/);
   assert.match(sim.recordingDetailInfo.textContent,/Aufgenommen: \d{2}\.\d{2}\.\d{4}/);
-  assert.doesNotMatch(sim.recordingDetailInfo.textContent,/1790837880|\\[Western|Drama\\]/);
+  assert.doesNotMatch(sim.recordingDetailInfo.textContent,/1790837880|\[Western\|Drama\]/);
 });
 

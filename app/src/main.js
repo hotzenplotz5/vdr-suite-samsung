@@ -939,14 +939,14 @@ function boot() {
       if (meta.episodeNumber!==undefined) episode.push("Folge "+meta.episodeNumber);
       if (episode.length) fields.push(episode.join(" · "));
       if (meta.genreText) {
-        var genres=meta.genreText.replace(/^\\[|\\]$/g,"").split("|").filter(function(x){return !!x;});
+        var genres=meta.genreText.replace(/^\[|\]$/g,"").split("|").filter(function(x){return !!x;});
         fields.push("Genre: "+genres.join(" · ").slice(0,180));
       }
       if (meta.releaseDate) fields.push("Erscheinung: "+meta.releaseDate.slice(0,64));
       if (item.recordedAt) {
         var rawDate=item.recordedAt;
-        var value=/^\\d{10}$/.test(rawDate) ? new Date(Number(rawDate)*1000) :
-          /^\\d{13}$/.test(rawDate) ? new Date(Number(rawDate)) : new Date(rawDate);
+        var value=/^\d{10}$/.test(rawDate) ? new Date(Number(rawDate)*1000) :
+          /^\d{13}$/.test(rawDate) ? new Date(Number(rawDate)) : new Date(rawDate);
         var readable=isFinite(value.getTime()) ?
           value.toLocaleDateString("de-DE",{year:"numeric",month:"2-digit",day:"2-digit"})+
           " · "+value.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) :
