@@ -350,3 +350,14 @@ Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-Err
 | AVPlay-Ton | FAIL – S6.1 | Zwei Video-Aufnahmen ohne Audio; kein Backend-Transcode auf Verdacht |
 
 **Hardware-Testgrenze:** Nach CI und bewusst ausgeführtem isoliertem DEV-Watch-Update am bereits installierten separaten Paket; kein `Run Project`, kein `wits --start`, keine Änderung am Originalpaket oder installierten Backend.
+
+
+## S6.1 – Samsung AVPlay Audio-Track-Triage (26.10.2026; SOURCE, HARDWARE OFFEN)
+
+**Ausgangslage auf echter Tizen-5.5-Hardware:** Zwei abgeschlossene VDR-Aufnahmen haben über AVPlay Bild, aber keinen Ton. TV-Lautstärke funktioniert. Mehrere HTML5-MP4-Versuche blieben schwarz. Das bleibt Audio FAIL bis zu einem bestätigten neuen TV-Test.
+
+**Source-Grenze:** getState() muss PLAYING melden. Dann höchstens 32 native AUDIO-Tracks über getTotalTrackInfo() und die Auswahl über getCurrentStreamInfo() auslesen; aus extra_info ausschließlich sanitisierten Audio-Codec (bekannte Allowlist), Sprache aus 2–3 Buchstaben, 1–16 Kanäle und bounded numerische Indexwerte übernehmen. Niemals rohe extra_info, URLs, Tokens oder Medien-Cookies anzeigen. Wenn mehrere Tracks gemeldet werden, ein nachgewiesener AAC-Stereo-Track existiert und die aktuelle Auswahl nicht bereits AAC-Stereo ist, darf setSelectTrack("AUDIO", index) auf dessen tatsächlich gelieferten Index zugreifen. Eine erfolgreiche API-Auswahl ist noch kein hörbarer Ton. Ungültige Zustände oder API-Ausnahmen blockieren die Videowiedergabe nicht.
+
+**Einziger Hardware-Gate:** Die bereits installierte, separat gekoppelte VDR-Suite DEV über den bekannten WITs-Watch-Prozess aktualisieren (ohne wits --start, Run Project, Uninstall oder Re-Pairing). Auf einer vorhandenen abgeschlossenen Aufnahme die neue Zeile `Audio · ...` ablesen, hörbaren Ton beurteilen, PAUSE/OK/STOP/BACK aus S6.0 mit prüfen. Bei fehlendem Ton den angezeigten Spur-/Codec-/Auswahlstatus notieren; erst danach Backend-Medienprofil untersuchen. Auf dem TV nichts als PASS markieren, bevor es tatsächlich beobachtet wurde.
+
+**PASS:** Bild und hörbarer Filmton sowie sauberer Rücksprung. Allein erkannte oder ausgewählte Tonspur genügt nicht.
