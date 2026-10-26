@@ -127,6 +127,27 @@ export function createPublicMediaMetadata(environment) {
          next!==cursor) : next===null;
     },done);
   }
+  // Native EPG event detail is a separate read: no guessed cache keys,
+  // no timer mutation and no request without a proven source eventId.
+  function eventDetail(cred,bid,cid,eid,done) {
+    if (!backend(bid) || !channel(cid) ||
+        typeof eid!=="string" || !/^[A-Za-z0-9._-]{1,128}$/.test(eid)) {
+      done({ok:false,kind:"bad_request"});return;
+    }
+    var path="/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
+      "&channelId="+encodeURIComponent(cid)+"&eventId="+encodeURIComponent(eid);
+    request(cred,path,false,function(data) {
+      return data && data.backendId===bid && data.channelId===cid &&
+        data.eventId===eid && typeof data.title==="string" &&
+        data.title.length>0 && data.title.length<=512 &&
+        typeof data.subtitle==="string" && data.subtitle.length<=512 &&
+        typeof data.description==="string" && data.description.length<=1536 &&
+        typeof data.startTime==="string" && /^\\d{10,12}$/.test(data.startTime) &&
+        typeof data.endTime==="string" && /^\\d{10,12}$/.test(data.endTime) &&
+        Number(data.endTime)>Number(data.startTime) &&
+        Number.isInteger(data.durationSeconds) && data.durationSeconds>=0;
+    },done);
+  }
   function recordingDetail(cred,bid,rid,done) {
     if (!backend(bid) || !recording(rid)) {
       done({ok:false,kind:"bad_request"});return;
@@ -178,7 +199,7 @@ export function createPublicMediaMetadata(environment) {
         return !!(data && data.bytes && data.contentType);
       },done);
   }
-  return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,
+  return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,eventDetail:eventDetail,
     recordingDetail:recordingDetail,artworkList:artworkList,artworkBytes:artworkBytes};
 }
 
