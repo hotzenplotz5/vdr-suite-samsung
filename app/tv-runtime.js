@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.3","build":"9e2a0e630d15","label":"Samsung v0.1.0 · S6.3 · b9e2a0e630d15"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"d04bdc499548","label":"Samsung v0.1.0 · S6.4 · bd04bdc499548"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1020,6 +1020,209 @@
   }
   // END app/src/api/recording-catalog.js
 
+  // BEGIN app/src/api/media-metadata.js
+  // Public API v1 metadata reads for the Samsung Device client.
+  // All calls use an explicit Device credential and backend-scoped grants.
+  // Never follow response-provided image URLs, redirects or native paths.
+  function createPublicMediaMetadata(environment) {
+    var env=environment || {};
+    var pending=null, generation=0;
+    function cancel() {
+      generation++;
+      if (pending && typeof pending.abort==="function") {
+        try {pending.abort();} catch (_) {}
+      }
+      pending=null;
+    }
+    function backend(id) {return typeof id==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(id);}
+    function channel(id) {return typeof id==="string" && /^[A-Za-z0-9._-]{1,256}$/.test(id);}
+    function recording(id) {return typeof id==="string" && /^rec_[0-9a-f]{32}$/.test(id);}
+    function artworkId(id) {return typeof id==="string" && /^[0-9a-f]{32}$/.test(id);}
+    function epoch(value) {return Number.isInteger(value) && value>=1000000000 && value<=999999999999;}
+    function credentials(cred) {
+      return cred && typeof cred.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(cred.base) &&
+        typeof cred.credentialId==="string" &&
+        /^[A-Za-z0-9._-]{1,128}$/.test(cred.credentialId) &&
+        typeof cred.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(cred.credentialSecret);
+    }
+    function request(cred,path,binary,validate,done) {
+      if (!credentials(cred) || typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"unavailable"});return;
+      }
+      cancel();
+      var token=generation;
+      var xhr=new env.XMLHttpRequest(),ended=false;
+      pending=xhr;
+      var url=cred.base.replace(/\/$/,"")+path;
+      function finish(result) {
+        if (ended || token!==generation) return;
+        ended=true;pending=null;done(result);
+      }
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=8000;
+        xhr.withCredentials=false;
+        if (binary) xhr.responseType="arraybuffer";
+        xhr.setRequestHeader("Accept",binary?"image/jpeg, image/png, image/webp":"application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          cred.credentialId+"."+cred.credentialSecret);
+        xhr.onload=function() {
+          if (xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if (xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var data;
+          if (binary) {
+            var mime=typeof xhr.getResponseHeader==="function" ?
+              (xhr.getResponseHeader("Content-Type")||"").split(";")[0].trim().toLowerCase() : "";
+            var bytes=xhr.response;
+            if (!/^(image\/jpeg|image\/png|image\/webp)$/.test(mime) ||
+                !bytes || typeof bytes.byteLength!=="number" ||
+                bytes.byteLength<1 || bytes.byteLength>2*1024*1024) {
+              finish({ok:false,kind:"response"});return;
+            }
+            data={bytes:bytes,contentType:mime};
+          } else {
+            try {data=JSON.parse(xhr.responseText);}
+            catch (_) {finish({ok:false,kind:"response"});return;}
+          }
+          if (!validate(data)) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:data});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      } catch (_) {finish({ok:false,kind:"network"});}
+    }
+    function validEvent(item,ch) {
+      if (!item || item.channelId!==ch || typeof item.title!=="string" ||
+          item.title.length>4096 || (item.subtitle!==undefined &&
+          (typeof item.subtitle!=="string" || item.subtitle.length>4096)) ||
+          typeof item.startTime!=="string" || !/^\d{10,12}$/.test(item.startTime) ||
+          typeof item.endTime!=="string" || !/^\d{10,12}$/.test(item.endTime) ||
+          Number(item.endTime)<=Number(item.startTime) ||
+          !Number.isInteger(item.durationSeconds) || item.durationSeconds<0) return false;
+      return item.eventId===undefined ||
+        (typeof item.eventId==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(item.eventId));
+    }
+    function nowNext(cred,bid,cid,from,done) {
+      if (!backend(bid) || !channel(cid) || !epoch(from)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path="/api/v1/epg/now-next?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&fromTime="+from+"&limit=2";
+      request(cred,path,false,function(data) {
+        return data && data.backendId===bid && data.channelId===cid &&
+          Array.isArray(data.items) && data.items.length<=2 &&
+          data.items.every(function(e){return validEvent(e,cid);}) &&
+          data.page && data.page.limit===2 && data.page.hasMore===false &&
+          data.meta && data.meta.partial===false;
+      },done);
+    }
+    function epgWindow(cred,bid,cid,from,until,cursor,done) {
+      if (!backend(bid) || !channel(cid) || !epoch(from) || !epoch(until) ||
+          until<=from || until-from>172800 ||
+          (cursor!==null && cursor!==undefined &&
+           (typeof cursor!=="string" || !/^[A-Za-z0-9._~-]{1,4096}$/.test(cursor)))) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path="/api/v1/epg/window?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&fromTime="+from+
+        "&untilTime="+until+"&limit=24";
+      if(cursor)path+="&cursor="+encodeURIComponent(cursor);
+      request(cred,path,false,function(data) {
+        if (!data || data.backendId!==bid || data.channelId!==cid ||
+            !Array.isArray(data.items) || data.items.length>24 ||
+            !data.items.every(function(e){return validEvent(e,cid);}) ||
+            !data.page || data.page.limit!==24 ||
+            typeof data.page.hasMore!=="boolean" || !data.meta ||
+            data.meta.partial!==false) return false;
+        var next=data.page.nextCursor;
+        return data.page.hasMore ?
+          (typeof next==="string" && /^[A-Za-z0-9._~-]{1,4096}$/.test(next) &&
+           next!==cursor) : next===null;
+      },done);
+    }
+    function recordingDetail(cred,bid,rid,done) {
+      if (!backend(bid) || !recording(rid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      request(cred,"/api/v1/recordings/"+rid+"?backendId="+encodeURIComponent(bid),
+        false,function(data) {
+          if (!data || data.backendId!==bid || data.recordingId!==rid ||
+              typeof data.title!=="string" || data.title.length>4096 ||
+              typeof data.description!=="string" || data.description.length>65536 ||
+              typeof data.recordedAt!=="string" || data.recordedAt.length>64 ||
+              !Number.isInteger(data.durationSeconds) || data.durationSeconds<0 ||
+              typeof data.durationKnown!=="boolean" ||
+              typeof data.sizeMb!=="number" || !isFinite(data.sizeMb) || data.sizeMb<0) return false;
+          var meta=data.metadata;
+          if (!meta || ["absent","partial","available"].indexOf(meta.state)<0 ||
+              ["none","restfulapi-scraper-bridge","manual"].indexOf(meta.source)<0 ||
+              ["unknown","movie","series","series-episode"].indexOf(meta.contentKind)<0) return false;
+          var fields=["subtitle","seriesTitle","episodeTitle","genreText","overview","releaseDate","epgTitle","tagline"];
+          return fields.every(function(field){return meta[field]===undefined ||
+            (typeof meta[field]==="string" && meta[field].length<=16384);}) &&
+            ["seasonNumber","episodeNumber"].every(function(field){return meta[field]===undefined ||
+              (Number.isInteger(meta[field]) && meta[field]>=0 && meta[field]<=99999);});
+        },done);
+    }
+    function artworkList(cred,bid,rid,done) {
+      if (!backend(bid) || !recording(rid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      request(cred,"/api/v1/recordings/"+rid+"/artwork?backendId="+encodeURIComponent(bid),
+        false,function(data){
+          return data && data.backendId===bid && data.recordingId===rid &&
+            Array.isArray(data.items) && data.items.length<=32 &&
+            data.items.every(function(item){
+              return item && artworkId(item.artworkId) &&
+                ["poster","fanart","banner","still"].indexOf(item.kind)>=0 &&
+                (item.width===undefined ||
+                 (Number.isInteger(item.width)&&item.width>0&&item.width<=16384)) &&
+                (item.height===undefined ||
+                 (Number.isInteger(item.height)&&item.height>0&&item.height<=16384));
+            });
+        },done);
+    }
+    function artworkBytes(cred,bid,rid,aid,done) {
+      if (!backend(bid) || !recording(rid) || !artworkId(aid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      request(cred,"/api/v1/recordings/"+rid+"/artwork/"+aid+
+        "?backendId="+encodeURIComponent(bid),true,function(data){
+          return !!(data && data.bytes && data.contentType);
+        },done);
+    }
+    return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,
+      recordingDetail:recordingDetail,artworkList:artworkList,artworkBytes:artworkBytes};
+  }
+  
+  function mediaMetadataError(result) {
+    if (!result) return "Metadaten nicht verfügbar.";
+    if (result.kind==="http") {
+      if (result.status===400) return "Anfrage nicht kompatibel mit dem Serververtrag (HTTP 400).";
+      if (result.status===401) return "Geräteanmeldung abgewiesen.";
+      if (result.status===403) return "Berechtigung fehlt: epg.view bzw. recordings.view.";
+      if (result.status===404) return "EPG-Eintrag, Aufnahme oder Funktion auf diesem Server nicht vorhanden.";
+      if (result.status===409) return "EPG-Zeitfenster hat sich geändert; bitte neu laden.";
+      if (result.status===503) return "Backend oder Metadaten-Cache derzeit nicht verfügbar.";
+      return "Public-v1-Metadaten HTTP "+result.status+".";
+    }
+    if (result.kind==="timeout") return "Metadaten-Zeitüberschreitung.";
+    if (result.kind==="network") return "Metadaten: Netzwerk/TLS/CORS-Fehler.";
+    if (result.kind==="response") return "Antwort verletzt den Public-v1-Metadatenvertrag.";
+    return "Metadatenanfrage nicht möglich.";
+  }
+  // END app/src/api/media-metadata.js
+
   // BEGIN app/src/api/recording-playback.js
   // S5.1 experimental Device-owned Recording playback. No Browser/private API.
   function validId(value,prefix) {
@@ -1671,9 +1874,13 @@
     var vault = createDeviceVault(window);
     var channelCatalog = createChannelCatalog(window);
     var recordingCatalog = createRecordingCatalog(window);
+    var liveMetadata = createPublicMediaMetadata(window);
+    var recordingMetadata = createPublicMediaMetadata(window);
     var recordingPlaybackClient = createRecordingPlaybackClient(window);
     var recordingPlayer = createSamsungRecordingPlayer(window);
     var recordingSelected = null;
+    var recordingDetailRun = 0;
+    var recordingPosterUrl = null;
     var recordingPlayBusy = false;
     var recordingTeardownBusy = false;
     var recordingPlaybackSession = null;
@@ -1714,6 +1921,9 @@
     var liveRows = 0;
     var liveFocusIds = [];
     var liveCurrentChannels = [];
+    var selectedLiveChannel = null;
+    var liveEpgRun = 0;
+    var liveWindow = null;
     var pairingRequest = null;
     var pairingBase = null;
     var pairingApproved = false;
@@ -1731,8 +1941,12 @@
     var pairingCode = document.getElementById("pairing-user-code");
     var liveList = document.getElementById("live-channel-list");
     var liveBackendName = document.getElementById("live-backend-name");
+    var liveEpgStatus = document.getElementById("live-epg-status");
+    var liveEpgList = document.getElementById("live-epg-list");
     var recordingList = document.getElementById("recording-list");
     var recordingBackendName = document.getElementById("recording-backend-name");
+    var recordingDetailInfo = document.getElementById("recording-detail-info");
+    var recordingPoster = document.getElementById("recording-detail-poster");
     var serverInput = document.getElementById("suite-base-input");
     var serverTest = document.getElementById("settings-test-button");
     var connectionResult = document.getElementById("suite-connection-result");
@@ -1757,7 +1971,8 @@
       if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
       if (currentView === "live") {
         var liveFocusRows = [NAV_ROW,
-          ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
+          ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
+         "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
         liveFocusIds.forEach(function (id) { liveFocusRows.push([id]); });
         return liveFocusRows;
       }
@@ -2184,6 +2399,88 @@
       if (skeleton) skeleton.hidden = state !== "loading";
     }
   
+    function clearLiveEpg() {
+      liveMetadata.cancel();
+      liveEpgRun += 1;
+      selectedLiveChannel = null;
+      liveWindow = null;
+      if (liveEpgStatus) liveEpgStatus.textContent =
+        "EPG: Sender mit OK auswählen. epg.view ist erforderlich.";
+      if (liveEpgList) {liveEpgList.textContent = "";liveEpgList.hidden = true;}
+    }
+    function epgRow(item) {
+      var start = new Date(Number(item.startTime)*1000);
+      var time = isFinite(start.getTime()) ?
+        start.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+      return time + " · " + item.title +
+        (item.subtitle ? " · " + item.subtitle : "");
+    }
+    function showEpgRows(rows,append) {
+      if (!liveEpgList) return;
+      if (!append) liveEpgList.textContent = "";
+      rows.forEach(function(item){
+        var node = document.createElement("li");
+        node.textContent = epgRow(item).slice(0,550);
+        liveEpgList.appendChild(node);
+      });
+      liveEpgList.hidden = !liveEpgList.children.length;
+    }
+    function loadSelectedEpg(action) {
+      if (!selectedLiveChannel || !liveCredential || !liveBackends.length) {
+        if (liveEpgStatus) liveEpgStatus.textContent =
+          "Zuerst einen geladenen Sender mit OK auswählen.";
+        return;
+      }
+      var backendId = liveBackends[liveBackendIndex].backendId;
+      var channelId = selectedLiveChannel.channelId;
+      if (selectedLiveChannel.backendId !== backendId) return;
+      var token = ++liveEpgRun;
+      if (action === "now") {
+        liveWindow = null;
+        if (liveEpgStatus) liveEpgStatus.textContent = "EPG Jetzt/Nächste wird geladen …";
+        liveMetadata.nowNext(liveCredential,backendId,channelId,
+          Math.floor(Date.now()/1000),function(result){
+            if (token!==liveEpgRun || currentView!=="live") return;
+            if (!result.ok) {
+              if (liveEpgStatus) liveEpgStatus.textContent =
+                "EPG Jetzt/Nächste: " + mediaMetadataError(result);
+              showEpgRows([],false);return;
+            }
+            showEpgRows(result.value.items,false);
+            if (liveEpgStatus) liveEpgStatus.textContent = result.value.items.length ?
+              "EPG Jetzt/Nächste · "+result.value.items.length+" Einträge" :
+              "EPG-Cache enthält keine passenden Sendungen.";
+          });
+        return;
+      }
+      if (action==="more" && (!liveWindow || !liveWindow.cursor)) {
+        if (liveEpgStatus) liveEpgStatus.textContent = "Keine weitere EPG-Seite.";
+        return;
+      }
+      var previous = action==="more" ? liveWindow.cursor : null;
+      if (action!=="more") {
+        var from=Math.floor(Date.now()/1000);
+        liveWindow={from:from,until:from+86400,cursor:null};
+        showEpgRows([],false);
+      }
+      var scope = liveWindow;
+      if (liveEpgStatus) liveEpgStatus.textContent = "24-Stunden-EPG wird geladen …";
+      liveMetadata.epgWindow(liveCredential,backendId,channelId,
+        scope.from,scope.until,previous,function(result){
+          if (token!==liveEpgRun || currentView!=="live" || liveWindow!==scope) return;
+          if (!result.ok) {
+            if (liveEpgStatus) liveEpgStatus.textContent =
+              "EPG-Zeitfenster: "+mediaMetadataError(result);
+            return;
+          }
+          showEpgRows(result.value.items,!!previous);
+          scope.cursor = result.value.page.hasMore ?
+            result.value.page.nextCursor : null;
+          if (liveEpgStatus) liveEpgStatus.textContent =
+            "24-Stunden-Programm · "+(scope.cursor ?
+              "Weitere Sendungen verfügbar" : "Ende des Zeitfensters");
+        });
+    }
     function clearLiveRows() {
       if (currentView === "live" && liveFocusIds.indexOf(focusedId) >= 0)
         setFocus("detail-live-preview");
@@ -2195,6 +2492,7 @@
       });
       liveFocusIds = [];
       liveCurrentChannels = [];
+      clearLiveEpg();
       liveRows = 0;
       // Drop stale dynamic channel-row memories, but preserve the user's last
       // focus on the static Live action row (e.g. Sender laden).
@@ -2202,7 +2500,8 @@
         var lastAction = rowMemory.live[1];
         rowMemory.live = {};
         if (["detail-live-home","detail-live-preview","detail-live-more",
-             "detail-live-backend"].indexOf(lastAction) !== -1)
+             "detail-live-backend","detail-live-epg-now","detail-live-epg-window",
+             "detail-live-epg-more"].indexOf(lastAction) !== -1)
           rowMemory.live[1] = lastAction;
       }
       if (liveList) {
@@ -2379,7 +2678,91 @@
       if (skeleton) skeleton.hidden = state !== "loading";
     }
   
+    function clearRecordingPoster() {
+      if (recordingPoster) {
+        recordingPoster.hidden=true;
+        recordingPoster.removeAttribute("src");
+      }
+      if (recordingPosterUrl && window.URL &&
+          typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(recordingPosterUrl);
+      recordingPosterUrl=null;
+    }
+    function fetchRecordingDetails(recording) {
+      recordingMetadata.cancel();
+      clearRecordingPoster();
+      var token=++recordingDetailRun;
+      var credential=recordingCredential;
+      var backend=recordingBackends[recordingBackendIndex];
+      if (!credential || !backend || !recording || !recording.recordingId) return;
+      var backendId=backend.backendId,recId=recording.recordingId;
+      if (recordingDetailInfo) recordingDetailInfo.textContent =
+        "Aufnahmedetails werden geladen …";
+      function current() {
+        return token===recordingDetailRun && currentView==="recordings" &&
+          recordingSelected && recordingSelected.recordingId===recId &&
+          recordingBackends[recordingBackendIndex] &&
+          recordingBackends[recordingBackendIndex].backendId===backendId;
+      }
+      recordingMetadata.recordingDetail(credential,backendId,recId,function(detail){
+        if (!current()) return;
+        if (!detail.ok) {
+          if (recordingDetailInfo) recordingDetailInfo.textContent =
+            "Aufnahmedetails: "+mediaMetadataError(detail);
+          return;
+        }
+        var item=detail.value,meta=item.metadata,fields=[];
+        fields.push(meta.contentKind==="series-episode" ? "Serienepisode" :
+          meta.contentKind==="series" ? "Serie" :
+          meta.contentKind==="movie" ? "Film" : "Aufnahme");
+        if (meta.seriesTitle) fields.push(meta.seriesTitle.slice(0,120));
+        if (meta.episodeTitle) fields.push(meta.episodeTitle.slice(0,120));
+        if (meta.subtitle && !meta.episodeTitle) fields.push(meta.subtitle.slice(0,120));
+        if (meta.seasonNumber!==undefined) fields.push("Staffel "+meta.seasonNumber);
+        if (meta.episodeNumber!==undefined) fields.push("Folge "+meta.episodeNumber);
+        if (meta.genreText) fields.push(meta.genreText.slice(0,90));
+        if (meta.overview) fields.push(meta.overview.slice(0,250));
+        if (meta.state==="absent") fields.push("Keine erweiterten Metadaten");
+        if (recordingDetailInfo) recordingDetailInfo.textContent=fields.join(" · ");
+        recordingMetadata.artworkList(credential,backendId,recId,function(art){
+          if (!current()) return;
+          if (!art.ok) {
+            if (recordingDetailInfo) recordingDetailInfo.textContent +=
+              " · Artwork: "+mediaMetadataError(art);
+            return;
+          }
+          var list=art.value.items;
+          if (!list.length) {
+            if (recordingDetailInfo) recordingDetailInfo.textContent+=" · Kein Artwork";
+            return;
+          }
+          if (recordingDetailInfo)
+            recordingDetailInfo.textContent+=" · "+list.length+" Artwork-Referenz(en)";
+          var poster=list.filter(function(x){return x.kind==="poster";})[0];
+          if (!poster || !recordingPoster || !window.Blob || !window.URL ||
+              typeof window.URL.createObjectURL!=="function") return;
+          recordingMetadata.artworkBytes(credential,backendId,recId,
+            poster.artworkId,function(img){
+              if (!current() || !img.ok) return;
+              // Authenticated image bytes only; never use server-returned URLs.
+              try {
+                var objectUrl=window.URL.createObjectURL(
+                  new window.Blob([img.value.bytes],{type:img.value.contentType}));
+                clearRecordingPoster();
+                recordingPosterUrl=objectUrl;
+                recordingPoster.src=objectUrl;
+                recordingPoster.hidden=false;
+              } catch (_) {clearRecordingPoster();}
+            });
+        });
+      });
+    }
     function clearRecordingRows() {
+      recordingMetadata.cancel();
+      recordingDetailRun += 1;
+      clearRecordingPoster();
+      if (recordingDetailInfo) recordingDetailInfo.textContent =
+        "Aufnahme mit OK auswählen, um Metadaten und Artwork anzufordern.";
       recordingSelected = null;
       if (recordingFocusIds.indexOf(focusedId) >= 0 &&
           currentView === "recordings")
@@ -2846,12 +3229,16 @@
     function showView(view) {
       if (ROUTES.indexOf(view) < 0) return false;
       if (currentView === "live" && view !== "live") {
+        clearLiveEpg();
         // In-flight responses cannot update a hidden view after navigation.
         liveRun += 1;
         liveBusy = false;
         channelCatalog.cancel();
       }
       if (currentView === "recordings" && view !== "recordings") {
+        recordingMetadata.cancel();
+        recordingDetailRun+=1;
+        clearRecordingPoster();
         if (recordingPlaybackSession || recordingPlayBusy) stopRecordingPlayback();
         recordingRun += 1;
         recordingBusy = false;
@@ -2998,6 +3385,8 @@
         }
         return;
       }
+      var epgAction = item.getAttribute("data-live-epg-action");
+      if (epgAction) {loadSelectedEpg(epgAction);return;}
       var liveAction = item.getAttribute("data-live-action");
       if (liveAction) {
         loadLiveChannels(liveAction);
@@ -3007,6 +3396,13 @@
       if (channelIndex !== null && currentView === "live") {
         var selected = liveCurrentChannels[Number(channelIndex)];
         if (selected) {
+          liveMetadata.cancel();
+          liveEpgRun+=1;
+          liveWindow=null;
+          selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId};
+          if (liveEpgList) {liveEpgList.textContent="";liveEpgList.hidden=true;}
+          if (liveEpgStatus) liveEpgStatus.textContent =
+            "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";
           liveStatus("ready", String(selected.channelNumber) + " · " + selected.name,
             "Sender ausgewählt · Live-Stream wird nicht automatisch gestartet. " +
             "Dafür sind media.live.play und ein bestätigter Device-Medienpfad erforderlich.");
@@ -3023,6 +3419,7 @@
         var chosen = recordingCurrentPageItems[Number(recordingIndex)];
         if (chosen) {
           recordingSelected = chosen;
+          fetchRecordingDetails(chosen);
           recordingStatus("ready", chosen.title || "Aufnahme",
             (chosen.description ? chosen.description.slice(0, 240) :
              "Aufnahme aus dem VDR-Katalog.") +
