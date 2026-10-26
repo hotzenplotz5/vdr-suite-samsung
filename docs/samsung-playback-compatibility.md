@@ -166,3 +166,34 @@ eingesetzten FFmpeg-Profile global ändern.
 5. **PASS erst bei wirklichem Vollbild plus Bild/Ton und sauberem STOP.**
 
 Eine Quelltest-Suite oder grüner GitHub-PR beweist keinen Hardware-PASS.
+
+## S5.4 – Einheitlicher nativer Device-Medienzugriff (Backend-Vertrag)
+
+Dies ist **kein Samsung-Spezial-Login**: Jeder authentifizierte Public-v1-Device-
+Client kann beim existierenden Recording-MediaSession-CREATE optional
+`"nativeMediaAccess": true` übergeben. Erst nach `media.recording.play`-
+Grant, Aufnahme-Admisson, echter Medienprofilauswahl und Session-Aktivierung
+liefert der Server das Feld
+`nativeMediaAccess: {"transport":"http-cookie","cookie":"vdr_suite_media=<SESSION-BEARER>"}`.
+Das ist der bereits für die konkrete Sitzung ausgestellte MediaGateway-Bearer
+**nicht** das Geräteanmelde-Credential und **keine** Medien-URL mit Token.
+Normale Browser-Requests bekommen das Feld nicht; das bisherige HttpOnly-Cookie
+bleibt unverändert. Der Zugriff endet bei Session-Stop/Widerruf/Expiry.
+
+Samsung AVPlay kann diesen Cookie per dokumentiertem
+`setStreamingProperty("COOKIE", cookie)` aus dem IDLE-Zustand vor
+`prepareAsync()` senden. Andere native Player können denselben Cookie als
+normalen HTTP-Request-Cookie nutzen. In keinem Fall werden dieser Cookie,
+Geräte-Credentials oder Medien-URLs protokolliert, persistiert oder in
+Fehlermeldungen dargestellt. Wenn das Backend noch keinen nativen
+Medienzugang anbietet, **kein** ungeschützter Fallback und keine Neu-Kopplung.
+
+**Reihenfolge:** Zuerst Backend-Kandidat sicher ausrollen und produktiven
+MediaSession-Contract verifizieren, danach **separates ausdrückliches**
+TV-Update-Gate mit gesicherter Kopplung. Das Play-Feature bleibt auf dem
+Samsung GU43TU6979UXZG **hardware-unbestätigt** bis AVPlay tatsächlich
+Bild/Ton bei MP4/TS/HLS wiedergibt. Die 2020er Codec-Grenzen sind eigenständig.
+
+Quellen:
+- [Samsung AVPlay COOKIE](https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html)
+- [VDR-Suite allgemeiner Device-Medienvertrag](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-device-recording-playback.md)
