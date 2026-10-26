@@ -150,6 +150,9 @@ export function createSamsungRecordingPlayer(environment) {
   var api = environment && environment.webapis && environment.webapis.avplay;
   var generation = 0;
   var active = false;
+  // Some 2020 AVPlay implementations report PLAYING transiently after pause().
+  // Remember the last explicit pause command, not a guessed decoder result.
+  var pauseRequested = false;
   function available() {
     return !!(api && typeof api.open === "function" &&
       typeof api.prepareAsync === "function" && typeof api.play === "function");
@@ -157,6 +160,7 @@ export function createSamsungRecordingPlayer(environment) {
   function stop() {
     generation += 1;
     active = false;
+    pauseRequested = false;
     if (!api) return;
     try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
     try { if (typeof api.close === "function") api.close(); } catch (_) {}
@@ -232,19 +236,29 @@ export function createSamsungRecordingPlayer(environment) {
     try {
       var state=typeof api.getState==="function" ? api.getState() : "";
       if (state==="PLAYING") {
+        if (pauseRequested) {
+          // getState() can lag the previous pause request. A second OK must
+          // request resume, not repeat pause and leave video frozen.
+          if (intent==="pause") return "already_paused";
+          api.play();pauseRequested=false;
+          return "resume_requested";
+        }
         if (intent==="play") return "already_playing";
         if (typeof api.pause!=="function") return "unavailable";
-        api.pause();return "paused";
+        api.pause();pauseRequested=true;
+        return "paused";
       }
       if (state==="PAUSED") {
         if (intent==="pause") return "already_paused";
-        api.play();
+        api.play();pauseRequested=false;
         // AVPlay.play() from PAUSED requests resume. It is not evidence of
-        // progressing frames or an audible decoder; do not claim hardware PASS.
+        // progressing frames or audible output; do not claim hardware PASS.
         return "resume_requested";
       }
-      if (state==="READY" && intent==="play") {
-        api.play();return "resume_requested";
+      if (state==="READY" && (intent==="play" ||
+          (intent==="toggle" && pauseRequested))) {
+        api.play();pauseRequested=false;
+        return "resume_requested";
       }
     } catch (_) {return "error";}
     return "unavailable";

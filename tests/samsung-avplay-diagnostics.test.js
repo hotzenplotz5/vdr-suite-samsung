@@ -207,3 +207,22 @@ test("S6.5: explicit BLUE-key audio switch uses only AVPlay-reported safe track 
   player.stop();
   assert.equal(player.cycleAudioTrack().status,"not_playing");
 });
+
+
+test("S6.5: a lagging PLAYING state after pause does not freeze second OK",()=>{
+  let ready,state="IDLE";const requests=[];
+  const api={open(){},close(){},stop(){},prepareAsync(fn){ready=fn;},
+    play(){requests.push("play");},pause(){requests.push("pause");},
+    getState(){return state;}};
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  player.start(url,()=>{});state="PLAYING";ready();
+  // Simulate Tizen reporting stale PLAYING after pause() returned.
+  assert.equal(player.pauseOrResume("toggle"),"paused");
+  assert.equal(player.pauseOrResume("pause"),"already_paused");
+  assert.equal(player.pauseOrResume("toggle"),"resume_requested");
+  assert.deepEqual(requests,["play","pause","play"]);
+  // It must now act on fresh PLAYING, not retain the old pause intention.
+  assert.equal(player.pauseOrResume("play"),"already_playing");
+  player.stop();
+  assert.equal(player.pauseOrResume("toggle"),"unavailable");
+});

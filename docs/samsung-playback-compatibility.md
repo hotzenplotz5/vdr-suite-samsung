@@ -249,3 +249,12 @@ insbesondere Filmfortschritt nach Resume. Pausieren kann bei abgelaufenen
 MediaSessions/AVPlay-Decoder- oder Netzwerkproblemen weiterhin blockieren;
 erst konkrete TV-/Serverbeobachtungen unterscheiden das. Bestehende
 DEV-Kopplung und Produktionsapp unverändert, kein Backend-Update auf Verdacht.
+
+
+**Zusätzliche Source-Absicherung gegen festhängende OK-Taste:** Der AVPlay-
+Adapter merkt sich eine erfolgreich angeforderte Pause. Falls Tizen direkt
+danach bei `getState()` noch kurz `PLAYING` meldet, fordert der nächste
+OK- oder PLAY-Druck ausdrücklich `play()` statt einer zweiten Pause an.
+Ein separater PAUSE-Druck bleibt idempotent. Die Absicht wird bei STOP,
+neuer Session und Fortsetzungsanforderung zurückgesetzt. Dies ist kein
+Beweis, dass Decoder, Stream oder MediaSession danach Fortschritt liefern.
