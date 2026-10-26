@@ -11,6 +11,7 @@ import { createDeviceVault } from "./platform/device-vault.js";
 import { restoreVerifiedSessionCredential } from "./platform/device-recovery.js";
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
+import { createPublicMediaMetadata, mediaMetadataError } from "./api/media-metadata.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
 import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis, describeSamsungAudio } from "./platform/recording-player.js";
@@ -47,9 +48,13 @@ function boot() {
   var vault = createDeviceVault(window);
   var channelCatalog = createChannelCatalog(window);
   var recordingCatalog = createRecordingCatalog(window);
+  var liveMetadata = createPublicMediaMetadata(window);
+  var recordingMetadata = createPublicMediaMetadata(window);
   var recordingPlaybackClient = createRecordingPlaybackClient(window);
   var recordingPlayer = createSamsungRecordingPlayer(window);
   var recordingSelected = null;
+  var recordingDetailRun = 0;
+  var recordingPosterUrl = null;
   var recordingPlayBusy = false;
   var recordingTeardownBusy = false;
   var recordingPlaybackSession = null;
@@ -90,6 +95,9 @@ function boot() {
   var liveRows = 0;
   var liveFocusIds = [];
   var liveCurrentChannels = [];
+  var selectedLiveChannel = null;
+  var liveEpgRun = 0;
+  var liveWindow = null;
   var pairingRequest = null;
   var pairingBase = null;
   var pairingApproved = false;
@@ -107,8 +115,12 @@ function boot() {
   var pairingCode = document.getElementById("pairing-user-code");
   var liveList = document.getElementById("live-channel-list");
   var liveBackendName = document.getElementById("live-backend-name");
+  var liveEpgStatus = document.getElementById("live-epg-status");
+  var liveEpgList = document.getElementById("live-epg-list");
   var recordingList = document.getElementById("recording-list");
   var recordingBackendName = document.getElementById("recording-backend-name");
+  var recordingDetailInfo = document.getElementById("recording-detail-info");
+  var recordingPoster = document.getElementById("recording-detail-poster");
   var serverInput = document.getElementById("suite-base-input");
   var serverTest = document.getElementById("settings-test-button");
   var connectionResult = document.getElementById("suite-connection-result");
@@ -133,7 +145,8 @@ function boot() {
     if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
     if (currentView === "live") {
       var liveFocusRows = [NAV_ROW,
-        ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
+        ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
+       "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
       liveFocusIds.forEach(function (id) { liveFocusRows.push([id]); });
       return liveFocusRows;
     }
@@ -560,6 +573,88 @@ function boot() {
     if (skeleton) skeleton.hidden = state !== "loading";
   }
 
+  function clearLiveEpg() {
+    liveMetadata.cancel();
+    liveEpgRun += 1;
+    selectedLiveChannel = null;
+    liveWindow = null;
+    if (liveEpgStatus) liveEpgStatus.textContent =
+      "EPG: Sender mit OK auswählen. epg.view ist erforderlich.";
+    if (liveEpgList) {liveEpgList.textContent = "";liveEpgList.hidden = true;}
+  }
+  function epgRow(item) {
+    var start = new Date(Number(item.startTime)*1000);
+    var time = isFinite(start.getTime()) ?
+      start.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+    return time + " · " + item.title +
+      (item.subtitle ? " · " + item.subtitle : "");
+  }
+  function showEpgRows(rows,append) {
+    if (!liveEpgList) return;
+    if (!append) liveEpgList.textContent = "";
+    rows.forEach(function(item){
+      var node = document.createElement("li");
+      node.textContent = epgRow(item).slice(0,550);
+      liveEpgList.appendChild(node);
+    });
+    liveEpgList.hidden = !liveEpgList.children.length;
+  }
+  function loadSelectedEpg(action) {
+    if (!selectedLiveChannel || !liveCredential || !liveBackends.length) {
+      if (liveEpgStatus) liveEpgStatus.textContent =
+        "Zuerst einen geladenen Sender mit OK auswählen.";
+      return;
+    }
+    var backendId = liveBackends[liveBackendIndex].backendId;
+    var channelId = selectedLiveChannel.channelId;
+    if (selectedLiveChannel.backendId !== backendId) return;
+    var token = ++liveEpgRun;
+    if (action === "now") {
+      liveWindow = null;
+      if (liveEpgStatus) liveEpgStatus.textContent = "EPG Jetzt/Nächste wird geladen …";
+      liveMetadata.nowNext(liveCredential,backendId,channelId,
+        Math.floor(Date.now()/1000),function(result){
+          if (token!==liveEpgRun || currentView!=="live") return;
+          if (!result.ok) {
+            if (liveEpgStatus) liveEpgStatus.textContent =
+              "EPG Jetzt/Nächste: " + mediaMetadataError(result);
+            showEpgRows([],false);return;
+          }
+          showEpgRows(result.value.items,false);
+          if (liveEpgStatus) liveEpgStatus.textContent = result.value.items.length ?
+            "EPG Jetzt/Nächste · "+result.value.items.length+" Einträge" :
+            "EPG-Cache enthält keine passenden Sendungen.";
+        });
+      return;
+    }
+    if (action==="more" && (!liveWindow || !liveWindow.cursor)) {
+      if (liveEpgStatus) liveEpgStatus.textContent = "Keine weitere EPG-Seite.";
+      return;
+    }
+    var previous = action==="more" ? liveWindow.cursor : null;
+    if (action!=="more") {
+      var from=Math.floor(Date.now()/1000);
+      liveWindow={from:from,until:from+86400,cursor:null};
+      showEpgRows([],false);
+    }
+    var scope = liveWindow;
+    if (liveEpgStatus) liveEpgStatus.textContent = "24-Stunden-EPG wird geladen …";
+    liveMetadata.epgWindow(liveCredential,backendId,channelId,
+      scope.from,scope.until,previous,function(result){
+        if (token!==liveEpgRun || currentView!=="live" || liveWindow!==scope) return;
+        if (!result.ok) {
+          if (liveEpgStatus) liveEpgStatus.textContent =
+            "EPG-Zeitfenster: "+mediaMetadataError(result);
+          return;
+        }
+        showEpgRows(result.value.items,!!previous);
+        scope.cursor = result.value.page.hasMore ?
+          result.value.page.nextCursor : null;
+        if (liveEpgStatus) liveEpgStatus.textContent =
+          "24-Stunden-Programm · "+(scope.cursor ?
+            "Weitere Sendungen verfügbar" : "Ende des Zeitfensters");
+      });
+  }
   function clearLiveRows() {
     if (currentView === "live" && liveFocusIds.indexOf(focusedId) >= 0)
       setFocus("detail-live-preview");
@@ -571,6 +666,7 @@ function boot() {
     });
     liveFocusIds = [];
     liveCurrentChannels = [];
+    clearLiveEpg();
     liveRows = 0;
     // Drop stale dynamic channel-row memories, but preserve the user's last
     // focus on the static Live action row (e.g. Sender laden).
@@ -578,7 +674,8 @@ function boot() {
       var lastAction = rowMemory.live[1];
       rowMemory.live = {};
       if (["detail-live-home","detail-live-preview","detail-live-more",
-           "detail-live-backend"].indexOf(lastAction) !== -1)
+           "detail-live-backend","detail-live-epg-now","detail-live-epg-window",
+           "detail-live-epg-more"].indexOf(lastAction) !== -1)
         rowMemory.live[1] = lastAction;
     }
     if (liveList) {
@@ -755,7 +852,91 @@ function boot() {
     if (skeleton) skeleton.hidden = state !== "loading";
   }
 
+  function clearRecordingPoster() {
+    if (recordingPoster) {
+      recordingPoster.hidden=true;
+      recordingPoster.removeAttribute("src");
+    }
+    if (recordingPosterUrl && window.URL &&
+        typeof window.URL.revokeObjectURL==="function")
+      window.URL.revokeObjectURL(recordingPosterUrl);
+    recordingPosterUrl=null;
+  }
+  function fetchRecordingDetails(recording) {
+    recordingMetadata.cancel();
+    clearRecordingPoster();
+    var token=++recordingDetailRun;
+    var credential=recordingCredential;
+    var backend=recordingBackends[recordingBackendIndex];
+    if (!credential || !backend || !recording || !recording.recordingId) return;
+    var backendId=backend.backendId,recId=recording.recordingId;
+    if (recordingDetailInfo) recordingDetailInfo.textContent =
+      "Aufnahmedetails werden geladen …";
+    function current() {
+      return token===recordingDetailRun && currentView==="recordings" &&
+        recordingSelected && recordingSelected.recordingId===recId &&
+        recordingBackends[recordingBackendIndex] &&
+        recordingBackends[recordingBackendIndex].backendId===backendId;
+    }
+    recordingMetadata.recordingDetail(credential,backendId,recId,function(detail){
+      if (!current()) return;
+      if (!detail.ok) {
+        if (recordingDetailInfo) recordingDetailInfo.textContent =
+          "Aufnahmedetails: "+mediaMetadataError(detail);
+        return;
+      }
+      var item=detail.value,meta=item.metadata,fields=[];
+      fields.push(meta.contentKind==="series-episode" ? "Serienepisode" :
+        meta.contentKind==="series" ? "Serie" :
+        meta.contentKind==="movie" ? "Film" : "Aufnahme");
+      if (meta.seriesTitle) fields.push(meta.seriesTitle.slice(0,120));
+      if (meta.episodeTitle) fields.push(meta.episodeTitle.slice(0,120));
+      if (meta.subtitle && !meta.episodeTitle) fields.push(meta.subtitle.slice(0,120));
+      if (meta.seasonNumber!==undefined) fields.push("Staffel "+meta.seasonNumber);
+      if (meta.episodeNumber!==undefined) fields.push("Folge "+meta.episodeNumber);
+      if (meta.genreText) fields.push(meta.genreText.slice(0,90));
+      if (meta.overview) fields.push(meta.overview.slice(0,250));
+      if (meta.state==="absent") fields.push("Keine erweiterten Metadaten");
+      if (recordingDetailInfo) recordingDetailInfo.textContent=fields.join(" · ");
+      recordingMetadata.artworkList(credential,backendId,recId,function(art){
+        if (!current()) return;
+        if (!art.ok) {
+          if (recordingDetailInfo) recordingDetailInfo.textContent +=
+            " · Artwork: "+mediaMetadataError(art);
+          return;
+        }
+        var list=art.value.items;
+        if (!list.length) {
+          if (recordingDetailInfo) recordingDetailInfo.textContent+=" · Kein Artwork";
+          return;
+        }
+        if (recordingDetailInfo)
+          recordingDetailInfo.textContent+=" · "+list.length+" Artwork-Referenz(en)";
+        var poster=list.filter(function(x){return x.kind==="poster";})[0];
+        if (!poster || !recordingPoster || !window.Blob || !window.URL ||
+            typeof window.URL.createObjectURL!=="function") return;
+        recordingMetadata.artworkBytes(credential,backendId,recId,
+          poster.artworkId,function(img){
+            if (!current() || !img.ok) return;
+            // Authenticated image bytes only; never use server-returned URLs.
+            try {
+              var objectUrl=window.URL.createObjectURL(
+                new window.Blob([img.value.bytes],{type:img.value.contentType}));
+              clearRecordingPoster();
+              recordingPosterUrl=objectUrl;
+              recordingPoster.src=objectUrl;
+              recordingPoster.hidden=false;
+            } catch (_) {clearRecordingPoster();}
+          });
+      });
+    });
+  }
   function clearRecordingRows() {
+    recordingMetadata.cancel();
+    recordingDetailRun += 1;
+    clearRecordingPoster();
+    if (recordingDetailInfo) recordingDetailInfo.textContent =
+      "Aufnahme mit OK auswählen, um Metadaten und Artwork anzufordern.";
     recordingSelected = null;
     if (recordingFocusIds.indexOf(focusedId) >= 0 &&
         currentView === "recordings")
@@ -1222,12 +1403,16 @@ function boot() {
   function showView(view) {
     if (ROUTES.indexOf(view) < 0) return false;
     if (currentView === "live" && view !== "live") {
+      clearLiveEpg();
       // In-flight responses cannot update a hidden view after navigation.
       liveRun += 1;
       liveBusy = false;
       channelCatalog.cancel();
     }
     if (currentView === "recordings" && view !== "recordings") {
+      recordingMetadata.cancel();
+      recordingDetailRun+=1;
+      clearRecordingPoster();
       if (recordingPlaybackSession || recordingPlayBusy) stopRecordingPlayback();
       recordingRun += 1;
       recordingBusy = false;
@@ -1374,6 +1559,8 @@ function boot() {
       }
       return;
     }
+    var epgAction = item.getAttribute("data-live-epg-action");
+    if (epgAction) {loadSelectedEpg(epgAction);return;}
     var liveAction = item.getAttribute("data-live-action");
     if (liveAction) {
       loadLiveChannels(liveAction);
@@ -1383,6 +1570,13 @@ function boot() {
     if (channelIndex !== null && currentView === "live") {
       var selected = liveCurrentChannels[Number(channelIndex)];
       if (selected) {
+        liveMetadata.cancel();
+        liveEpgRun+=1;
+        liveWindow=null;
+        selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId};
+        if (liveEpgList) {liveEpgList.textContent="";liveEpgList.hidden=true;}
+        if (liveEpgStatus) liveEpgStatus.textContent =
+          "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";
         liveStatus("ready", String(selected.channelNumber) + " · " + selected.name,
           "Sender ausgewählt · Live-Stream wird nicht automatisch gestartet. " +
           "Dafür sind media.live.play und ein bestätigter Device-Medienpfad erforderlich.");
@@ -1399,6 +1593,7 @@ function boot() {
       var chosen = recordingCurrentPageItems[Number(recordingIndex)];
       if (chosen) {
         recordingSelected = chosen;
+        fetchRecordingDetails(chosen);
         recordingStatus("ready", chosen.title || "Aufnahme",
           (chosen.description ? chosen.description.slice(0, 240) :
            "Aufnahme aus dem VDR-Katalog.") +
