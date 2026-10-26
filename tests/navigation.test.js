@@ -37,11 +37,14 @@ test("Optional Samsung keys tolerate unsupported individual keys", () => {
     got.push(key);
   }}}});
   assert.equal(result.supported, true);
-  assert.equal(result.registered.length, 7);
+  assert.ok(result.registered.length > 7, "expanded optional key set registered");
+  assert.deepEqual(result.failed, ["ColorF0Red"]);
   assert.ok(result.registered.includes("MediaPlayPause"));
   assert.ok(result.registered.includes("MediaStop"));
   assert.deepEqual(got, result.registered);
-  assert.deepEqual(registerOptionalKeys({}), { supported: false, registered: [] });
+  assert.deepEqual(registerOptionalKeys({}), {
+    supported: false, registered: [], unavailable: [], failed: []
+  });
 });
 
 test("S6.0: playback owns OK, combined PlayPause, Play, Pause, STOP and Back", () => {
