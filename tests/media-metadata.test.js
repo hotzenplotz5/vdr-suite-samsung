@@ -170,3 +170,21 @@ test("S6.6 EPG OK resolves native event details over protected Public v1",()=>{
   assert.equal(out.kind,"bad_request");
   assert.equal(h.calls.length,2);
 });
+
+test("S6.7 EPG source event IDs accept backend-compatible colon syntax",()=>{
+ const h=mock(),client=createPublicMediaMetadata(h.env);let out;
+ const nativeId="native-event:1234";
+ client.epgWindow(credential,"home",cid,from,until,null,r=>out=r);
+ h.reply(0,200,{backendId:"home",channelId:cid,
+   items:[{...event,eventId:nativeId}],
+   page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+ assert.equal(out.ok,true);
+ assert.equal(out.value.items[0].eventId,nativeId);
+ client.eventDetail(credential,"home",cid,nativeId,r=>out=r);
+ assert.equal(new URL(h.calls[1].url).searchParams.get("eventId"),nativeId);
+ h.reply(1,200,{backendId:"home",channelId:cid,eventId:nativeId,
+   title:"Heute",subtitle:"",description:"Native Detailinformation",
+   startTime:String(from),endTime:String(from+3600),durationSeconds:3600});
+ assert.equal(out.ok,true);
+ assert.equal(out.value.description,"Native Detailinformation");
+});
