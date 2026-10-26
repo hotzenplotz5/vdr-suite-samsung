@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.2","build":"5957f1452f49","label":"Samsung v0.1.0 · S6.2 · b5957f1452f49"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.2","build":"8428b2adc1da","label":"Samsung v0.1.0 · S6.2 · b8428b2adc1da"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1536,7 +1536,7 @@
       function buffering() {
         if (token!==generation || phase==="failed" || phase==="finished" ||
             phase==="stopped") return;
-        if (phase==="preparing") return; // startup watchdog already runs
+        if (phase==="preparing" || phase==="paused") return; // startup or intentional pause
         phase="buffering";
         onState("buffering");
         armWatchdog(token,20000,"stall_timeout",onState);
@@ -1567,6 +1567,7 @@
       try {
         video.src=mediaUrl;
         video.load();
+        if (phase==="failed") return true; // synchronous media error keeps precedence
         onState("preparing");
         // Catches the real-device black-screen case where neither canplay nor
         // error is emitted; does not assert that the codec is the root cause.
