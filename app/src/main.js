@@ -94,6 +94,7 @@ function boot() {
   var liveRun = 0;
   var liveRows = 0;
   var liveFocusIds = [];
+  var liveEpgFocusIds = [];
   var liveCurrentChannels = [];
   var selectedLiveChannel = null;
   var liveEpgRun = 0;
@@ -147,7 +148,13 @@ function boot() {
       var liveFocusRows = [NAV_ROW,
         ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
        "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
-      liveFocusIds.forEach(function (id) { liveFocusRows.push([id]); });
+      var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
+      for (var i=0;i<count;i++) {
+        var cells=[];
+        if (liveFocusIds[i]) cells.push(liveFocusIds[i]);
+        if (liveEpgFocusIds[i]) cells.push(liveEpgFocusIds[i]);
+        if (cells.length) liveFocusRows.push(cells);
+      }
       return liveFocusRows;
     }
     if (currentView === "recordings") {
@@ -573,8 +580,20 @@ function boot() {
     if (skeleton) skeleton.hidden = state !== "loading";
   }
 
+  function clearEpgFocusRows() {
+    if (currentView==="live" && liveEpgFocusIds.indexOf(focusedId)>=0)
+      setFocus("detail-live-epg-now");
+    liveEpgFocusIds.forEach(function(id) {
+      var element=controls[id];
+      delete controls[id];
+      var index=items.indexOf(element);
+      if (index!==-1) items.splice(index,1);
+    });
+    liveEpgFocusIds=[];
+  }
   function clearLiveEpg() {
     liveMetadata.cancel();
+    clearEpgFocusRows();
     liveEpgRun += 1;
     selectedLiveChannel = null;
     liveWindow = null;
@@ -595,11 +614,25 @@ function boot() {
   }
   function showEpgRows(rows,append,nowNext) {
     if (!liveEpgList) return;
-    if (!append) liveEpgList.textContent="";
+    if (!append) {
+      clearEpgFocusRows();
+      liveEpgList.textContent="";
+    }
     rows.forEach(function(item,index){
+      var eventIndex=liveEpgFocusIds.length;
+      var id="live-epg-row-"+eventIndex;
       var node=document.createElement("li");
+      node.className="live-epg-event tv-focusable";
+      node.tabIndex=-1;
+      node.setAttribute("role","button");
+      node.setAttribute("data-focus-id",id);
+      node.setAttribute("aria-label",epgRow(item,index,!!nowNext).slice(0,400));
       node.textContent=epgRow(item,index,!!nowNext).slice(0,550);
+      controls[id]=node;
+      items.push(node);
+      liveEpgFocusIds.push(id);
       liveEpgList.appendChild(node);
+      node.addEventListener("click",function(){setFocus(id);});
     });
     liveEpgList.hidden=!liveEpgList.children.length;
     if (!append) liveEpgList.scrollTop=0;
@@ -905,9 +938,21 @@ function boot() {
       if (meta.seasonNumber!==undefined) episode.push("Staffel "+meta.seasonNumber);
       if (meta.episodeNumber!==undefined) episode.push("Folge "+meta.episodeNumber);
       if (episode.length) fields.push(episode.join(" · "));
-      if (meta.genreText) fields.push("Genre: "+meta.genreText.slice(0,180));
+      if (meta.genreText) {
+        var genres=meta.genreText.replace(/^\\[|\\]$/g,"").split("|").filter(function(x){return !!x;});
+        fields.push("Genre: "+genres.join(" · ").slice(0,180));
+      }
       if (meta.releaseDate) fields.push("Erscheinung: "+meta.releaseDate.slice(0,64));
-      if (item.recordedAt) fields.push("Aufgenommen: "+item.recordedAt.replace("T"," ").slice(0,19));
+      if (item.recordedAt) {
+        var rawDate=item.recordedAt;
+        var value=/^\\d{10}$/.test(rawDate) ? new Date(Number(rawDate)*1000) :
+          /^\\d{13}$/.test(rawDate) ? new Date(Number(rawDate)) : new Date(rawDate);
+        var readable=isFinite(value.getTime()) ?
+          value.toLocaleDateString("de-DE",{year:"numeric",month:"2-digit",day:"2-digit"})+
+          " · "+value.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) :
+          rawDate.replace("T"," ").slice(0,32);
+        fields.push("Aufgenommen: "+readable);
+      }
       if (item.durationKnown) fields.push("Laufzeit: "+Math.round(item.durationSeconds/60)+" Min.");
       if (meta.tagline) fields.push(meta.tagline.slice(0,220));
       if (meta.overview) fields.push("Inhalt: "+meta.overview.slice(0,1800));
@@ -1591,6 +1636,7 @@ function boot() {
         liveEpgRun+=1;
         liveWindow=null;
         selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId};
+        clearEpgFocusRows();
         if (liveEpgList) {liveEpgList.textContent="";liveEpgList.hidden=true;}
         if (liveEpgStatus) liveEpgStatus.textContent =
           "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";

@@ -97,32 +97,11 @@
         </section>
       </section>
 
-      <section class="page detail-page" data-panel="live" hidden>
+      <section class="page detail-page live-tv-page" data-panel="live" hidden>
         <span class="detail-eyebrow">LIVE-TV · ECHTE SENDER</span>
         <h1>Deine Sender.</h1>
-        <p>Senderdaten aus deinem freigegebenen VDR-Backend. Wiedergabe folgt später.</p>
-        <div class="detail-grid">
-          <div class="detail-art detail-art-live" aria-hidden="true">
-            <span class="detail-art-kicker">IMMER ALLES IM BLICK</span>
-            <span class="detail-art-motif">◉</span>
-            <strong>Sender & Programm</strong>
-            <span>VDR-Suite Samsung</span>
-          </div>
-          <section class="detail-status-card" id="detail-state-live" data-state="offline" aria-label="Bereichsstatus">
-            <span class="detail-status-label" id="detail-state-badge-live">OFFLINE</span>
-            <strong id="detail-state-title-live">Noch keine Serververbindung</strong>
-            <p id="detail-state-description-live">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
-            <div class="detail-skeleton" id="detail-state-skeleton-live" hidden aria-hidden="true">
-              <i></i><i></i><i></i>
-            </div>
-            <span class="detail-status-hint">Kein automatischer Abruf · keine Wiedergabe</span>
-          <section class="live-epg" aria-label="EPG-Programm des ausgewählten Senders">
-            <p id="live-epg-status" aria-live="polite">EPG: Sender mit OK auswählen. epg.view ist erforderlich.</p>
-            <ul id="live-epg-list" class="live-epg-events" hidden></ul>
-          </section>
-          </section>
-        </div>
-        <div class="detail-actions">
+        <p>VDR-Senderreihenfolge links · aktuelles Programm und 24-Stunden-EPG rechts.</p>
+        <div class="detail-actions live-actions">
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-home" data-target-view="home">Zurück zu Home</button>
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-preview" data-live-action="load">Sender laden</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-more" data-live-action="more">Mehr Sender</button>
@@ -131,9 +110,22 @@
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-window" data-live-epg-action="window">Programm 24h</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-more" data-live-epg-action="more">Weitere Sendungen</button>
         </div>
-        <div class="live-catalog" aria-label="Echte Senderliste">
-          <p class="live-backend-name" id="live-backend-name">Noch kein Backend geladen</p>
-          <ul class="live-channel-list" id="live-channel-list" hidden></ul>
+        <div class="live-workspace">
+          <section class="live-catalog" aria-label="Echte Senderliste in VDR-Reihenfolge">
+            <p class="live-backend-name" id="live-backend-name">Noch kein Backend geladen</p>
+            <ul class="live-channel-list" id="live-channel-list" hidden></ul>
+          </section>
+          <section class="live-epg-panel detail-status-card" id="detail-state-live"
+                   data-state="offline" aria-label="Ausgewählter Sender und großes TV-Programm">
+            <span class="detail-status-label" id="detail-state-badge-live">OFFLINE</span>
+            <strong id="detail-state-title-live">Noch keine Serververbindung</strong>
+            <p id="detail-state-description-live">Sender auswählen und EPG anfordern.</p>
+            <div class="detail-skeleton" id="detail-state-skeleton-live" hidden aria-hidden="true"><i></i><i></i><i></i></div>
+            <section class="live-epg" aria-label="EPG des ausgewählten Senders">
+              <p id="live-epg-status" aria-live="polite">EPG: Sender per OK auswählen. epg.view ist erforderlich.</p>
+              <ul id="live-epg-list" class="live-epg-events" hidden></ul>
+            </section>
+          </section>
         </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>

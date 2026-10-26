@@ -416,3 +416,21 @@ All metadata remains read-only through protected Public-v1 Device GETs.
 **S6.4 real-TV verification still OPEN**: device epg.view, actual programme data,
 recording detail/artwork quality, plus distinct AVPlay sound and image gates.
 No production TV reinstall or pairing was performed by this commit.
+
+
+## S6.4 Samsung hardware follow-up: 26 October 2026
+
+Actual Samsung photos show **real EPG GET success**, with genuine ZDF
+24-hour programme entries; the tiny upper-right status-card design made
+them unreadable, so **EPG usability is FAIL even though data arrives**.
+A separate Samsung photo shows a genuine recording, title/overview,
+115-minute duration and server-authenticated poster: **recording metadata
+and poster hardware PASS**, with raw pipe-separated genre and raw Unix
+recording timestamps noted as formatting defects.
+
+Follow-up replaces the ornamental live hero/status layout with full-height
+sender-list (left) / EPG (right) columns, 17–19px programme text, and
+D-pad-focusable scrolling programme rows using the same focus owner.
+Also normalizes recorded dates and pipe-delimited genres without changing
+Device authorization, API request paths, or playback code. **New layout
+hardware recheck OPEN until the TV receives this build.**

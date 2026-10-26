@@ -848,17 +848,59 @@ test("S6.4 late recording detail response cannot revive an earlier selection",()
   assert.match(sim.recordingDetailInfo.textContent,/nicht vorhanden/);
 });
 
-test("S6.4 on-TV EPG and Recording metadata are visible above their long lists",()=>{
-  const live=html.indexOf('data-panel="live"');
-  const recordings=html.indexOf('data-panel="recordings"');
-  const epg=html.indexOf('class="live-epg"',live);
-  const channels=html.indexOf('id="live-channel-list"',live);
-  const detail=html.indexOf('class="recording-detail"',recordings);
-  const list=html.indexOf('id="recording-list"',recordings);
-  assert.ok(live>=0 && epg>live && epg<channels,
-    "EPG status and entries appear in the top card before the sender list");
-  assert.ok(recordings>=0 && detail>recordings && detail<list,
-    "recording description and poster appear above the recording list");
-  assert.match(html.slice(live,channels),/id="detail-state-live"[\s\S]*id="live-epg-status"/);
-  assert.match(html.slice(recordings,list),/class="detail-art detail-art-recordings"[\s\S]*id="recording-detail-poster"/);
+test("S6.4 24h programme has full-height two-pane layout and D-pad rows",()=>{
+  const live=html.slice(html.indexOf('data-panel="live"'),html.indexOf('data-panel="recordings"'));
+  const css=readFileSync("app/styles.css","utf8");
+  assert.match(live,/class="live-workspace"/);
+  assert.ok(live.indexOf('class="live-catalog"')<live.indexOf('class="live-epg-panel'));
+  assert.match(css,/\.live-workspace\s*\{[^}]*grid-template-columns:45% minmax\(0,1fr\)/);
+  assert.match(css,/#detail-state-live\.live-epg-panel \.live-epg-events\s*\{[^}]*max-height:none/);
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish(); sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[{channelId:channel.channelId,title:"Jetzt läuft",startTime:from,
+      endTime:String(Number(from)+3600),durationSeconds:3600},
+      {channelId:channel.channelId,title:"Danach läuft",
+      startTime:String(Number(from)+3600),endTime:String(Number(from)+7200),
+      durationSeconds:3600}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.liveEpgList.children.length,2);
+  sim.liveList.children[0].click();
+  const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(39);
+  assert.equal(sim.liveEpgList.children[0].isFocused,true,"RIGHT from channel focuses EPG");
+  key(40);
+  assert.equal(sim.liveEpgList.children[1].isFocused,true,"DOWN moves within EPG");
+  assert.equal(h.calls.length,4,"navigating programmes is read-only, no playback");
 });
+
+test("S6.4 recording metadata normalizes VDR epoch dates and pipe genres",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={kind:"recording",backendId:"home",
+    recordingId:"rec_00000000000000000000000000000001",title:"Ein Western",
+    description:"Beschreibung",recordedAt:"1790837880",
+    durationSeconds:6900,durationKnown:true,sizeMb:201};
+  h.reply(2,200,{items:[rec],page:{limit:100,offset:0,totalCount:1,hasMore:false},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  h.reply(3,200,{...rec,metadata:{state:"available",source:"restfulapi-scraper-bridge",
+    contentKind:"movie",genreText:"[Western|Drama]",overview:"Eine Geschichte"}});
+  assert.match(sim.recordingDetailInfo.textContent,/Genre: Western · Drama/);
+  assert.match(sim.recordingDetailInfo.textContent,/Aufgenommen: \d{2}\.\d{2}\.\d{4}/);
+  assert.doesNotMatch(sim.recordingDetailInfo.textContent,/1790837880|\\[Western|Drama\\]/);
+});
+
