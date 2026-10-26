@@ -69,11 +69,22 @@ Stand: 2026-10-25. **Sx** sind ausschließlich Samsung-Projektphasen. Keine VDR-
 
 **S5.2-FULLSCREEN QUELLKANDIDAT (Samsung-Fotos 25.10.2026, TV-RETEST OFFEN):** Das native Samsung-`application/avplayer`-Objekt wird beim Boot als unmittelbares `document.body`-Kind registriert statt in der scrollbaren Aufnahmeseite zu verbleiben. Beim Wiedergabestart wird die Weboberfläche über eine CSS-Klasse transparent/unsichtbar, das Video-Overlay bildschirmfüllend (1920×1080 AVPlay-DisplayRect mit optionaler Letterbox); beim STOP/Fehler/Ende wird der vorherige Zustand wiederhergestellt. Tests decken DOM-Lebenszyklus und Displaymodus ab. **Das löst das Layout, beweist aber ausdrücklich keinen erfolgreichen Medienabruf, Cookie-Transport, Decoder oder Bild/Ton.** Siehe Hardware-Abnahme.
 
-## Phase S6 – VDR-TV-Funktionen
+## Phase S6 – TV-Funktionen und Public API v1 (ab 26.10.2026)
 
-- **S6.1** Channels/Live-TV, inklusive Hardware-Player-Prüfung.
-- **S6.2** EPG und Timer per öffentlichen Verträgen.
-- **S6.3** Suche, Teletext, HbbTV, Legacy-OSD nur nach eigenständiger Machbarkeits- und API-Prüfung.
+**Integrationsregel:** Ein gemeinsamer S6-Entwicklungsbranch und ein Draft-PR; Slices als einzelne Commits, keine Folgebranches. Nur Samsung-Code; bestehende Public-v1-Verträge verwenden. Hardwarebelege in `docs/hardware-acceptance.md`, API-v1-Serverbelege ausschließlich in der bestehenden zentralen VDR-Suite-Matrix. Kein Backend-Deployment, TV-Uninstall, neues Pairing oder automatischer Grant.
+
+- **S6.0 – Fernbedienung (SOURCE-KANDIDAT, REAL-TV OFFEN):** `MediaPlayPause` (Samsung 10252) im zentralen Tastenowner registrieren/normalisieren; OK nur bei aktivem Player als Pause/Fortsetzen verwenden; STOP/BACK stoppt. Die tatsächliche Eingabe und `playing/paused/unavailable/error` werden im Fullscreen ohne Secrets sichtbar. Kein zweiter Key-Handler. Unit- und Runtime-Regressionen sowie reale Tizen-5.5-Tastenprobe.
+- **S6.1 – AVPlay-Audio:** sichere Track-/Codec-/Auswahl-Diagnose, erst dann begründete Spurwahl; echtes Bild **und Ton** auf dem TV als Gate.
+- **S6.2 – Playback-Lifecycle:** Pufferung, Pause/Fortsetzen, Session-Stop, Fehlerzustände und HTML5-MP4-Negativdiagnose; kein automatischer Fallback.
+- **S6.3 – Sender/Live-TV:** serverseitig vorhandene numerische Senderreihenfolge und Cursor; Live-Playback nur mit bestätigtem Public-v1-Vertrag.
+- **S6.4 – EPG/Aufnahme-Details:** echte Zeitfenster, Metadaten, VDR-Ordner, Artwork.
+- **S6.5 – Suche:** EPG-/Recording-Suche mit Grenzen, Filtern und Pagination.
+- **S6.6 – Timer-Leseansichten:** Timer, Assignments, Operations und Revisionen zunächst read-only.
+- **S6.7 – Continue Watching:** Device-Progress/CAS, Resume nur bei tatsächlich unterstütztem HLS-Profil, Track-/Untertitelanzeige.
+- **S6.8 – sichere Timer-Tests:** ausschließlich ausdrücklich genehmigte Testobjekte und Mutationen; keine echte Aufnahme oder geplanten Timer verändern.
+- **S6.9 – zentrale API-v1-Abnahme:** nur neue echte TV-/Device-Gaps (401/403, Cursor-/ETag-/409, Backend-Isolation, Neustart und Device-Erhalt), historisch akzeptierte Tests nicht wiederholen.
+
+**S6.0 Abnahme:** Kombinierte Play/Pause-Taste sowie getrennte Play/Pause (sofern Fernbedienung vorhanden), OK, STOP und BACK am echten Samsung prüfen; mindestens ein Pause/Fortsetzen und STOP ohne sekundären Sessionfehler. Der bereits dokumentierte stumme AVPlay-Stream bleibt bis S6.1 ausdrücklich FAIL.
 
 ## Phase S7 – Verteilung/Wartung
 

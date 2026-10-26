@@ -331,3 +331,22 @@ Der reale GU43TU6979UXZG öffnet jetzt den bildschirmfüllenden Player, aber AVP
 Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-ErrorCodes/Names und prüft nach einem Wiedergabefehler die geschützte Medienroute ausschließlich über einen Header-only GET/Range-Request, **vor** dem Session-Stop. Zusätzlich existiert eine bewusst vom Nutzer wählbare alternative **HTML5-MP4-Probe** für vom Server gewählte progressive MP4-MediaSessions. Kein Credentials-/Token-in-URL, keine zweite Kopplung oder Installation, keine unbelegte Browser-/AVPlay-Cookieannahme. Vollständige Quelle-/Sicherheits-/TV-Gates: [Samsung-Playback-Kompatibilität](samsung-playback-compatibility.md).
 
 **Hardware-PASS erst nach einem wirklich abspielbaren Bild/Ton, STOP/Cleanup und identischer bestehender Geräte-Kopplung.** Source-only- und CI-Abnahme genügt nicht.
+
+
+## S6.0 – TV-Fernbedienung / AVPlay (26.10.2026; SOURCE, HARDWARE-GATE OFFEN)
+
+**Ausgangslage am echten Samsung GU43TU6979UXZG:** Echte VDR-Aufnahme über native Device-MediaSession zeigt AVPlay-Bild, aber kein Audio bei mindestens zwei abgeschlossenen Aufnahmen; HTML5 MP4 bleibt schwarz. OK, PLAY/PAUSE und STOP reagierten während AVPlay nicht, BACK kehrte mit „Wiedergabe beendet“ zurück. TV-Lautstärke/Lautsprecher funktionieren. Das ist ausdrücklich kein Audio- oder Remote-PASS.
+
+**S6.0-Quelländerung:** Samsung `MediaPlayPause` (10252) zusätzlich registriert und normalisiert; ein zentraler Capture-Keydown-Owner ordnet OK/PLAY/PAUSE/PLAY_PAUSE während Recording-Wiedergabe dem vorhandenen AVPlay-`pauseOrResume` zu, STOP/BACK dem bisherigen MediaSession-Cleanup. Unbekannte numerische Tasten und Player-Returncodes werden ausschließlich im sichtbaren Recording-Overlay angezeigt; keine URLs, Credentials oder Medien-Cookies. Taste-Wiederholung wird nicht als weitere Aktion verarbeitet.
+
+| S6.0-Realgate | Stand | Beobachtung erforderlich |
+| --- | --- | --- |
+| DEV-Identität und `Anmeldung prüfen` erhalten | OFFEN | Kein erneutes Pairing; Produktiv-App unberührt |
+| PLAY/PAUSE kombiniert (10252) | OFFEN | Overlay-Taste und `playing/paused` + sichtbarer Bildstillstand/Fortsetzen |
+| OK toggelt bei Playback, Menü-OK bleibt normal | OFFEN | Player und D-Pad-Menü getrennt testen |
+| Getrennte PLAY-/PAUSE-Tasten (falls vorhanden) | OFFEN | Gemeldeter Tastencode und Playback-Effekt |
+| STOP und BACK | OFFEN | STOP tatsächlich empfangen, AVPlay verlassen, Session-Cleanup und Rückkehr |
+| Unbekannte Taste | OFFEN | Nur begrenzter Zahlencode oder sicherer Fallback im Overlay |
+| AVPlay-Ton | FAIL – S6.1 | Zwei Video-Aufnahmen ohne Audio; kein Backend-Transcode auf Verdacht |
+
+**Hardware-Testgrenze:** Nach CI und bewusst ausgeführtem isoliertem DEV-Watch-Update am bereits installierten separaten Paket; kein `Run Project`, kein `wits --start`, keine Änderung am Originalpaket oder installierten Backend.

@@ -1,5 +1,5 @@
 const OPTIONAL_KEYS = [
-  "MediaPlay", "MediaPause", "MediaStop",
+  "MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
   "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue"
 ];
 

@@ -4,21 +4,21 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"226675b93921","label":"Samsung v0.1.0 · S5.1 · b226675b93921"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.0","build":"f46542830067","label":"Samsung v0.1.0 · S6.0 · bf46542830067"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
   const KEY_CODES = Object.freeze({
     37: "LEFT", 38: "UP", 39: "RIGHT", 40: "DOWN",
     13: "OK", 8: "BACK", 27: "BACK", 10009: "BACK",
-    415: "PLAY", 19: "PAUSE", 413: "STOP",
+    415: "PLAY", 19: "PAUSE", 10252: "PLAY_PAUSE", 413: "STOP",
     403: "RED", 404: "GREEN", 405: "YELLOW", 406: "BLUE"
   });
   
   const NAMED_KEYS = Object.freeze({
     ArrowLeft: "LEFT", ArrowUp: "UP", ArrowRight: "RIGHT", ArrowDown: "DOWN",
     Enter: "OK", Escape: "BACK", Backspace: "BACK", BrowserBack: "BACK",
-    MediaPlay: "PLAY", MediaPause: "PAUSE", MediaStop: "STOP",
+    MediaPlay: "PLAY", MediaPause: "PAUSE", MediaPlayPause: "PLAY_PAUSE", MediaStop: "STOP",
     ColorF0Red: "RED", ColorF1Green: "GREEN",
     ColorF2Yellow: "YELLOW", ColorF3Blue: "BLUE"
   });
@@ -29,6 +29,14 @@
       return NAMED_KEYS[event.key];
     }
     return KEY_CODES[event.keyCode || event.which] || null;
+  }
+  
+  // Route input only while a recording player owns the remote. Never move menu focus.
+  function playbackRemoteAction(key) {
+    if (key === "STOP" || key === "BACK") return "stop";
+    if (key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE" || key === "OK")
+      return "toggle";
+    return null;
   }
   // END app/src/navigation/remote.js
 
@@ -96,7 +104,7 @@
 
   // BEGIN app/src/platform/keys.js
   const OPTIONAL_KEYS = [
-    "MediaPlay", "MediaPause", "MediaStop",
+    "MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
     "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue"
   ];
   
@@ -1485,6 +1493,7 @@
     var recordingPlayerSurface = document.getElementById("recording-player-surface");
     var recordingHtml5Video = document.getElementById("recording-html5-video");
     var recordingAvplayObject = document.getElementById("recording-avplay-object");
+    var recordingRemoteHint = document.getElementById("recording-remote-hint");
     var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
     var recordingPlayerMode = "avplay";
     // Samsung native AVPlay requires a viewport-level object, not one clipped by
@@ -2316,6 +2325,8 @@
             return;
           }
           recordingPlayerMode = mode;
+          if (recordingRemoteHint) recordingRemoteHint.textContent =
+            "Fernbedienung · OK/PLAY-PAUSE pausiert · STOP/ZURÜCK beendet · Taste: keine";
           if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
           if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
           if (recordingPlayerSurface) {
@@ -2800,10 +2811,23 @@
       source: "./assets/branding/startvideo.mp4"
     });
   
-    // Exactly one keydown owner. No view adds its own Samsung remote listener.
+    // Exactly one capture-phase keydown owner: catch events from the native
+    // playback surface before focused elements can consume them.
     document.addEventListener("keydown", function (event) {
       var key = normalizeRemoteKey(event);
-      if (!key) return;
+      var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
+        currentView === "recordings";
+      if (!key) {
+        if (playbackKeysActive && recordingRemoteHint) {
+          // Display only a bounded numeric TV key code. Never display raw event
+          // objects, native media URLs, headers or credentials.
+          var raw = event.keyCode || event.which;
+          recordingRemoteHint.textContent = "Fernbedienung · Unbekannte Taste" +
+            (typeof raw === "number" && isFinite(raw) && raw >= 0 &&
+             raw <= 65535 && Math.floor(raw) === raw ? " · Code " + raw : "");
+        }
+        return;
+      }
       if (editingServerAddress && event.target === serverInput) {
         if (key === "BACK") {
           event.preventDefault();
@@ -2816,22 +2840,36 @@
       keyStatus.textContent = key;
       if (intro.active()) {
         if (key === "OK" || key === "BACK" || key === "STOP" ||
-            key === "PLAY" || key === "PAUSE") intro.skip();
+            key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE") intro.skip();
         return;
       }
-      if ((recordingPlaybackSession || recordingPlayBusy) && currentView === "recordings") {
-        if (key === "STOP" || key === "BACK") {
+      if (playbackKeysActive) {
+        var action = playbackRemoteAction(key);
+        // A held button must not rapidly toggle pause/resume or repeat STOP.
+        if (event.repeat && action) return;
+        if (action === "stop") {
           stopRecordingPlayback("user"); return;
         }
-        if (key === "PLAY" || key === "PAUSE") {
-          var playbackState = (recordingPlayerMode === "html5" ? recordingHtml5Player : recordingPlayer).pauseOrResume();
+        if (action === "toggle") {
+          var playbackState = (recordingPlayerMode === "html5" ?
+            recordingHtml5Player : recordingPlayer).pauseOrResume();
+          if (recordingRemoteHint)
+            recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
+              " · Player: " + playbackState;
           if (playbackState === "paused")
-            recordingStatus("ready","Wiedergabe pausiert","PLAY setzt fort.");
+            recordingStatus("ready","Wiedergabe pausiert","PLAY/PAUSE oder OK setzt fort.");
           else if (playbackState === "playing")
             recordingStatus("ready","Wiedergabe läuft","STOP oder Zurück beendet.");
+          else if (playbackState === "error")
+            recordingStatus("error","Tastenaktion fehlgeschlagen","AVPlay konnte Pause/Fortsetzen nicht ausführen.");
+          else
+            recordingStatus("loading","Taste erkannt","Player noch nicht bereit.");
           return;
         }
-        return; // do not move focus under the native full-screen player
+        if (recordingRemoteHint)
+          recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
+            " · keine Wiedergabeaktion";
+        return; // no focus movement under native full-screen player
       }
       if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
         setFocus(nextFocusId(focusedId, key, focusRows(), rowMemory[currentView]));
@@ -2840,7 +2878,7 @@
       } else if (key === "BACK") {
         goBack();
       }
-    });
+    }, true);
   
     // Mouse/keyboard focus can also occur on desktop/emulator; synchronize it
     // without registering another key handler or moving into a hidden panel.

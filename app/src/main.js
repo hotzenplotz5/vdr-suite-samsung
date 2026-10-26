@@ -1,4 +1,4 @@
-import { normalizeRemoteKey } from "./navigation/remote.js";
+import { normalizeRemoteKey, playbackRemoteAction } from "./navigation/remote.js";
 import { nextFocusId } from "./navigation/premium-focus.js";
 import { getPlatformCapabilities } from "./platform/capabilities.js";
 import { registerOptionalKeys } from "./platform/keys.js";
@@ -56,6 +56,7 @@ function boot() {
   var recordingPlayerSurface = document.getElementById("recording-player-surface");
   var recordingHtml5Video = document.getElementById("recording-html5-video");
   var recordingAvplayObject = document.getElementById("recording-avplay-object");
+  var recordingRemoteHint = document.getElementById("recording-remote-hint");
   var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
   var recordingPlayerMode = "avplay";
   // Samsung native AVPlay requires a viewport-level object, not one clipped by
@@ -887,6 +888,8 @@ function boot() {
           return;
         }
         recordingPlayerMode = mode;
+        if (recordingRemoteHint) recordingRemoteHint.textContent =
+          "Fernbedienung · OK/PLAY-PAUSE pausiert · STOP/ZURÜCK beendet · Taste: keine";
         if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
         if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
         if (recordingPlayerSurface) {
@@ -1371,10 +1374,23 @@ function boot() {
     source: "./assets/branding/startvideo.mp4"
   });
 
-  // Exactly one keydown owner. No view adds its own Samsung remote listener.
+  // Exactly one capture-phase keydown owner: catch events from the native
+  // playback surface before focused elements can consume them.
   document.addEventListener("keydown", function (event) {
     var key = normalizeRemoteKey(event);
-    if (!key) return;
+    var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
+      currentView === "recordings";
+    if (!key) {
+      if (playbackKeysActive && recordingRemoteHint) {
+        // Display only a bounded numeric TV key code. Never display raw event
+        // objects, native media URLs, headers or credentials.
+        var raw = event.keyCode || event.which;
+        recordingRemoteHint.textContent = "Fernbedienung · Unbekannte Taste" +
+          (typeof raw === "number" && isFinite(raw) && raw >= 0 &&
+           raw <= 65535 && Math.floor(raw) === raw ? " · Code " + raw : "");
+      }
+      return;
+    }
     if (editingServerAddress && event.target === serverInput) {
       if (key === "BACK") {
         event.preventDefault();
@@ -1387,22 +1403,36 @@ function boot() {
     keyStatus.textContent = key;
     if (intro.active()) {
       if (key === "OK" || key === "BACK" || key === "STOP" ||
-          key === "PLAY" || key === "PAUSE") intro.skip();
+          key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE") intro.skip();
       return;
     }
-    if ((recordingPlaybackSession || recordingPlayBusy) && currentView === "recordings") {
-      if (key === "STOP" || key === "BACK") {
+    if (playbackKeysActive) {
+      var action = playbackRemoteAction(key);
+      // A held button must not rapidly toggle pause/resume or repeat STOP.
+      if (event.repeat && action) return;
+      if (action === "stop") {
         stopRecordingPlayback("user"); return;
       }
-      if (key === "PLAY" || key === "PAUSE") {
-        var playbackState = (recordingPlayerMode === "html5" ? recordingHtml5Player : recordingPlayer).pauseOrResume();
+      if (action === "toggle") {
+        var playbackState = (recordingPlayerMode === "html5" ?
+          recordingHtml5Player : recordingPlayer).pauseOrResume();
+        if (recordingRemoteHint)
+          recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
+            " · Player: " + playbackState;
         if (playbackState === "paused")
-          recordingStatus("ready","Wiedergabe pausiert","PLAY setzt fort.");
+          recordingStatus("ready","Wiedergabe pausiert","PLAY/PAUSE oder OK setzt fort.");
         else if (playbackState === "playing")
           recordingStatus("ready","Wiedergabe läuft","STOP oder Zurück beendet.");
+        else if (playbackState === "error")
+          recordingStatus("error","Tastenaktion fehlgeschlagen","AVPlay konnte Pause/Fortsetzen nicht ausführen.");
+        else
+          recordingStatus("loading","Taste erkannt","Player noch nicht bereit.");
         return;
       }
-      return; // do not move focus under the native full-screen player
+      if (recordingRemoteHint)
+        recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
+          " · keine Wiedergabeaktion";
+      return; // no focus movement under native full-screen player
     }
     if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
       setFocus(nextFocusId(focusedId, key, focusRows(), rowMemory[currentView]));
@@ -1411,7 +1441,7 @@ function boot() {
     } else if (key === "BACK") {
       goBack();
     }
-  });
+  }, true);
 
   // Mouse/keyboard focus can also occur on desktop/emulator; synchronize it
   // without registering another key handler or moving into a hidden panel.

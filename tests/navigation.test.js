@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeRemoteKey } from "../app/src/navigation/remote.js";
+import { normalizeRemoteKey, playbackRemoteAction } from "../app/src/navigation/remote.js";
 import { nextMenuIndex } from "../app/src/navigation/focus.js";
 import { getPlatformCapabilities } from "../app/src/platform/capabilities.js";
 import { registerOptionalKeys } from "../app/src/platform/keys.js";
@@ -11,6 +11,11 @@ test("Remote D-Pad, OK and Samsung Back are normalized", () => {
   assert.equal(normalizeRemoteKey({ key: "Enter" }), "OK");
   assert.equal(normalizeRemoteKey({ keyCode: 10009 }), "BACK");
   assert.equal(normalizeRemoteKey({ keyCode: 404 }), "GREEN");
+  assert.equal(normalizeRemoteKey({ keyCode: 10252 }), "PLAY_PAUSE");
+  assert.equal(normalizeRemoteKey({ key: "MediaPlayPause" }), "PLAY_PAUSE");
+  assert.equal(normalizeRemoteKey({ keyCode: 415 }), "PLAY");
+  assert.equal(normalizeRemoteKey({ keyCode: 19 }), "PAUSE");
+  assert.equal(normalizeRemoteKey({ keyCode: 413 }), "STOP");
   assert.equal(normalizeRemoteKey({ key: "Unknown", keyCode: 999 }), null);
 });
 test("Focus never escapes the four-item vertical menu", () => {
@@ -32,7 +37,18 @@ test("Optional Samsung keys tolerate unsupported individual keys", () => {
     got.push(key);
   }}}});
   assert.equal(result.supported, true);
-  assert.equal(result.registered.length, 6);
+  assert.equal(result.registered.length, 7);
+  assert.ok(result.registered.includes("MediaPlayPause"));
+  assert.ok(result.registered.includes("MediaStop"));
   assert.deepEqual(got, result.registered);
   assert.deepEqual(registerOptionalKeys({}), { supported: false, registered: [] });
+});
+
+test("S6.0: playback owns OK, combined PlayPause, Play, Pause, STOP and Back", () => {
+  for (const key of ["OK","PLAY","PAUSE","PLAY_PAUSE"])
+    assert.equal(playbackRemoteAction(key),"toggle");
+  for (const key of ["STOP","BACK"])
+    assert.equal(playbackRemoteAction(key),"stop");
+  for (const key of ["LEFT","RIGHT","UP","DOWN",null,"UNKNOWN"])
+    assert.equal(playbackRemoteAction(key),null);
 });
