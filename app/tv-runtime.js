@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"ea06b0787099","label":"Samsung v0.1.0 · S6.4 · bea06b0787099"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"78557ef2610c","label":"Samsung v0.1.0 · S6.4 · b78557ef2610c"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1634,7 +1634,7 @@
     // Remember the last explicit pause command, not a guessed decoder result.
     var pauseRequested = false;
     // Bounded, non-secret AVPlay telemetry; clock progress does not prove frames or audio.
-    var lastPlaybackMs = null, progressedSeconds = 0;
+    var lastPlaybackMs = null, progressedMilliseconds = 0;
     function available() {
       return !!(api && typeof api.open === "function" &&
         typeof api.prepareAsync === "function" && typeof api.play === "function");
@@ -1644,7 +1644,7 @@
       active = false;
       pauseRequested = false;
       lastPlaybackMs = null;
-      progressedSeconds = 0;
+      progressedMilliseconds = 0;
       if (!api) return;
       try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
       try { if (typeof api.close === "function") api.close(); } catch (_) {}
@@ -1689,11 +1689,11 @@
                   Math.floor(ms)!==ms) return;
               var previous=lastPlaybackMs;
               if (previous!==null && ms>previous)
-                progressedSeconds+=Math.min(30,Math.floor((ms-previous)/1000));
+                progressedMilliseconds+=Math.min(30000,ms-previous);
               lastPlaybackMs=ms;
               onState("progress",{seconds:Math.floor(ms/1000),
                 advanced:previous!==null && ms>previous,
-                deltaSeconds:progressedSeconds});
+                deltaSeconds:Math.floor(progressedMilliseconds/1000)});
             },
             onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
           });
@@ -1762,7 +1762,7 @@
     // Read-only, bounded evidence after a real remote command.
     function inspectPlayback() {
       var state="unavailable",timeSeconds=null;
-      if (!active || !api) return {state:state,seconds:null,deltaSeconds:progressedSeconds};
+      if (!active || !api) return {state:state,seconds:null,deltaSeconds:Math.floor(progressedMilliseconds/1000)};
       try {
         var raw=typeof api.getState==="function" ? api.getState() : "";
         if (["NONE","IDLE","READY","PLAYING","PAUSED"].indexOf(raw)>=0)
@@ -1773,7 +1773,7 @@
         if (typeof ms==="number" && isFinite(ms) && ms>=0 &&
             ms<=4294967295 && Math.floor(ms)===ms) timeSeconds=Math.floor(ms/1000);
       } catch (_) {}
-      return {state:state,seconds:timeSeconds,deltaSeconds:progressedSeconds};
+      return {state:state,seconds:timeSeconds,deltaSeconds:Math.floor(progressedMilliseconds/1000)};
     }
     function cycleAudioTrack() {
       if (!active || !api) return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
