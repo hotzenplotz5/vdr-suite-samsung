@@ -859,6 +859,6 @@ test("S6.4 on-TV EPG and Recording metadata are visible above their long lists",
     "EPG status and entries appear in the top card before the sender list");
   assert.ok(recordings>=0 && detail>recordings && detail<list,
     "recording description and poster appear above the recording list");
-  assert.match(html.slice(live,channels),/id="detail-state-live"[\\s\\S]*id="live-epg-status"/);
-  assert.match(html.slice(recordings,list),/class="detail-art detail-art-recordings"[\\s\\S]*id="recording-detail-poster"/);
+  assert.match(html.slice(live,channels),/id="detail-state-live"[\s\S]*id="live-epg-status"/);
+  assert.match(html.slice(recordings,list),/class="detail-art detail-art-recordings"[\s\S]*id="recording-detail-poster"/);
 });
