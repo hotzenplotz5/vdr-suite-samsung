@@ -14,7 +14,7 @@ import { createRecordingCatalog, recordingCatalogError } from "./api/recording-c
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
 import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis, describeSamsungAudio } from "./platform/recording-player.js";
-import { createHtml5RecordingPlayer } from "./platform/html5-recording-player.js";
+import { createHtml5RecordingPlayer, html5PlaybackDiagnosis } from "./platform/html5-recording-player.js";
 
 // Every control is in exactly one row per visible route. Navigation never
 // uses hidden DOM items or relies on pixel positions (Tizen 5.5 safe).
@@ -58,7 +58,8 @@ function boot() {
   var recordingAvplayObject = document.getElementById("recording-avplay-object");
   var recordingRemoteHint = document.getElementById("recording-remote-hint");
   var recordingAudioHint = document.getElementById("recording-audio-hint");
-  var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
+  var recordingLifecycleHint = document.getElementById("recording-lifecycle-hint");
+  var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video,window);
   var recordingPlayerMode = "avplay";
   // Samsung native AVPlay requires a viewport-level object, not one clipped by
   // .detail-page / .recording-catalog scrolling containers.
@@ -808,8 +809,10 @@ function boot() {
               recordingPlaybackError(result) + " · Server-Idle-Timeout kann aufräumen.");
         });
     }
-    if (reason === "user") recordingStatus("ready","Wiedergabe beendet",
-      "Samsung AVPlay lokal gestoppt; Server-Stop angefordert.");
+    if (reason === "user") recordingStatus("ready",
+      session ? "Wiedergabe beendet" : "Wiedergabeversuch abgebrochen",
+      session ? "Player lokal gestoppt; MediaSession-Stop angefordert." :
+        "Player abgebrochen, bevor eine MediaSession bestätigt wurde. Ein unbekanntes Server-Ergebnis wird nicht erneut angefordert.");
   }
   function startSelectedRecording(mode) {
     mode = mode === "html5" ? "html5" : "avplay";
@@ -889,6 +892,9 @@ function boot() {
           return;
         }
         recordingPlayerMode = mode;
+        if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+          mode === "avplay" ? "AVPlay · MediaSession bereit · Player wird vorbereitet" :
+            "HTML5 MP4 · Player wird vorbereitet · 12s Startdiagnose";
         if (recordingAudioHint) recordingAudioHint.textContent =
           mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
             "Audio · HTML5 ohne AVPlay-Spurdiagnose";
@@ -907,22 +913,36 @@ function boot() {
         var player = mode === "html5" ? recordingHtml5Player : recordingPlayer;
         var started = player.start(result.mediaUrl,function (state,detail) {
           if (state === "playing") {
+            if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+              mode === "html5" ? "HTML5 · onplaying empfangen · Bild/Ton prüfen" :
+                "AVPlay · play() ausgeführt · Bild/Ton prüfen";
             recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
               " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
           } else if (state === "audio" && mode === "avplay") {
             if (recordingAudioHint)
               recordingAudioHint.textContent = describeSamsungAudio(detail);
           } else if (state === "preparing" || state === "buffering") {
+            if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+              (mode === "html5" ? "HTML5" : "AVPlay") + " · " +
+              (state === "buffering" ? "Pufferung – auf Daten warten" : "Vorbereitung läuft");
             recordingStatus("loading",mode === "html5" ? "HTML5-Video startet" : "Samsung AVPlay startet",rec.title +
               " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
+          } else if (state === "ready") {
+            if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+              "AVPlay · Pufferung abgeschlossen · Bild/Ton prüfen";
+            recordingStatus("ready","AVPlay-Pufferung abgeschlossen",
+              rec.title + " · Decoder und Tonausgabe auf dem TV prüfen.");
           } else if (state === "error" || state === "unsupported") {
             // The media gateway permits GET, not HEAD. Probe only the response
             // headers of the very same protected session while still active.
             // This does NOT prove what cookies native AVPlay transmits.
             var failedSession = recordingPlaybackSession;
             var playerFailure = mode === "html5"
-              ? "HTML5-Video " + (detail && detail.code ? "Fehlercode " + detail.code : "nicht abspielbar")
+              ? html5PlaybackDiagnosis(detail)
               : samsungPlaybackDiagnosis(detail,transport);
+            if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+              mode === "html5" ? html5PlaybackDiagnosis(detail) :
+                "AVPlay · Medienfehler · Zugang wird geprüft";
             recordingStatus("loading","Prüfe Medienzugriff",
               playerFailure + " · Diagnose ohne Video-Download …");
             probeMediaHttpHeaders(window,result.mediaUrl,function (probe) {
@@ -932,6 +952,8 @@ function boot() {
                 playerFailure + " " + describeMediaAccessProbe(probe));
             });
           } else if (state === "finished") {
+            if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+              "Player · Aufnahme regulär beendet";
             stopRecordingPlayback("finished");
             recordingStatus("ready","Aufnahme beendet",rec.title);
           }
