@@ -948,9 +948,66 @@ test("S6.6 EPG row OK opens a readable detail, never silently ignores key",()=>{
     endTime:first.endTime,durationSeconds:3600});
   assert.equal(detail["live-epg-detail-description"].textContent,"Ausführlicher Inhalt");
   key(40);key(13);
-  assert.equal(h.calls.length,5,"no guessed event ID or private endpoint");
+  assert.equal(h.calls.length,6,"now-next without native ID requests only a scoped window");
+  assert.match(h.calls[5].url,/\/api\/v1\/epg\/window\?/);
+  const params=new URL(h.calls[5].url).searchParams;
+  assert.equal(params.get("fromTime"),second.startTime);
+  assert.equal(params.get("untilTime"),second.endTime);
   assert.match(detail["live-epg-detail-title"].textContent,/heute/);
-  assert.match(detail["live-epg-detail-description"].textContent,/keine bestätigte Event-ID/);
+  h.reply(5,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...second,eventId:"13739"}],
+    page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+  assert.equal(h.calls.length,7,"verified ID triggers native detail GET");
+  assert.match(h.calls[6].url,/\/api\/v1\/epg\/event\?/);
+  assert.equal(new URL(h.calls[6].url).searchParams.get("eventId"),"13739");
+  h.reply(6,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"13739",title:"heute",subtitle:"",
+    description:"Nachrichten und Wetter",startTime:second.startTime,
+    endTime:second.endTime,durationSeconds:600});
+  assert.match(detail["live-epg-detail-description"].textContent,/Nachrichten und Wetter/);
   sim.nodes["nav-recordings"].click();
   assert.equal(detail["live-epg-detail"].hidden,true);
+});
+
+test("S6.7 missing or ambiguous native EPG IDs never cause guessed detail requests",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const entry={channelId:channel.channelId,title:"Tagesschau",
+    startTime:from,endTime:String(Number(from)+900),durationSeconds:900};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[entry],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/window\?/);
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    items:[entry],page:{limit:24,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  assert.equal(h.calls.length,5);
+  assert.match(sim.epgDetailNodes["live-epg-detail-description"].textContent,
+    /keine eindeutig belegte native Event-ID/);
+  key(13);
+  h.reply(5,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...entry,eventId:"81234"},{...entry,eventId:"81235"}],
+    page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+  assert.equal(h.calls.length,6,"duplicate matching rows are ambiguous");
+  key(13);
+  h.reply(6,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...entry,eventId:"81234"}],
+    page:{limit:24,hasMore:true,nextCursor:"ew1_more"},meta:{partial:false}});
+  assert.equal(h.calls.length,7,"not all rows received; do not assume uniqueness");
+  key(13);
+  assert.equal(h.calls.length,8);
+  sim.nodes["nav-recordings"].click();
+  const aborted=h.calls[7];
+  assert.equal(aborted.aborted,true,"leaving page cancels pending window request");
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...entry,eventId:"81234"}],
+    page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+  assert.equal(h.calls.length,8,"stale callback must not start detail after navigation");
 });
