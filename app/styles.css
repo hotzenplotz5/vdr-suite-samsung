@@ -294,6 +294,9 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   background: #000; }
 .recording-player-hint { position: absolute; z-index: 10001; bottom: 16px;
   left: 24px; color: #f0f7ff; background: rgba(4,12,24,.75); padding: 8px 15px; }
+.recording-audio-hint { position: absolute; z-index: 10001; bottom: 63px;
+  left: 24px; max-width: calc(100vw - 48px); color: #e0f3ff;
+  background: rgba(4,12,24,.82); padding: 8px 15px; font-size: 16px; }
 
 @media(max-width:1380px) {
   .recordings-actions .action-button { min-width: 125px; }
