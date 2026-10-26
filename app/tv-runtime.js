@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"1817c5cb327c","label":"Samsung v0.1.0 · S6.4 · b1817c5cb327c"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"fa336e37453b","label":"Samsung v0.1.0 · S6.4 · bfa336e37453b"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1153,6 +1153,27 @@
            next!==cursor) : next===null;
       },done);
     }
+    // Native EPG event detail is a separate read: no guessed cache keys,
+    // no timer mutation and no request without a proven source eventId.
+    function eventDetail(cred,bid,cid,eid,done) {
+      if (!backend(bid) || !channel(cid) ||
+          typeof eid!=="string" || !/^[A-Za-z0-9._-]{1,128}$/.test(eid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path="/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&eventId="+encodeURIComponent(eid);
+      request(cred,path,false,function(data) {
+        return data && data.backendId===bid && data.channelId===cid &&
+          data.eventId===eid && typeof data.title==="string" &&
+          data.title.length>0 && data.title.length<=512 &&
+          typeof data.subtitle==="string" && data.subtitle.length<=512 &&
+          typeof data.description==="string" && data.description.length<=1536 &&
+          typeof data.startTime==="string" && /^\d{10,12}$/.test(data.startTime) &&
+          typeof data.endTime==="string" && /^\d{10,12}$/.test(data.endTime) &&
+          Number(data.endTime)>Number(data.startTime) &&
+          Number.isInteger(data.durationSeconds) && data.durationSeconds>=0;
+      },done);
+    }
     function recordingDetail(cred,bid,rid,done) {
       if (!backend(bid) || !recording(rid)) {
         done({ok:false,kind:"bad_request"});return;
@@ -1204,7 +1225,7 @@
           return !!(data && data.bytes && data.contentType);
         },done);
     }
-    return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,
+    return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,eventDetail:eventDetail,
       recordingDetail:recordingDetail,artworkList:artworkList,artworkBytes:artworkBytes};
   }
   
@@ -1946,6 +1967,7 @@
     var channelCatalog = createChannelCatalog(window);
     var recordingCatalog = createRecordingCatalog(window);
     var liveMetadata = createPublicMediaMetadata(window);
+    var liveDetailMetadata = createPublicMediaMetadata(window);
     var recordingMetadata = createPublicMediaMetadata(window);
     var recordingPlaybackClient = createRecordingPlaybackClient(window);
     var recordingPlayer = createSamsungRecordingPlayer(window);
@@ -1992,6 +2014,8 @@
     var liveRows = 0;
     var liveFocusIds = [];
     var liveEpgFocusIds = [];
+    var liveEpgRows = [];
+    var liveEpgDetailRun = 0;
     var liveCurrentChannels = [];
     var selectedLiveChannel = null;
     var liveEpgRun = 0;
@@ -2015,6 +2039,11 @@
     var liveBackendName = document.getElementById("live-backend-name");
     var liveEpgStatus = document.getElementById("live-epg-status");
     var liveEpgList = document.getElementById("live-epg-list");
+    var liveEpgDetail = document.getElementById("live-epg-detail");
+    var liveEpgDetailTime = document.getElementById("live-epg-detail-time");
+    var liveEpgDetailTitle = document.getElementById("live-epg-detail-title");
+    var liveEpgDetailSubtitle = document.getElementById("live-epg-detail-subtitle");
+    var liveEpgDetailDescription = document.getElementById("live-epg-detail-description");
     var recordingList = document.getElementById("recording-list");
     var recordingBackendName = document.getElementById("recording-backend-name");
     var recordingDetailInfo = document.getElementById("recording-detail-info");
@@ -2487,6 +2516,10 @@
         if (index!==-1) items.splice(index,1);
       });
       liveEpgFocusIds=[];
+      liveEpgRows=[];
+      liveDetailMetadata.cancel();
+      liveEpgDetailRun+=1;
+      if (liveEpgDetail) liveEpgDetail.hidden=true;
     }
     function clearLiveEpg() {
       liveMetadata.cancel();
@@ -2509,6 +2542,65 @@
       return label+clock(start)+"–"+clock(end)+" · "+item.title+
         (item.subtitle ? " · "+item.subtitle : "");
     }
+    // OK on a focusable EPG row must do something visible. A description
+    // can only be fetched if Public v1 advertises a proven native eventId.
+    function selectEpgEvent(item,loadDescription) {
+      liveDetailMetadata.cancel();
+      var token=++liveEpgDetailRun;
+      if (!item || !liveEpgDetail) return;
+      var start=new Date(Number(item.startTime)*1000);
+      var end=new Date(Number(item.endTime)*1000);
+      var clock=function(date) {
+        return isFinite(date.getTime()) ?
+          date.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+      };
+      var date=isFinite(start.getTime()) ?
+        start.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"}) : "";
+      liveEpgDetail.hidden=false;
+      if (liveEpgDetailTime) liveEpgDetailTime.textContent =
+        date+" · "+clock(start)+"–"+clock(end);
+      if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=item.title.slice(0,512);
+      if (liveEpgDetailSubtitle) {
+        liveEpgDetailSubtitle.textContent=(item.subtitle || "").slice(0,512);
+        liveEpgDetailSubtitle.hidden=!item.subtitle;
+      }
+      if (!liveEpgDetailDescription) return;
+      if (!loadDescription) {
+        liveEpgDetailDescription.textContent="OK: Sendungsinformationen anzeigen.";
+        return;
+      }
+      if (!/^[A-Za-z0-9._-]{1,128}$/.test(item.eventId || "")) {
+        liveEpgDetailDescription.textContent =
+          "Keine ausführliche Beschreibung abrufbar: Dieser EPG-Eintrag enthält keine bestätigte Event-ID.";
+        return;
+      }
+      var backend=liveBackends[liveBackendIndex];
+      var channel=selectedLiveChannel;
+      if (!backend || !channel || !liveCredential ||
+          channel.backendId!==backend.backendId || item.channelId!==channel.channelId)
+        return;
+      liveEpgDetailDescription.textContent="Lade Sendungsbeschreibung …";
+      liveDetailMetadata.eventDetail(liveCredential,backend.backendId,
+        channel.channelId,item.eventId,function(result) {
+          if (token!==liveEpgDetailRun || currentView!=="live" ||
+              !selectedLiveChannel ||
+              selectedLiveChannel.channelId!==channel.channelId ||
+              selectedLiveChannel.backendId!==channel.backendId) return;
+          if (!result.ok) {
+            liveEpgDetailDescription.textContent =
+              "Sendungsdetails: "+mediaMetadataError(result);
+            return;
+          }
+          var info=result.value;
+          if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=info.title;
+          if (liveEpgDetailSubtitle) {
+            liveEpgDetailSubtitle.textContent=info.subtitle || "";
+            liveEpgDetailSubtitle.hidden=!info.subtitle;
+          }
+          liveEpgDetailDescription.textContent=info.description ||
+            "Für diese Sendung ist keine ausführliche Beschreibung hinterlegt.";
+        });
+    }
     function showEpgRows(rows,append,nowNext) {
       if (!liveEpgList) return;
       if (!append) {
@@ -2523,16 +2615,23 @@
         node.tabIndex=-1;
         node.setAttribute("role","button");
         node.setAttribute("data-focus-id",id);
+        node.setAttribute("data-epg-index",String(eventIndex));
         node.setAttribute("aria-label",epgRow(item,index,!!nowNext).slice(0,400));
         node.textContent=epgRow(item,index,!!nowNext).slice(0,550);
         controls[id]=node;
         items.push(node);
         liveEpgFocusIds.push(id);
+        liveEpgRows.push(item);
         liveEpgList.appendChild(node);
-        node.addEventListener("click",function(){setFocus(id);});
+        node.addEventListener("click",function(){
+          if (setFocus(id)) selectEpgEvent(item,true);
+        });
       });
       liveEpgList.hidden=!liveEpgList.children.length;
-      if (!append) liveEpgList.scrollTop=0;
+      if (!append) {
+        liveEpgList.scrollTop=0;
+        if (rows.length) selectEpgEvent(rows[0],false);
+      }
     }
     function loadSelectedEpg(action) {
       if (!selectedLiveChannel || !liveCredential || !liveBackends.length) {
@@ -3520,6 +3619,12 @@
       }
       var epgAction = item.getAttribute("data-live-epg-action");
       if (epgAction) {loadSelectedEpg(epgAction);return;}
+      var epgIndex=item.getAttribute("data-epg-index");
+      if (epgIndex!==null && currentView==="live") {
+        var epgItem=liveEpgRows[Number(epgIndex)];
+        if (epgItem) selectEpgEvent(epgItem,true);
+        return;
+      }
       var liveAction = item.getAttribute("data-live-action");
       if (liveAction) {
         loadLiveChannels(liveAction);
