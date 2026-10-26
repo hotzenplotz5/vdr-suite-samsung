@@ -59,6 +59,8 @@ function boot() {
   var recordingDetailRun = 0;
   var recordingPosterUrl = null;
   var recordingPlayBusy = false;
+  // Invalidate deferred read-only AVPlay key latency probes after changes.
+  var recordingControlSequence = 0;
   var recordingTeardownBusy = false;
   var recordingPlaybackSession = null;
   var recordingPlayerSurface = document.getElementById("recording-player-surface");
@@ -1275,6 +1277,7 @@ function boot() {
   }
 
   function stopRecordingPlayback(reason) {
+    recordingControlSequence++;
     // The stop request is a SECONDARY cleanup operation. A late timeout may
     // never overwrite an earlier AVPlay/decoder/media-access failure.
     if (recordingTeardownBusy) return;
@@ -1307,6 +1310,7 @@ function boot() {
         "Player abgebrochen, bevor eine MediaSession bestätigt wurde. Ein unbekanntes Server-Ergebnis wird nicht erneut angefordert.");
   }
   function startSelectedRecording(mode) {
+    recordingControlSequence++;
     mode = mode === "html5" ? "html5" : "avplay";
     if (recordingPlayBusy || recordingPlaybackSession) return;
     if (recordingTeardownBusy) {
@@ -2011,17 +2015,48 @@ function boot() {
         return;
       }
       if (action === "play" || action === "pause" || action === "toggle") {
+        var controlTicket=++recordingControlSequence;
+        var controllingSession=recordingPlaybackSession;
+        var beforeCall=Date.now();
+        // Measure the synchronous native operation. Tizen may block JS here;
+        // a status like resume_requested does NOT mean decoded frames resumed.
         var playbackState = (recordingPlayerMode === "html5" ?
           recordingHtml5Player : recordingPlayer).pauseOrResume(action);
+        var afterCall=Date.now();
+        var callMs=Math.max(0,Math.min(600000,afterCall-beforeCall));
         if (recordingRemoteHint) {
           var evidence=recordingPlayerMode==="avplay" ?
             recordingPlayer.inspectPlayback() : null;
           recordingRemoteHint.textContent = "Fernbedienung · "+key+
             " (Code "+(event.keyCode || event.which || "?")+")"+
-            " · Aktion "+playbackState+(evidence ?
+            " · Aktion "+playbackState+
+            " · Native-API "+callMs+"ms"+(evidence ?
               " · AVPlay "+evidence.state+
               (evidence.seconds===null ? "" : " · Zeit "+evidence.seconds+"s")+
               " · Delta "+evidence.deltaSeconds+"s" : "");
+          // After one explicit native key command, inspect the CLOCK again.
+          // It is read-only; no guessed seek, audio switch, new session or
+          // "video frames OK" claim. Stop and subsequent keypresses fence it.
+          if (evidence && controllingSession &&
+              typeof window.setTimeout==="function") {
+            var initialSeconds=evidence.seconds;
+            window.setTimeout(function () {
+              if (recordingControlSequence!==controlTicket ||
+                  currentView!=="recordings" ||
+                  recordingPlaybackSession!==controllingSession) return;
+              var later=recordingPlayer.inspectPlayback();
+              var wallSeconds=Math.max(0,Math.min(600,
+                Math.floor((Date.now()-afterCall)/1000)));
+              var clock=initialSeconds!==null && later.seconds!==null ?
+                (later.seconds>initialSeconds ? "Uhr vorwärts" :
+                  later.seconds===initialSeconds ? "Uhr unverändert" :
+                    "Uhr rückwärts") : "Uhr nicht lesbar";
+              if (recordingRemoteHint)
+                recordingRemoteHint.textContent += " · nach "+wallSeconds+
+                  "s: "+later.state+" · "+clock+
+                  (later.seconds===null ? "" : " ("+later.seconds+"s)");
+            },10000);
+          }
         }
         if (playbackState === "paused" || playbackState === "already_paused")
           recordingStatus("ready","Wiedergabe pausiert",
