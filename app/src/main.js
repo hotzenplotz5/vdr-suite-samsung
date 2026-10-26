@@ -2025,12 +2025,14 @@ function boot() {
         var afterCall=Date.now();
         var callMs=Math.max(0,Math.min(600000,afterCall-beforeCall));
         if (recordingRemoteHint) {
+          var beforeSnapshot=Date.now();
           var evidence=recordingPlayerMode==="avplay" ?
             recordingPlayer.inspectPlayback() : null;
+          var snapshotMs=Math.max(0,Math.min(600000,Date.now()-beforeSnapshot));
           recordingRemoteHint.textContent = "Fernbedienung · "+key+
             " (Code "+(event.keyCode || event.which || "?")+")"+
             " · Aktion "+playbackState+
-            " · Native-API "+callMs+"ms"+(evidence ?
+            " · Native-API "+callMs+"ms · Snapshot "+snapshotMs+"ms"+(evidence ?
               " · AVPlay "+evidence.state+
               (evidence.seconds===null ? "" : " · Zeit "+evidence.seconds+"s")+
               " · Delta "+evidence.deltaSeconds+"s" : "");
