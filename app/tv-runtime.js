@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"cb78e7cf8cbe","label":"Samsung v0.1.0 · S6.4 · bcb78e7cf8cbe"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"b5c4db8704be","label":"Samsung v0.1.0 · S6.4 · bb5c4db8704be"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1161,7 +1161,7 @@
         done({ok:false,kind:"bad_request"});return;
       }
       var path="/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
-        "&channelId="+encodeURIComponent(cid)+"&eventId="+encodeURIComponent(eid);
+        "&channelId="+encodeURIComponent(cid)+"&eventId="+eid;
       request(cred,path,false,function(data) {
         return data && data.backendId===bid && data.channelId===cid &&
           data.eventId===eid && typeof data.title==="string" &&
