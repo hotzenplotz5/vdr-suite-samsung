@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"b5c4db8704be","label":"Samsung v0.1.0 · S6.4 · bb5c4db8704be"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"369881797eba","label":"Samsung v0.1.0 · S6.4 · b369881797eba"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1174,6 +1174,26 @@
           Number.isInteger(data.durationSeconds) && data.durationSeconds>=0;
       },done);
     }
+    // Public-v1 EPG images are binary, device-authorized GETs only.
+    // Do not accept provider image URLs, paths, or media credentials in query.
+    function epgImage(cred,bid,cid,eid,preferred,done) {
+      if (!backend(bid) || !channel(cid) ||
+          typeof eid!=="string" || !/^[A-Za-z0-9._:-]{1,160}$/.test(eid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path=(preferred ? "/api/v1/epg/preferred-artwork" :
+        "/api/v1/epg/artwork")+"?backendId="+bid+
+        "&channelId="+cid+"&eventId="+eid;
+      request(cred,path,true,function(data){
+        return !!(data && data.bytes && data.contentType);
+      },done);
+    }
+    function epgPreferredArtwork(cred,bid,cid,eid,done) {
+      epgImage(cred,bid,cid,eid,true,done);
+    }
+    function epgDirectArtwork(cred,bid,cid,eid,done) {
+      epgImage(cred,bid,cid,eid,false,done);
+    }
     function recordingDetail(cred,bid,rid,done) {
       if (!backend(bid) || !recording(rid)) {
         done({ok:false,kind:"bad_request"});return;
@@ -1226,6 +1246,7 @@
         },done);
     }
     return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,eventDetail:eventDetail,
+      epgPreferredArtwork:epgPreferredArtwork,epgDirectArtwork:epgDirectArtwork,
       recordingDetail:recordingDetail,artworkList:artworkList,artworkBytes:artworkBytes};
   }
   
@@ -1968,6 +1989,8 @@
     var recordingCatalog = createRecordingCatalog(window);
     var liveMetadata = createPublicMediaMetadata(window);
     var liveDetailMetadata = createPublicMediaMetadata(window);
+    var liveArtworkMetadata = createPublicMediaMetadata(window);
+    var liveEpgArtworkUrl = null;
     var recordingMetadata = createPublicMediaMetadata(window);
     var recordingPlaybackClient = createRecordingPlaybackClient(window);
     var recordingPlayer = createSamsungRecordingPlayer(window);
@@ -2044,6 +2067,8 @@
     var liveEpgDetailTitle = document.getElementById("live-epg-detail-title");
     var liveEpgDetailSubtitle = document.getElementById("live-epg-detail-subtitle");
     var liveEpgDetailDescription = document.getElementById("live-epg-detail-description");
+    var liveEpgPoster = document.getElementById("live-epg-detail-poster");
+    var liveEpgArtworkStatus = document.getElementById("live-epg-artwork-status");
     var recordingList = document.getElementById("recording-list");
     var recordingBackendName = document.getElementById("recording-backend-name");
     var recordingDetailInfo = document.getElementById("recording-detail-info");
@@ -2506,6 +2531,19 @@
       if (skeleton) skeleton.hidden = state !== "loading";
     }
   
+    function clearEpgArtwork() {
+      if (liveEpgPoster) {
+        liveEpgPoster.hidden=true;
+        liveEpgPoster.onerror=null;
+        liveEpgPoster.onload=null;
+        liveEpgPoster.removeAttribute("src");
+      }
+      if (liveEpgArtworkUrl && window.URL &&
+          typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(liveEpgArtworkUrl);
+      liveEpgArtworkUrl=null;
+      if (liveEpgArtworkStatus) liveEpgArtworkStatus.textContent="";
+    }
     function clearEpgFocusRows() {
       if (currentView==="live" && liveEpgFocusIds.indexOf(focusedId)>=0)
         setFocus("detail-live-epg-now");
@@ -2518,6 +2556,8 @@
       liveEpgFocusIds=[];
       liveEpgRows=[];
       liveDetailMetadata.cancel();
+      liveArtworkMetadata.cancel();
+      clearEpgArtwork();
       liveEpgDetailRun+=1;
       if (liveEpgDetail) liveEpgDetail.hidden=true;
     }
@@ -2546,6 +2586,8 @@
     // can only be fetched if Public v1 advertises a proven native eventId.
     function selectEpgEvent(item,loadDescription) {
       liveDetailMetadata.cancel();
+      liveArtworkMetadata.cancel();
+      clearEpgArtwork();
       var token=++liveEpgDetailRun;
       if (!item || !liveEpgDetail) return;
       var start=new Date(Number(item.startTime)*1000);
@@ -2567,6 +2609,8 @@
       if (!liveEpgDetailDescription) return;
       if (!loadDescription) {
         liveEpgDetailDescription.textContent="OK: Sendungsinformationen anzeigen.";
+        if (liveEpgArtworkStatus) liveEpgArtworkStatus.textContent=
+          "Sendungsbild wird bei OK geladen, sofern im EPG vorhanden.";
         return;
       }
       var backend=liveBackends[liveBackendIndex];
@@ -2578,6 +2622,59 @@
         return token===liveEpgDetailRun && currentView==="live" &&
           selectedLiveChannel && selectedLiveChannel.channelId===channel.channelId &&
           selectedLiveChannel.backendId===channel.backendId;
+      }
+      // Reuse Public v1's already authorized EPG artwork service. An absent
+      // preferred image may fall back to the direct EPG image only on 404.
+      // Every old selection's image request and Object URL are cancelled.
+      function loadEpgArtwork(id) {
+        if (!stillSelected() || !liveEpgPoster || !liveEpgArtworkStatus) return;
+        liveEpgArtworkStatus.textContent="Prüfe vorhandenes Sendungsbild …";
+        function receiveArtwork(result) {
+          if (!stillSelected()) return;
+          if (!result.ok) {
+            liveEpgArtworkStatus.textContent=result.kind==="http" &&
+              result.status===404 ? "Kein Sendungsbild hinterlegt." :
+              "Sendungsbild: "+mediaMetadataError(result);
+            return;
+          }
+          try {
+            if (!window.URL || !window.Blob ||
+                typeof window.URL.createObjectURL!=="function")
+              throw Error("No object URL support");
+            var objectUrl=window.URL.createObjectURL(
+              new window.Blob([result.value.bytes],{type:result.value.contentType}));
+            if (!stillSelected()) {
+              window.URL.revokeObjectURL(objectUrl);return;
+            }
+            clearEpgArtwork();
+            liveEpgArtworkUrl=objectUrl;
+            liveEpgPoster.onload=function() {
+              if (stillSelected() && liveEpgArtworkUrl===objectUrl)
+                liveEpgArtworkStatus.textContent="";
+            };
+            liveEpgPoster.onerror=function() {
+              if (!stillSelected() || liveEpgArtworkUrl!==objectUrl) return;
+              clearEpgArtwork();
+              liveEpgArtworkStatus.textContent="Sendungsbild konnte nicht dargestellt werden.";
+            };
+            liveEpgPoster.src=objectUrl;
+            liveEpgPoster.hidden=false;
+            liveEpgArtworkStatus.textContent="Sendungsbild geladen.";
+          } catch (_) {
+            clearEpgArtwork();
+            liveEpgArtworkStatus.textContent="Bildanzeige auf diesem TV nicht verfügbar.";
+          }
+        }
+        liveArtworkMetadata.epgPreferredArtwork(liveCredential,
+          backend.backendId,channel.channelId,id,function(result) {
+            if (!stillSelected()) return;
+            if (!result.ok && result.kind==="http" && result.status===404) {
+              liveArtworkMetadata.epgDirectArtwork(liveCredential,
+                backend.backendId,channel.channelId,id,receiveArtwork);
+              return;
+            }
+            receiveArtwork(result);
+          });
       }
       function loadEventDetail(id) {
         if (!stillSelected()) return;
@@ -2605,6 +2702,7 @@
             }
             liveEpgDetailDescription.textContent=info.description ||
               "Für diese Sendung ist keine ausführliche Beschreibung hinterlegt.";
+            loadEpgArtwork(id);
           });
       }
       if (/^[A-Za-z0-9._:-]{1,160}$/.test(item.eventId || "")) {
