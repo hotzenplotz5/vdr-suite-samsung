@@ -148,6 +148,26 @@ export function createPublicMediaMetadata(environment) {
         Number.isInteger(data.durationSeconds) && data.durationSeconds>=0;
     },done);
   }
+  // Public-v1 EPG images are binary, device-authorized GETs only.
+  // Do not accept provider image URLs, paths, or media credentials in query.
+  function epgImage(cred,bid,cid,eid,preferred,done) {
+    if (!backend(bid) || !channel(cid) ||
+        typeof eid!=="string" || !/^[A-Za-z0-9._:-]{1,160}$/.test(eid)) {
+      done({ok:false,kind:"bad_request"});return;
+    }
+    var path=(preferred ? "/api/v1/epg/preferred-artwork" :
+      "/api/v1/epg/artwork")+"?backendId="+bid+
+      "&channelId="+cid+"&eventId="+eid;
+    request(cred,path,true,function(data){
+      return !!(data && data.bytes && data.contentType);
+    },done);
+  }
+  function epgPreferredArtwork(cred,bid,cid,eid,done) {
+    epgImage(cred,bid,cid,eid,true,done);
+  }
+  function epgDirectArtwork(cred,bid,cid,eid,done) {
+    epgImage(cred,bid,cid,eid,false,done);
+  }
   function recordingDetail(cred,bid,rid,done) {
     if (!backend(bid) || !recording(rid)) {
       done({ok:false,kind:"bad_request"});return;
@@ -200,6 +220,7 @@ export function createPublicMediaMetadata(environment) {
       },done);
   }
   return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,eventDetail:eventDetail,
+    epgPreferredArtwork:epgPreferredArtwork,epgDirectArtwork:epgDirectArtwork,
     recordingDetail:recordingDetail,artworkList:artworkList,artworkBytes:artworkBytes};
 }
 
