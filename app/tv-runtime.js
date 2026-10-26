@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"78557ef2610c","label":"Samsung v0.1.0 · S6.4 · b78557ef2610c"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"2bec13396e34","label":"Samsung v0.1.0 · S6.4 · b2bec13396e34"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -3362,7 +3362,7 @@
             mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
               "Audio · HTML5 ohne AVPlay-Spurdiagnose";
           if (recordingRemoteHint) recordingRemoteHint.textContent =
-            "Fernbedienung · OK/PLAY-PAUSE pausiert · STOP/ZURÜCK beendet · Taste: keine";
+            "Fernbedienung · "+remoteSummary+" · OK/PLAY-PAUSE schaltet um · STOP/ZURÜCK beendet";
           if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
           if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
           if (recordingPlayerSurface) {
@@ -3885,7 +3885,16 @@
     document.getElementById("tizen-status").textContent = caps.tizen ? "vorhanden" : "nicht erkannt";
     document.getElementById("avplay-status").textContent = caps.avplay ? "vorhanden" : "nicht erkannt";
     document.getElementById("remote-status").textContent = caps.tvInputDevice ? "vorhanden" : "nicht erkannt";
-    registerOptionalKeys(window);
+    var optionalRemote = registerOptionalKeys(window);
+    var remoteKeys = ["MediaPlay","MediaPause","MediaStop","ColorF3Blue"];
+    var missingRemote = remoteKeys.filter(function(name) {
+      return optionalRemote.registered.indexOf(name) < 0;
+    });
+    var remoteSummary = missingRemote.length ?
+      "Zusatz-Tasten nicht registriert: "+missingRemote.join(", ") :
+      "PLAY/PAUSE/STOP/BLAU registriert (Empfang am TV noch prüfen)";
+    document.getElementById("remote-status").textContent =
+      caps.tvInputDevice ? remoteSummary : "TV-Eingabegerät nicht verfügbar";
     if (serverInput) {
       var savedBase = null;
       try {
@@ -3966,7 +3975,8 @@
           if (recordingAudioHint) recordingAudioHint.textContent =
             describeSamsungAudio(sound);
           if (recordingRemoteHint)
-            recordingRemoteHint.textContent="Fernbedienung · BLAU · Tonspur wechseln";
+            recordingRemoteHint.textContent="Fernbedienung · BLAU (Code "+
+              (event.keyCode || event.which || "?")+") · Tonspur wechseln";
           return;
         }
         if (action === "play" || action === "pause" || action === "toggle") {
@@ -3976,6 +3986,7 @@
             var evidence=recordingPlayerMode==="avplay" ?
               recordingPlayer.inspectPlayback() : null;
             recordingRemoteHint.textContent = "Fernbedienung · "+key+
+              " (Code "+(event.keyCode || event.which || "?")+")"+
               " · Aktion "+playbackState+(evidence ?
                 " · AVPlay "+evidence.state+
                 (evidence.seconds===null ? "" : " · Zeit "+evidence.seconds+"s")+
@@ -3999,8 +4010,21 @@
         }
         if (recordingRemoteHint)
           recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
+            " (Code "+(event.keyCode || event.which || "?")+")"+
             " · keine Wiedergabeaktion";
         return; // no focus movement under native full-screen player
+      }
+      if (currentView==="live" && liveEpgScrollActions &&
+          !liveEpgScrollActions.hidden && liveEpgFocusIds.length) {
+        // The last EPG item must lead directly to the nearby detail-scroll
+        // controls, not down through every row of the unrelated sender list.
+        if (key==="DOWN" &&
+            focusedId===liveEpgFocusIds[liveEpgFocusIds.length-1] &&
+            setFocus("live-epg-scroll-down")) return;
+        if (key==="UP" &&
+            (focusedId==="live-epg-scroll-up" ||
+             focusedId==="live-epg-scroll-down") &&
+            setFocus(liveEpgFocusIds[liveEpgFocusIds.length-1])) return;
       }
       if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
         setFocus(nextFocusId(focusedId, key, focusRows(), rowMemory[currentView]));
