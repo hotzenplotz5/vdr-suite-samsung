@@ -874,9 +874,9 @@ test("S6.4 24h programme has full-height two-pane layout and D-pad rows",()=>{
       durationSeconds:3600}],
     page:{limit:2,hasMore:false},meta:{partial:false}});
   assert.equal(sim.liveEpgList.children.length,2);
-  sim.liveList.children[0].click();
   const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
-  key(39);
+  key(40); // Move from the EPG action into the first sender without selecting it again.
+  key(39); // Cross from left sender column to first right-side EPG row.
   assert.equal(sim.liveEpgList.children[0].isFocused,true,"RIGHT from channel focuses EPG");
   key(40);
   assert.equal(sim.liveEpgList.children[1].isFocused,true,"DOWN moves within EPG");
