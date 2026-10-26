@@ -598,7 +598,7 @@ Die DEV-Oberfläche zeigt unten rechts **Samsung v0.1.1 · S6.4** (die vom lokal
 **S6.15 Source:** Samsung-Keycodes und `getSupportedKeys()` / `registerKey()` in getrennten Plattformadaptern ergänzt. Die Registrierung zeigt nur Potenzial für DOM-Keyevents, nicht automatisch die Funktionen oder ein Hardware-PASS. Senderziffern/CH ändern weder MediaSession noch Backend und erlauben nur Navigation über bereits geladene Sender. Rewind/FF sind bewusst read-only diagnostisch bis AVPlay-Puffer/Seek-Gates geklärt. `Teletext`/PreCH/Tools/Info benötigen noch echte Funktionen; möglicherweise reservierte TV-Tasten bleiben als Geräte-Hardware-Gate offen. Herstellerquelle: https://developer.samsung.com/smarttv/develop/guides/user-interaction/remote-control.html
 
 
-### S6.15 INFO – differenzierter Hardwarebefund (26.10.2026)
+### S6.15 SETTINGS – korrigierter Hardwarebefund (26.10.2026)
 
 **Korrigierter Nutzer-Hardwaretest:** Zuerst wurde irrtümlich `INFO` als Ausnahme gemeldet; anschließend präzisierte der Nutzer ausdrücklich, dass **SETTINGS** die nicht funktionierende Taste ist. `INFO` funktioniert laut Nutzer. Samsung dokumentiert `Info`/457 und `Menu`/18, aber keinen eigenständigen `Settings`-Eintrag. Ob die physische SETTINGS-Taste bei diesem Gerät vom TV-System reserviert wird oder einen an die App weitergegebenen Tastencode besitzt, ist offen; keine fiktiven Keycodes ergänzen.
 
