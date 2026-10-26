@@ -371,9 +371,9 @@ test("S3.1 settings offers a TV-focusable HTTPS input and explicit probe", () =>
   sim.nodes["nav-settings"].click();
   press(40); // first settings control: Back Home
   assert.equal(sim.nodes["detail-settings-home"].isFocused,true);
-  press(39); // address input
+  press(39); // address input; focusing opens native Samsung IME
   assert.equal(sim.nodes["settings-base-input"].isFocused,true);
-  press(39); // explicit test button
+  press(65376); // IME Done, then return to normal remote focus navigation
   assert.equal(sim.nodes["settings-test"].isFocused,true);
   press(13); // no address: fail closed before XHR
   assert.match(sim.serverStatus.textContent,/HTTPS/i);
@@ -381,6 +381,50 @@ test("S3.1 settings offers a TV-focusable HTTPS input and explicit probe", () =>
   press(10009); // restore Settings origin
   assert.equal(sim.panels.find(p=>p.route==="home").hidden,false);
 });
+
+test("S6.16 Samsung native IME exclusively owns Backspace, arrows and editing keys",()=>{
+  const sim=simulate();
+  sim.video.finish();
+  sim.nodes["nav-settings"].click();
+  const press=(keyCode,target=sim.serverInput)=>{
+    let prevented=false;
+    sim.listeners.keydown({keyCode,target,preventDefault(){prevented=true;}});
+    return prevented;
+  };
+  press(40,{});
+  press(39,{});
+  assert.equal(sim.serverInput.isFocused,true);
+  // A Samsung virtual keyboard can dispatch events at document level.
+  // All edit/navigation keys must bypass the global capture handler.
+  for(const key of [8,37,38,39,40,13,49,50]){
+    assert.equal(press(key,{}),false,"IME key "+key+" must keep browser default");
+    assert.equal(sim.serverInput.isFocused,true,"IME key "+key+" must keep input focused");
+    assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  }
+  // Remote Return closes the keyboard first, not the whole Settings route.
+  assert.equal(press(10009,{}),false);
+  assert.equal(sim.nodes["settings-test"].isFocused,true);
+  assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  // Once editing is closed, the shared remote owner must work normally.
+  assert.equal(press(10009,{}),true);
+  assert.equal(sim.panels.find(p=>p.route==="home").hidden,false);
+});
+
+test("S6.16 Samsung IME Cancel leaves Settings and saved server address intact",()=>{
+  const store={writes:0,getItem(){return null;},setItem(){this.writes++;}};
+  const sim=simulate({localStorage:store});
+  sim.video.finish();
+  sim.nodes["nav-settings"].click();
+  sim.nodes["settings-base-input"].click();
+  assert.equal(sim.serverInput.isFocused,true);
+  let prevented=false;
+  sim.listeners.keydown({keyCode:65385,target:{},preventDefault(){prevented=true;}});
+  assert.equal(prevented,false);
+  assert.equal(sim.nodes["settings-test"].isFocused,true);
+  assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  assert.equal(store.writes,0,"no invalid or empty server must be persisted");
+});
+
 test("S3.2 pairing is reachable by D-pad but refuses unverified server/unsafe vault", () => {
   const sim = simulate();
   sim.video.finish();
