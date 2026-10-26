@@ -361,3 +361,16 @@ Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-Err
 **Einziger Hardware-Gate:** Die bereits installierte, separat gekoppelte VDR-Suite DEV über den bekannten WITs-Watch-Prozess aktualisieren (ohne wits --start, Run Project, Uninstall oder Re-Pairing). Auf einer vorhandenen abgeschlossenen Aufnahme die neue Zeile `Audio · ...` ablesen, hörbaren Ton beurteilen, PAUSE/OK/STOP/BACK aus S6.0 mit prüfen. Bei fehlendem Ton den angezeigten Spur-/Codec-/Auswahlstatus notieren; erst danach Backend-Medienprofil untersuchen. Auf dem TV nichts als PASS markieren, bevor es tatsächlich beobachtet wurde.
 
 **PASS:** Bild und hörbarer Filmton sowie sauberer Rücksprung. Allein erkannte oder ausgewählte Tonspur genügt nicht.
+
+
+## S6.2 – Player-Lifecycle, HTML5-Schwarzbild und Session-Cleanup (26.10.2026; SOURCE/CI PASS, TV OFFEN)
+
+**Vorheriger TV-Befund:** Native AVPlay-Aufnahme liefert Bild, bei zwei getesteten Aufnahmen keinen Ton. Mehrere HTML5-MP4-Starts blieben schwarz; nach ZURÜCK erschien pauschal „Wiedergabe beendet“, obwohl keine Wiedergabe bestätigt war. Das sind keine S6.2-Hardware-PASS-Ergebnisse.
+
+**Quelländerung:** Genau ein Player-/Keydown-Owner. Native AVPlay-Callbacks unterscheiden Vorbereitung, PLAY-Aufruf, Buffering, Buffering-Ende, reguläres Ende und tatsächlichen Playerfehler. Eine dritte, sichtbare Diagnosezeile zeigt dies bei fullscreen AVPlay/HTML5. HTML5 behandelt erst `onplaying` als Wiedergabe-Ereignis. Ein 12-Sekunden-Watchdog meldet den Schwarzbild-Start ohne `onplaying`, ein 20-Sekunden-Watchdog meldet stockende Wiedergabe; beide werden bei STOP/Ende/Fehler/Neustart deaktiviert. Native HTML5-MediaError-Codes 1–4 und `play()`-Ablehnung werden in festen Texten ohne Credentials/URLs angezeigt. Das opt-in-HTML5 ist keine automatische Ausweichwiedergabe.
+
+**Stop-Grenze:** Lokaler Player-Stop und authentifizierter MediaSession-STOP bleiben getrennt. Nach STOP vor bestätigtem CREATE wird ausschließlich „Wiedergabeversuch abgebrochen“ gemeldet; ein ungewisses POST-Ergebnis wird nicht automatisch wiederholt. Bei Playerfehler wird die bestehende geschützte GET-Range-Headerdiagnose vor Session-STOP verwendet. Späte STOP-Timeouts dürfen den primären Playbackfehler nicht überschreiben. Die S6.2-Quelltests ersetzen keine tatsächliche Session-Stop-Abnahme.
+
+**TV-Gate:** Zusammen mit S6.0-Tasten und S6.1-Audio am bestehenden, separat gekoppelten Samsung DEV testen, sobald Zugriff wieder möglich ist: erkannte Taste, Bild/Ton, Playerstatus bei Pufferung, geordnetes STOP/BACK, MediaSession-Cleanup, HTML5-MP4-Abbruchanzeige (falls bewusst gewählt), Geräteschlüssel unverändert. Bis dahin **REAL-TV OPEN**.
+
+**Unberührt:** Productive Samsung-App, yaVDR-Backend, Device-Grants, bestehendes Pairing und installierte Pakete. Kein WITs-Start, keine neue Installation oder temporäre Credentials.
