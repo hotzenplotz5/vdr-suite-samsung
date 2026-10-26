@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {createHtml5RecordingPlayer} from "../app/src/platform/html5-recording-player.js";
+import {createHtml5RecordingPlayer,html5PlaybackDiagnosis} from "../app/src/platform/html5-recording-player.js";
 const url="https://example.invalid/vdr-suite/api/v1/media/sessions/ms_0123456789abcdef0123456789abcdef/recording/stream.mp4";
 function fakeVideo(){
   const actions=[];
@@ -63,4 +63,98 @@ test("S5.3: there is one selected playback mode, both stopped on cleanup",()=>{
   assert.match(s,/mode === "html5" \? recordingHtml5Player : recordingPlayer/);
   assert.match(html,/data-recordings-action="html5"/);
   assert.match(html,/id="recording-html5-video"/);
+});
+
+function fakeClock() {
+  let next=1;
+  const tasks=new Map();
+  return {
+    setTimeout(fn,ms){const id=next++;tasks.set(id,{fn,ms});return id;},
+    clearTimeout(id){tasks.delete(id);},
+    flush(ms){const work=[...tasks].filter(([,t])=>t.ms===ms);
+      for(const [id,task] of work){if(tasks.has(id)){tasks.delete(id);task.fn();}}
+    },
+    get count(){return tasks.size;}
+  };
+}
+
+test("S6.2: HTML5 black screen with no events reports startup timeout, not false playback success",()=>{
+  const video=fakeVideo(),clock=fakeClock(),player=createHtml5RecordingPlayer(video,clock),events=[];
+  player.start(url,(state,detail)=>events.push({state,detail}));
+  assert.deepEqual(events.map(x=>x.state),["preparing"]);
+  assert.equal(clock.count,1);
+  clock.flush(12000);
+  assert.deepEqual(events.at(-1),{state:"error",detail:{stage:"html5",code:"startup_timeout"}});
+  assert.match(html5PlaybackDiagnosis(events.at(-1).detail),/Schwarzes Bild/);
+  assert.equal(player.pauseOrResume(),"unavailable");
+  video.oncanplay();
+  assert.ok(!video.actions.includes("play"),"stale oncanplay must not revive failed media");
+  player.stop();
+  assert.equal(clock.count,0);
+});
+
+test("S6.2: buffering after real onplaying terminates only if no progress for 20 seconds",()=>{
+  const video=fakeVideo(),clock=fakeClock(),player=createHtml5RecordingPlayer(video,clock),events=[];
+  player.start(url,(state,detail)=>events.push({state,detail}));
+  video.oncanplay();video.onplaying();
+  assert.equal(clock.count,0,"playing cancels startup watchdog");
+  video.onwaiting();
+  assert.equal(events.at(-1).state,"buffering");
+  clock.flush(20000);
+  assert.equal(events.at(-1).detail.code,"stall_timeout");
+  assert.match(html5PlaybackDiagnosis(events.at(-1).detail),/Videopufferung/);
+  video.onplaying();
+  assert.equal(events.at(-1).state,"error","terminal failure cannot become playing");
+});
+
+test("S6.2: stop and next start invalidate all old startup deadlines and media callbacks",()=>{
+  const v=fakeVideo(),clock=fakeClock(),player=createHtml5RecordingPlayer(v,clock),events=[];
+  player.start(url,(s)=>events.push(s));
+  const oldCanPlay=v.oncanplay;
+  player.stop();
+  assert.equal(clock.count,0);
+  clock.flush(12000);oldCanPlay();
+  assert.deepEqual(events,["preparing"]);
+  player.start(url,(s)=>events.push(s));
+  v.oncanplay();v.onplaying();
+  clock.flush(12000);
+  assert.deepEqual(events,["preparing","preparing","playing"]);
+  v.onended();
+  assert.equal(clock.count,0);
+  assert.equal(player.pauseOrResume(),"unavailable");
+});
+
+test("S6.2: video media error, play rejection and explicit format errors are sanitized",async()=>{
+  const v=fakeVideo(),clock=fakeClock(),events=[],player=createHtml5RecordingPlayer(v,clock);
+  player.start(url,(s,d)=>events.push({s,d}));
+  v.error={code:4,message:"private account and media URL"};
+  v.onerror();v.onerror();
+  assert.equal(events.filter(e=>e.s==="error").length,1);
+  assert.match(html5PlaybackDiagnosis(events.at(-1).d),/Codec/);
+  assert.doesNotMatch(JSON.stringify(events),/private account|media URL/);
+  const w=fakeVideo();
+  w.play=()=>Promise.reject(Error("do not disclose private media URL"));
+  const ev=[],q=createHtml5RecordingPlayer(w,clock);
+  q.start(url,(s,d)=>ev.push({s,d}));
+  w.oncanplay();
+  await Promise.resolve();await Promise.resolve();
+  assert.equal(ev.at(-1).d.code,"play_rejected");
+  assert.doesNotMatch(JSON.stringify(ev),/private media URL/);
+  q.stop();
+});
+
+test("S6.2: pause clears buffering timer; resumed playing has a bounded recovery deadline",()=>{
+  const v=fakeVideo(),clock=fakeClock(),events=[];
+  const player=createHtml5RecordingPlayer(v,clock);
+  player.start(url,(s,d)=>events.push({s,d}));
+  v.oncanplay();v.onplaying();
+  v.onwaiting();assert.equal(clock.count,1);
+  assert.equal(player.pauseOrResume(),"paused");
+  assert.equal(clock.count,0);
+  assert.equal(player.pauseOrResume(),"playing");
+  assert.equal(clock.count,1);
+  v.onplaying();
+  assert.equal(clock.count,0);
+  clock.flush(20000);
+  assert.equal(events.filter(e=>e.s==="error").length,0);
 });
