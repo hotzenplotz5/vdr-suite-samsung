@@ -42,6 +42,8 @@ function boot() {
   var rowMemory = {};
   var previewStates = {};
   var editingServerAddress = false;
+  var remoteChannelDigits = "";
+  var remoteLastDigitAt = 0;
   var testingConnection = false;
   var discovery = createDiscoveryClient(window);
   var pairingClient = createPairingClient(window);
@@ -1927,6 +1929,14 @@ function boot() {
   var remoteSummary = missingRemote.length ?
     "Zusatz-Tasten nicht registriert: "+missingRemote.join(", ") :
     "PLAY/PAUSE/STOP/BLAU registriert (Empfang am TV noch prüfen)";
+  var extraKeys = ["MediaRewind","MediaFastForward","ChannelUp","ChannelDown",
+    "PreviousChannel","Info","Menu","Tools","Teletext",
+    "0","1","2","3","4","5","6","7","8","9"];
+  var activeExtra = extraKeys.filter(function(name) {
+    return optionalRemote.registered.indexOf(name)>=0;
+  });
+  remoteSummary += " · Weitere "+activeExtra.length+"/"+extraKeys.length+
+    " registriert (Empfang am TV prüfen)";
   document.getElementById("remote-status").textContent =
     caps.tvInputDevice ? remoteSummary : "TV-Eingabegerät nicht verfügbar";
   if (serverInput) {
@@ -1998,6 +2008,11 @@ function boot() {
       if (event.repeat && action) return;
       if (action === "stop") {
         stopRecordingPlayback("user"); return;
+      }
+      if (action === "rewind" || action === "fastforward") {
+        if (recordingRemoteHint) recordingRemoteHint.textContent =
+          "Fernbedienung · "+key+" erkannt · Spulen noch nicht freigeschaltet";
+        return; // No blind seek on a stalled/unverified AVPlay media stream.
       }
       if (action === "audio") {
         if (recordingPlayerMode !== "avplay") {
@@ -2081,6 +2096,43 @@ function boot() {
           " (Code "+(event.keyCode || event.which || "?")+")"+
           " · keine Wiedergabeaktion";
       return; // no focus movement under native full-screen player
+    }
+    if (key === "SETTINGS") {
+      navigateTo("settings","nav-settings");
+      return;
+    }
+    if (currentView === "live" && (key === "CHANNEL_UP" || key === "CHANNEL_DOWN")) {
+      if (!liveFocusIds.length) {
+        message.textContent = "CH+/CH− erkannt · zuerst Sender laden"; return;
+      }
+      var cursor = liveFocusIds.indexOf(focusedId);
+      var next = cursor<0 ? (key==="CHANNEL_UP" ? liveFocusIds.length-1 : 0) :
+        Math.max(0,Math.min(liveFocusIds.length-1,
+          cursor+(key==="CHANNEL_UP" ? -1 : 1)));
+      setFocus(liveFocusIds[next]);
+      return; // Only visible catalog entries; never auto-tune.
+    }
+    if (currentView === "live" && /^DIGIT_[0-9]$/.test(key)) {
+      var now = Date.now();
+      if (now-remoteLastDigitAt>1800) remoteChannelDigits="";
+      remoteChannelDigits=(remoteChannelDigits+key.slice(6)).slice(-5);
+      remoteLastDigitAt=now;
+      var matched=-1;
+      for (var ci=0;ci<liveCurrentChannels.length;ci++) {
+        if (String(liveCurrentChannels[ci].channelNumber)===
+            String(Number(remoteChannelDigits))) { matched=ci; break; }
+      }
+      if (matched>=0 && liveFocusIds[matched]) setFocus(liveFocusIds[matched]);
+      message.textContent="Sendernummer "+remoteChannelDigits+
+        (matched>=0 ? " · Sender fokussiert (OK zeigt EPG)" :
+          " · nur bereits geladene Katalogseite");
+      return;
+    }
+    if (key==="INFO") {
+      message.textContent="INFO erkannt · EPG-Details über OK öffnen"; return;
+    }
+    if (key==="PREVIOUS_CHANNEL" || key==="TELETEXT" || key==="TOOLS") {
+      message.textContent=key+" erkannt · Funktion noch nicht implementiert"; return;
     }
     if (currentView==="live" && liveEpgScrollActions &&
         !liveEpgScrollActions.hidden && liveEpgFocusIds.length) {
