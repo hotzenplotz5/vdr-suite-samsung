@@ -87,7 +87,7 @@ export function createPublicMediaMetadata(environment) {
         Number(item.endTime)<=Number(item.startTime) ||
         !Number.isInteger(item.durationSeconds) || item.durationSeconds<0) return false;
     return item.eventId===undefined ||
-      (typeof item.eventId==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(item.eventId));
+      (typeof item.eventId==="string" && /^[A-Za-z0-9._:-]{1,160}$/.test(item.eventId));
   }
   function nowNext(cred,bid,cid,from,done) {
     if (!backend(bid) || !channel(cid) || !epoch(from)) {
@@ -131,7 +131,7 @@ export function createPublicMediaMetadata(environment) {
   // no timer mutation and no request without a proven source eventId.
   function eventDetail(cred,bid,cid,eid,done) {
     if (!backend(bid) || !channel(cid) ||
-        typeof eid!=="string" || !/^[A-Za-z0-9._-]{1,128}$/.test(eid)) {
+        typeof eid!=="string" || !/^[A-Za-z0-9._:-]{1,160}$/.test(eid)) {
       done({ok:false,kind:"bad_request"});return;
     }
     var path="/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
