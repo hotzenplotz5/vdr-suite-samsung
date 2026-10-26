@@ -434,3 +434,19 @@ D-pad-focusable scrolling programme rows using the same focus owner.
 Also normalizes recorded dates and pipe-delimited genres without changing
 Device authorization, API request paths, or playback code. **New layout
 hardware recheck OPEN until the TV receives this build.**
+
+
+## S6.5 – TV beobachtet, Quellfix zur späteren Abnahme (2026-10-26)
+
+**HARDWARE FAIL (beobachtet):** Samsung-AVPlay zeigt die Videoaufnahme,
+meldet Tonspuren, spielt aber keinen hörbaren Ton. OK pausiert teilweise,
+beim erneuten OK friert die Wiedergabe ein. Der Besitzer ist derzeit nicht
+am Fernseher; keine neue Hardwareprüfung möglich.
+
+**SOURCE-Korrektur:** Separate PLAY/PAUSE/STOP-Befehle,
+idempotente PLAY- und PAUSE-Zustände; OK/MediaPlayPause toggeln.
+Bei angefordertem Resume wird kein tatsächliches Abspielen behauptet.
+Tonspurdiagnose: nur erkannte sichere Indices, Single-AAC-Fallback und
+explizite BLAU-Taste für die vorhandenen bekannten Audioformate.
+Die Authentifizierung, Device-MediaSession und Fullscreen-Engine werden
+nicht verändert. **Re-Test des Tons und Resume auf Tizen 5.5 bleibt OPEN.**

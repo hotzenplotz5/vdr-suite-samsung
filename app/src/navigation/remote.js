@@ -25,7 +25,10 @@ export function normalizeRemoteKey(event) {
 // Route input only while a recording player owns the remote. Never move menu focus.
 export function playbackRemoteAction(key) {
   if (key === "STOP" || key === "BACK") return "stop";
-  if (key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE" || key === "OK")
-    return "toggle";
+  if (key === "PLAY") return "play";
+  if (key === "PAUSE") return "pause";
+  if (key === "PLAY_PAUSE" || key === "OK") return "toggle";
+  // Explicit, user-initiated audio track inspection/selection during AVPlay.
+  if (key === "BLUE") return "audio";
   return null;
 }

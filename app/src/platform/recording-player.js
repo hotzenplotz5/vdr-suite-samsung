@@ -80,8 +80,9 @@ function inspectSamsungAudio(api) {
       selected.channels<=2) {result.status="active_compatible";return result;}
   // Samsung permits AUDIO track switching only in PLAYING. Avoid switching
   // single-track streams, guessing codecs or selecting unknown track IDs.
-  if (all.tracks.length<2 || !compatible ||
-      typeof api.setSelectTrack!=="function") {
+  // A single explicitly advertised AAC stereo track may still be unselected.
+  // Selecting it while PLAYING is safer than assuming that demuxed means active.
+  if (!compatible || typeof api.setSelectTrack!=="function") {
     result.status="no_safe_switch";return result;
   }
   try {api.setSelectTrack("AUDIO",compatible.index);}
@@ -90,6 +91,37 @@ function inspectSamsungAudio(api) {
   result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
   result.status=result.currentIndex===compatible.index ?
     "selected_confirmed" : "selection_requested";
+  return result;
+}
+// Explicit BLUE-key selection helps diagnose audio that is detected but silent.
+// Only Tizen-reported AUDIO indices with a known codec/channel count are used.
+// No guessed index, raw extra_info, media URL, credential or cookie escapes.
+function cycleSamsungAudio(api) {
+  var state="";
+  try {state=typeof api.getState==="function" ? api.getState() : "";}
+  catch (_) {}
+  if (state!=="PLAYING") return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+  var all=samsungAudioRead(api,"getTotalTrackInfo");
+  if (!all.ok) return {status:"unavailable",total:0,currentIndex:null,tracks:[]};
+  var current=samsungAudioRead(api,"getCurrentStreamInfo");
+  var selected=current.tracks.length ? current.tracks[0] : null;
+  var result={status:"no_safe_switch",total:all.tracks.length,
+    currentIndex:selected ? selected.index : null,tracks:all.tracks};
+  var choices=all.tracks.filter(function(track) {
+    return ["AAC","AC3","EAC3","MPEG"].indexOf(track.codec)>=0 &&
+      track.channels!==null && track.channels<=6;
+  });
+  if (!choices.length || typeof api.setSelectTrack!=="function") return result;
+  var at=-1;
+  if (selected) for (var i=0;i<choices.length;i++)
+    if (choices[i].index===selected.index) {at=i;break;}
+  var target=choices[(at+1)%choices.length];
+  try {api.setSelectTrack("AUDIO",target.index);}
+  catch (_) {result.status="selection_failed";return result;}
+  var after=samsungAudioRead(api,"getCurrentStreamInfo");
+  result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
+  result.status=result.currentIndex===target.index ?
+    "manual_confirmed" : "manual_requested";
   return result;
 }
 export function describeSamsungAudio(detail) {
@@ -107,6 +139,8 @@ export function describeSamsungAudio(detail) {
     (current.language ? " "+current.language : "");
   var labels={active_compatible:"bereits aktiv",
     selected_confirmed:"AAC-Spur bestätigt",selection_requested:"AAC-Spur angefordert",
+    manual_confirmed:"Tonspur manuell bestätigt · Hörtest erforderlich",
+    manual_requested:"Tonspur manuell angefordert · Hörtest erforderlich",
     selection_failed:"Spurauswahl fehlgeschlagen",
     no_safe_switch:"keine sichere automatische Wahl",observed:"nur Diagnose"};
   return label+" · "+(labels[detail.status]||"Status unbekannt");
@@ -192,18 +226,35 @@ export function createSamsungRecordingPlayer(environment) {
       return false;
     }
   }
-  function pauseOrResume() {
+  function pauseOrResume(action) {
     if (!active || !api) return "unavailable";
+    var intent=action==="play" || action==="pause" ? action : "toggle";
     try {
-      var state = typeof api.getState === "function" ? api.getState() : "";
-      if (state === "PLAYING" && typeof api.pause === "function") {
-        api.pause(); return "paused";
+      var state=typeof api.getState==="function" ? api.getState() : "";
+      if (state==="PLAYING") {
+        if (intent==="play") return "already_playing";
+        if (typeof api.pause!=="function") return "unavailable";
+        api.pause();return "paused";
       }
-      if (state === "PAUSED") {api.play();return "playing";}
+      if (state==="PAUSED") {
+        if (intent==="pause") return "already_paused";
+        api.play();
+        // AVPlay.play() from PAUSED requests resume. It is not evidence of
+        // progressing frames or an audible decoder; do not claim hardware PASS.
+        return "resume_requested";
+      }
+      if (state==="READY" && intent==="play") {
+        api.play();return "resume_requested";
+      }
     } catch (_) {return "error";}
     return "unavailable";
   }
-  return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};
+  function cycleAudioTrack() {
+    if (!active || !api) return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+    return cycleSamsungAudio(api);
+  }
+  return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
+    cycleAudioTrack:cycleAudioTrack};
 }
 // Advertise only the narrow H.264/AAC path observed via a TV decoder probe.
 // This is not proof that all VDR recordings are decodable.

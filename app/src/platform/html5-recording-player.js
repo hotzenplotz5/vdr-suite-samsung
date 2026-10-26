@@ -119,15 +119,18 @@ export function createHtml5RecordingPlayer(video, environment) {
       return true;
     } catch (_) {stop();onState("error",{stage:"html5",code:"load_failed"});return false;}
   }
-  function pauseOrResume() {
+  function pauseOrResume(action) {
     if (!active || !video || phase==="failed" || phase==="finished") return "unavailable";
+    var intent=action==="play" || action==="pause" ? action : "toggle";
     try {
       if (!video.paused) {
+        if (intent==="play") return "already_playing";
         video.pause();
         phase="paused";
         cancelWatchdog();
         return "paused";
       }
+      if (intent==="pause") return "already_paused";
       var token=generation;
       var attempt=video.play();
       phase="buffering";
@@ -140,7 +143,7 @@ export function createHtml5RecordingPlayer(video, environment) {
           attempt.catch(function(){if (token===generation)failure("play_rejected");});
       }
       // This is a play request, not proof of frames: onplaying confirms it.
-      return "playing";
+      return "resume_requested";
     } catch (_) {return "error";}
   }
   return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};

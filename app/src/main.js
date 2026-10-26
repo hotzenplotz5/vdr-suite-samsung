@@ -1754,18 +1754,37 @@ function boot() {
       if (action === "stop") {
         stopRecordingPlayback("user"); return;
       }
-      if (action === "toggle") {
+      if (action === "audio") {
+        if (recordingPlayerMode !== "avplay") {
+          if (recordingAudioHint) recordingAudioHint.textContent =
+            "Audio · Spurauswahl nur bei AVPlay";
+          return;
+        }
+        var sound=recordingPlayer.cycleAudioTrack();
+        if (recordingAudioHint) recordingAudioHint.textContent =
+          describeSamsungAudio(sound);
+        if (recordingRemoteHint)
+          recordingRemoteHint.textContent="Fernbedienung · BLAU · Tonspur wechseln";
+        return;
+      }
+      if (action === "play" || action === "pause" || action === "toggle") {
         var playbackState = (recordingPlayerMode === "html5" ?
-          recordingHtml5Player : recordingPlayer).pauseOrResume();
+          recordingHtml5Player : recordingPlayer).pauseOrResume(action);
         if (recordingRemoteHint)
           recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
             " · Player: " + playbackState;
-        if (playbackState === "paused")
-          recordingStatus("ready","Wiedergabe pausiert","PLAY/PAUSE oder OK setzt fort.");
-        else if (playbackState === "playing")
-          recordingStatus("ready","Wiedergabe läuft","STOP oder Zurück beendet.");
+        if (playbackState === "paused" || playbackState === "already_paused")
+          recordingStatus("ready","Wiedergabe pausiert",
+            "PLAY setzt fort · OK oder PLAY/PAUSE schaltet um · STOP beendet.");
+        else if (playbackState === "already_playing")
+          recordingStatus("ready","Player meldet PLAYING",
+            "PLAY bereits aktiv · Bild/Ton am TV prüfen · PAUSE hält an.");
+        else if (playbackState === "resume_requested")
+          recordingStatus("loading","Fortsetzen angefordert",
+            "AVPlay/HTML5-Play aufgerufen; Bildfortschritt am TV prüfen · STOP beendet.");
         else if (playbackState === "error")
-          recordingStatus("error","Tastenaktion fehlgeschlagen","AVPlay konnte Pause/Fortsetzen nicht ausführen.");
+          recordingStatus("error","Tastenaktion fehlgeschlagen",
+            "PLAY/PAUSE im aktuellen Player-Zustand fehlgeschlagen.");
         else
           recordingStatus("loading","Taste erkannt","Player noch nicht bereit.");
         return;

@@ -216,3 +216,36 @@ Der Samsung-Client prüft den tatsächlichen HDMI-/Decoder-Erfolg nicht indirekt
 Bei der freiwilligen progressiven HTML5-MP4-Probe verhindern zwei begrenzte Watchdogs ein endloses schwarzes Bild ohne Fehlermeldung: 12 Sekunden für den Videostart und 20 Sekunden für eine spätere festhängende Pufferung. Video-`MediaError`-Codes, Ablehnung von `play()` und fehlende Ereignisse werden unterschiedlich erklärt, ohne eine unbewiesene Codec-Ursache zu behaupten. `stop()` entkräftet alte Callback-Generationen und Timer; es gibt weder automatischen Protokoll-/Player-Fallback noch Credential-/Cookie-Logging. Später Session-Stop-Timeout bleibt eine *sekundäre Cleanup-Diagnose*, niemals Ersatz für den primären Videofehler.
 
 **Real TV:** Für S6.0, S6.1 und S6.2 weiterhin offen. Keine Backend-Medienprofil-/Codecänderung ohne tatsächliche Audio- und Playerbefunde.
+
+
+## S6.5 – Reale TV-Befunde: Stummes AVPlay und einfrierendes Fortsetzen (26.10.2026)
+
+Nutzerbeobachtung auf Samsung Tizen 5.5: AVPlay zeigt echte Aufnahmen und kann
+Audiospuren erkennen, **aber kein hörbarer Ton**. OK konnte gelegentlich
+pausieren; nach weiterem OK blieb das Bild eingefroren. Hardware **FAIL**,
+auch nach den ersten S6.0–S6.2-Quellverbesserungen.
+
+Quellfehler behoben: `MediaPlay` (415) und `MediaPause` (19) wurden wie
+`MediaPlayPause` (10252) und OK als umschaltende Aktion behandelt. Jetzt
+setzt PLAY ausschließlich fort, PAUSE hält ausschließlich an, OK und die
+kombinierte Taste schalten um, STOP/BACK schließen den Player und die
+vorhandene MediaSession. Eine `play()`-Rückkehr heißt
+**„Fortsetzen angefordert“** und beweist noch keine Videofortsetzung.
+Kein automatischer Restart/Session-Neuaufbau nach Stillstand.
+
+Samsungs AVPlay-API erlaubt AUDIO-Trackwahl im Zustand PLAYING. Zusätzlich
+zur vorhandenen sicheren AAC-Stereo-Vorauswahl wird bei einer einzigen
+AAC-Stereo-Spur ohne bestätigte Auswahl deren tatsächlicher Index gesetzt.
+Während nativer Wiedergabe kann der Nutzer **BLAU** verwenden, um
+ausschließlich zwischen real gemeldeten AUDIO-Indizes mit bekanntem
+AAC/AC3/EAC3/MPEG-Codec und 1–6 Kanälen umzuschalten. Das ist
+**manuelle Diagnose**, kein Ton-PASS und kein Transcode-Versprechen.
+Unbekannte Spuren und rohe Metadaten/URLs/Cookies bleiben gesperrt.
+Bei HTML5 meldet BLAU ausschließlich, dass die Funktion AVPlay erfordert.
+
+**Erneutes Real-TV-Gate:** dieselbe Aufnahme, Bild/Ton, Tonspurdiagnose
+vor/nach BLAU, einzelne PLAY/PAUSE-Tasten, OK/PlayPause, STOP/BACK,
+insbesondere Filmfortschritt nach Resume. Pausieren kann bei abgelaufenen
+MediaSessions/AVPlay-Decoder- oder Netzwerkproblemen weiterhin blockieren;
+erst konkrete TV-/Serverbeobachtungen unterscheiden das. Bestehende
+DEV-Kopplung und Produktionsapp unverändert, kein Backend-Update auf Verdacht.

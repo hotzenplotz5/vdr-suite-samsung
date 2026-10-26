@@ -45,8 +45,11 @@ test("Optional Samsung keys tolerate unsupported individual keys", () => {
 });
 
 test("S6.0: playback owns OK, combined PlayPause, Play, Pause, STOP and Back", () => {
-  for (const key of ["OK","PLAY","PAUSE","PLAY_PAUSE"])
+  for (const key of ["OK","PLAY_PAUSE"])
     assert.equal(playbackRemoteAction(key),"toggle");
+  assert.equal(playbackRemoteAction("PLAY"),"play");
+  assert.equal(playbackRemoteAction("PAUSE"),"pause");
+  assert.equal(playbackRemoteAction("BLUE"),"audio");
   for (const key of ["STOP","BACK"])
     assert.equal(playbackRemoteAction(key),"stop");
   for (const key of ["LEFT","RIGHT","UP","DOWN",null,"UNKNOWN"])
