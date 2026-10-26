@@ -374,3 +374,16 @@ Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-Err
 **TV-Gate:** Zusammen mit S6.0-Tasten und S6.1-Audio am bestehenden, separat gekoppelten Samsung DEV testen, sobald Zugriff wieder möglich ist: erkannte Taste, Bild/Ton, Playerstatus bei Pufferung, geordnetes STOP/BACK, MediaSession-Cleanup, HTML5-MP4-Abbruchanzeige (falls bewusst gewählt), Geräteschlüssel unverändert. Bis dahin **REAL-TV OPEN**.
 
 **Unberührt:** Productive Samsung-App, yaVDR-Backend, Device-Grants, bestehendes Pairing und installierte Pakete. Kein WITs-Start, keine neue Installation oder temporäre Credentials.
+
+
+## S6.3 – Sendernavigation und echte numerische Channel-Pagination (26.10.2026; SOURCE, TV OFFEN)
+
+**Übernommen statt neu entwickelt:** Samsung-PR #12 enthielt den hardwaregemeldeten Fehler „Sender geladen, aber nicht mit D-Pad erreichbar“ und bereits getestete Fokus- und Paginationslösungen; Samsung-PR #3 enthielt die Public-v1-Anfrage nach numerischer VDR-`channelNumber`-Sortierung. Beide Änderungen wurden im bestehenden Phase-S6-Branch integriert, ohne den Installationsstand oder ein vorhandenes Gerät zu verändern.
+
+**Clientfunktion:** Der einzige D-Pad-/Fokus-Owner nimmt dynamisch geladene `channel-row-*`-Elemente auf. UP/DOWN navigiert, OK zeigt nur die echten Kanalmetadaten, BACK kehrt wie bisher zurück. „Mehr Sender“ lädt exakt eine begrenzte, vom Server bestimmte Folgeseite und fokussiert deren ersten Eintrag. Backendwechsel/Neuabruf entfernen veraltete Fokus-IDs, verhindern Cross-Backend-Cursor-Verwendung und unterdrücken alte Async-Rückmeldungen. Erreichbare TV-Sender im Frontend sind noch **kein** Beleg für funktionierendes Live-Tuning.
+
+**Public-v1-Vertrag:** `GET /api/v1/channels?backendId=...&limit=20&sort=backendId,channelNumber,channelId&order=asc`; die gesamte VDR-Snapshot-Sortierung erfolgt serverseitig vor dem Paginieren, `ch2_` ist ein opaker Cursor und wird unverändert übergeben. Weder ein Client-Sort der ersten 20 IDs noch ein stiller Rückfall auf `ch1_` ist zulässig. Alter Server ohne Unterstützung liefert sichtbares HTTP 400. Fremder Scope, 401, 403 und 409 bleiben explizit behandelt.
+
+**Noch nicht implementiertes Live-Streaming:** Backend `api/device-live-tv-playback.md` dokumentiert Device `POST /api/v1/live-playback-sessions`, `media.live.play@backend` und einen abgesicherten live-progressive-fMP4-Pfad. Ob der installierte yaVDR-Build diese Funktion und einen auf Samsung Tizen 5.5 tatsächlich nutzbaren AVPlay-Medienzugang besitzt, ist nicht belegt. Deshalb löst die Senderauswahl **keinen** unkontrollierten POST bzw. Tuner-Lease aus. Keine privaten Browser-Routen, kein Streamdev-Ersatz, kein neuer Backend-Build. Das Live-Playback bleibt ein eigener offener Runtime-/Hardware-Gate.
+
+**TV-Gate offen:** Exakten installierten Backend-Build mit neuem Channel-Sort-Vertrag bestätigen, danach auf der bereits gekoppelten DEV-App Sender 1–20 sowie zweite Seite mit `channels.conf` vergleichen, D-Pad/OK/Mehr/BACK und den Geräteerhalt prüfen. Ein API-v1-200 auf älterem Sort-Modus oder allein ein grün getesteter Quellbranch genügt nicht.
