@@ -1404,6 +1404,16 @@ function boot() {
                 "AVPlay · play() ausgeführt · Bild/Ton prüfen";
             recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
               " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+          } else if (state === "progress" && mode === "avplay") {
+            // Samsung timeline callbacks measure the demux clock, not video
+            // frames or audibility; report exactly what the TV observed.
+            if (recordingLifecycleHint && detail &&
+                typeof detail.seconds==="number") {
+              recordingLifecycleHint.textContent="AVPlay-Zeit " +
+                Math.floor(detail.seconds/60)+":"+
+                ("0"+detail.seconds%60).slice(-2)+
+                " · Fortschritt "+detail.deltaSeconds+"s · Bild/Ton separat prüfen";
+            }
           } else if (state === "audio" && mode === "avplay") {
             if (recordingAudioHint)
               recordingAudioHint.textContent = describeSamsungAudio(detail);
@@ -1975,9 +1985,15 @@ function boot() {
       if (action === "play" || action === "pause" || action === "toggle") {
         var playbackState = (recordingPlayerMode === "html5" ?
           recordingHtml5Player : recordingPlayer).pauseOrResume(action);
-        if (recordingRemoteHint)
-          recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
-            " · Player: " + playbackState;
+        if (recordingRemoteHint) {
+          var evidence=recordingPlayerMode==="avplay" ?
+            recordingPlayer.inspectPlayback() : null;
+          recordingRemoteHint.textContent = "Fernbedienung · "+key+
+            " · Aktion "+playbackState+(evidence ?
+              " · AVPlay "+evidence.state+
+              (evidence.seconds===null ? "" : " · Zeit "+evidence.seconds+"s")+
+              " · Delta "+evidence.deltaSeconds+"s" : "");
+        }
         if (playbackState === "paused" || playbackState === "already_paused")
           recordingStatus("ready","Wiedergabe pausiert",
             "PLAY setzt fort · OK oder PLAY/PAUSE schaltet um · STOP beendet.");
