@@ -252,6 +252,10 @@ button { font: inherit; cursor: default; color: inherit; -webkit-appearance: non
 .live-channel-row { display: flex; align-items: center; min-height: 56px; padding: 12px 18px;
   background: #091a30; border-bottom: 1px solid #1e3854; }
 .live-channel-row:nth-child(even) { background: #0e2540; }
+/* The entire native-order sender row participates in the existing D-pad focus graph. */
+.live-channel-row.tv-focusable.is-focused, .live-channel-row.tv-focusable:focus {
+  background: #21466b; outline: 3px solid #64b4ff; outline-offset: -3px;
+}
 .live-channel-row strong { flex: 0 1 47%; font-size: 19px; margin-right: 12px; }
 .live-channel-row span { color: #adc3da; font-size: 15px; }
 @media(max-width:1380px) {
