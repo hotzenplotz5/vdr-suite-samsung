@@ -123,10 +123,17 @@
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-preview" data-live-action="load">Sender laden</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-more" data-live-action="more">Mehr Sender</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-backend" data-live-action="backend">Backend wechseln</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-now" data-live-epg-action="now">Jetzt / Nächste</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-window" data-live-epg-action="window">Programm 24h</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-more" data-live-epg-action="more">Weitere Sendungen</button>
         </div>
         <div class="live-catalog" aria-label="Echte Senderliste">
           <p class="live-backend-name" id="live-backend-name">Noch kein Backend geladen</p>
           <ul class="live-channel-list" id="live-channel-list" hidden></ul>
+          <section class="live-epg" aria-label="EPG-Programm des ausgewählten Senders">
+            <p id="live-epg-status" aria-live="polite">EPG: Sender mit OK auswählen. epg.view ist erforderlich.</p>
+            <ul id="live-epg-list" class="live-epg-events" hidden></ul>
+          </section>
         </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>
@@ -163,6 +170,10 @@
         <div class="recording-catalog" aria-label="Echte Aufnahmen, in Seiten von bis zu 100 pro Serveranfrage">
           <p class="recording-backend-name" id="recording-backend-name">Noch kein Backend geladen</p>
           <ol class="recording-list" id="recording-list" hidden></ol>
+          <section class="recording-detail" aria-label="Geschützte Aufnahmedetails">
+            <p id="recording-detail-info" aria-live="polite">Aufnahme mit OK auswählen, um Metadaten und Artwork anzufordern.</p>
+            <img id="recording-detail-poster" alt="Aufnahme-Poster (authentifizierter Abruf)" hidden>
+          </section>
           <div id="recording-player-surface" class="recording-player-surface" hidden
                aria-label="Samsung AVPlay Wiedergabetest">
             <object id="recording-avplay-object" type="application/avplayer" width="100%" height="100%"></object>
