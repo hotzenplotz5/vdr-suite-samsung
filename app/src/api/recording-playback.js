@@ -67,14 +67,15 @@ export function createRecordingPlaybackClient(environment) {
       xhr.send(JSON.stringify(payload));
     } catch (_) {finish({ok:false,kind:"network"});}
   }
-  function begin(credential,backendId,recordingId,capabilities,done) {
+  function begin(credential,backendId,recordingId,capabilities,done,nativeMediaAccess) {
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(backendId) ||
         !validId(recordingId,"rec") ||
         !capabilities || typeof capabilities !== "object") {
       done({ok:false,kind:"bad_request"}); return;
     }
     request(credential,"/api/v1/recording-playback-sessions","POST",
-      {backendId:backendId,recordingId:recordingId,capabilities:capabilities},
+      {backendId:backendId,recordingId:recordingId,capabilities:capabilities,
+        nativeMediaAccess:nativeMediaAccess === true},
       function (result) {
         if (!result.ok) {done(result); return;}
         var session=result.value && result.value.mediaSession;
@@ -97,8 +98,20 @@ export function createRecordingPlaybackClient(environment) {
         if (!path.startsWith(prefix+"/api/v1/media/sessions/"+session.id+"/")) {
           done({ok:false,kind:"response"}); return;
         }
+        // Only a session-scoped, explicitly requested native cookie is
+        // available to the external player. It must never be persisted/logged.
+        var nativeCookie = null;
+        if (nativeMediaAccess === true) {
+          var access = result.value && result.value.nativeMediaAccess;
+          if (!access || access.transport !== "http-cookie" ||
+              typeof access.cookie !== "string" ||
+              !/^vdr_suite_media=mg_[0-9a-f]{32}\.[A-Za-z0-9._~-]{8,256}$/.test(access.cookie)) {
+            done({ok:false,kind:"response"}); return;
+          }
+          nativeCookie = access.cookie;
+        }
         done({ok:true,sessionId:session.id,mediaUrl:origin[0]+path,
-          profile:session.presentationProfileId || ""});
+          profile:session.presentationProfileId || "",nativeCookie:nativeCookie});
       });
   }
   function stop(credential,backendId,sessionId,done) {
