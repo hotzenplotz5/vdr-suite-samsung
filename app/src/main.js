@@ -2003,6 +2003,16 @@ function boot() {
       return;
     }
     if (playbackKeysActive) {
+      if (key==="INFO") {
+        var infoSnapshot=recordingPlayerMode==="avplay" ?
+          recordingPlayer.inspectPlayback() : null;
+        if (recordingRemoteHint) recordingRemoteHint.textContent=
+          "Fernbedienung · INFO (Code "+(event.keyCode || event.which || "?")+")"+
+          (infoSnapshot ? " · AVPlay "+infoSnapshot.state+
+            (infoSnapshot.seconds===null ? "" : " · Zeit "+infoSnapshot.seconds+"s") :
+            " · HTML5-Player");
+        return; // Diagnostic only: never change native playback state.
+      }
       var action = playbackRemoteAction(key);
       // A held button must not rapidly toggle pause/resume or repeat STOP.
       if (event.repeat && action) return;
@@ -2129,7 +2139,37 @@ function boot() {
       return;
     }
     if (key==="INFO") {
-      message.textContent="INFO erkannt · EPG-Details über OK öffnen"; return;
+      // INFO reuses the existing authenticated detail handlers: no new API.
+      if (currentView==="live") {
+        var infoTarget=controls[focusedId];
+        var epgIndex=infoTarget && infoTarget.getAttribute("data-epg-index");
+        if (epgIndex!==null && epgIndex!==undefined) {
+          activate(infoTarget);
+          message.textContent="INFO · Sendungsdetails geöffnet";
+          return;
+        }
+        var channelIndex=infoTarget && infoTarget.getAttribute("data-channel-index");
+        if (channelIndex!==null && channelIndex!==undefined) activate(infoTarget);
+        if (selectedLiveChannel) {
+          loadSelectedEpg("now");
+          message.textContent="INFO · Jetzt/Nächste für gewählten Sender";
+        } else {
+          if (liveEpgStatus) liveEpgStatus.textContent=
+            "INFO erkannt · zuerst einen Sender laden und auswählen.";
+          message.textContent="INFO · noch kein Sender ausgewählt";
+        }
+        return;
+      }
+      if (currentView==="recordings") {
+        var infoRecord=controls[focusedId];
+        if (infoRecord && infoRecord.getAttribute("data-recording-index")!==null) {
+          activate(infoRecord);
+          message.textContent="INFO · Aufnahmedetails geöffnet";
+          return;
+        }
+      }
+      message.textContent="INFO erkannt · Details unter Live-TV/Aufnahmen";
+      return;
     }
     if (key==="PREVIOUS_CHANNEL" || key==="TELETEXT" || key==="TOOLS") {
       message.textContent=key+" erkannt · Funktion noch nicht implementiert"; return;
