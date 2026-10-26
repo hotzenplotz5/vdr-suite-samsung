@@ -24,7 +24,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-recordings-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-epg-action", "data-recordings-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -53,6 +53,13 @@ function simulate(options = {}) {
     appendChild(child) { this.children.push(child); }
   };
   const liveBackendName = {textContent:""};
+  const liveEpgStatus = {textContent:""};
+  const liveEpgList = {
+    hidden:true,children:[],_text:"",
+    set textContent(value){this._text=value;if(value==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(node){this.children.push(node);}
+  };
   const recordingList = {
     hidden:true, children:[], scrollTop:0, _text:"",
     set textContent(value) {this._text=value;if(value==="") this.children=[];},
@@ -60,6 +67,11 @@ function simulate(options = {}) {
     appendChild(child) {this.children.push(child);}
   };
   const recordingBackendName = {textContent:""};
+  const recordingDetailInfo = {textContent:""};
+  const recordingPoster = {
+    hidden:true,src:"",alt:"Poster",
+    removeAttribute(name){if(name==="src")this.src="";}
+  };
   const textNodes = Object.fromEntries([
     "message", "key-status", "tizen-status", "avplay-status", "remote-status"
   ].map(key => [key,{ textContent: "wird geprüft" }]));
@@ -119,6 +131,8 @@ function simulate(options = {}) {
       if (id === "pairing-user-code") return pairCode;
       if (id === "live-channel-list") return liveList;
       if (id === "live-backend-name") return liveBackendName;
+      if (id === "live-epg-status") return liveEpgStatus;
+      if (id === "live-epg-list") return liveEpgList;
       if (id === "recording-list") return recordingList;
       if (id === "recording-player-surface") return playerSurface;
       if (id === "recording-remote-hint") return remoteHint;
@@ -127,6 +141,8 @@ function simulate(options = {}) {
       if (id === "recording-html5-video") return recordingHtml5Video;
       if (id === "recording-avplay-object") return nativeAvplayObject;
       if (id === "recording-backend-name") return recordingBackendName;
+      if (id === "recording-detail-info") return recordingDetailInfo;
+      if (id === "recording-detail-poster") return recordingPoster;
       if (!textNodes[id]) throw Error("Missing test node " + id);
       return textNodes[id];
     },
@@ -161,7 +177,7 @@ function simulate(options = {}) {
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -172,7 +188,7 @@ test("Installed Samsung runtime shows actual deterministic build identity immedi
   const manifest = readFileSync("app/config.xml","utf8");
   assert.equal(info.version, pkg.version);
   assert.match(manifest, new RegExp('version="' + info.version.replace(/\./g,"\\.") + '"'));
-  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S6\.3 · b[0-9a-f]{12}$/);
+  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S6\.4 · b[0-9a-f]{12}$/);
   assert(!runtime.includes("VDR-Suite Samsung · S3.3"));
   const sim = simulate();
   assert.equal(sim.versionFooter.textContent, info.label);
@@ -741,4 +757,37 @@ test("S6.3 more channels focuses first appended sender; reload removes stale foc
   key(40);
   assert.equal(sim.liveList.children[0].isFocused,true);
   assert.ok(h.calls.every(req=>req.method==="GET"));
+});
+
+test("S6.4 live channel EPG is explicitly requested and never starts playback",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const selected=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  assert.equal(h.calls.length,3,"OK on channel selects metadata only");
+  sim.nodes["detail-live-epg-now"].click();
+  assert.match(h.calls[3].url,/\/api\/v1\/epg\/now-next\?/);
+  assert.match(h.calls[3].url,/backendId=home&channelId=/);
+  assert.equal(h.calls[3].method,"GET");
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:selected.channelId,
+    items:[{channelId:selected.channelId,title:"Heute",subtitle:"Kurz",
+      startTime:from,endTime:String(Number(from)+3600),durationSeconds:3600}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.liveEpgList.children.length,1);
+  assert.match(sim.liveEpgList.children[0].textContent,/Heute/);
+  sim.nodes["detail-live-epg-window"].click();
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/window\?/);
+  const query=new URL(h.calls[4].url).searchParams;
+  assert.equal(query.get("limit"),"24");
+  assert.equal(Number(query.get("untilTime"))-Number(query.get("fromTime")),86400);
+  h.reply(4,403,{code:"forbidden"});
+  assert.match(sim.liveEpgStatus.textContent,/epg.view/);
+  assert.equal(h.calls.every(req=>req.method==="GET"),true);
 });
