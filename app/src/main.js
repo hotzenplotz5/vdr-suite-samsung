@@ -13,7 +13,7 @@ import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
-import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis } from "./platform/recording-player.js";
+import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungPlaybackDiagnosis, describeSamsungAudio } from "./platform/recording-player.js";
 import { createHtml5RecordingPlayer } from "./platform/html5-recording-player.js";
 
 // Every control is in exactly one row per visible route. Navigation never
