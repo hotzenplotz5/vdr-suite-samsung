@@ -83,6 +83,7 @@ function simulate(options = {}) {
   const pairCode = {textContent:""};
   const playerSurface = {hidden:true};
   const remoteHint = {textContent:""};
+  const audioHint = {textContent:""};
   const nativeAvplayObject = {hidden:false};
   const recordingHtml5Video = {
     hidden:true,paused:true,src:"",error:null,
@@ -120,6 +121,7 @@ function simulate(options = {}) {
       if (id === "recording-list") return recordingList;
       if (id === "recording-player-surface") return playerSurface;
       if (id === "recording-remote-hint") return remoteHint;
+      if (id === "recording-audio-hint") return audioHint;
       if (id === "recording-html5-video") return recordingHtml5Video;
       if (id === "recording-avplay-object") return nativeAvplayObject;
       if (id === "recording-backend-name") return recordingBackendName;
@@ -157,7 +159,7 @@ function simulate(options = {}) {
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, playerSurface, remoteHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, playerSurface, remoteHint, audioHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -168,7 +170,7 @@ test("Installed Samsung runtime shows actual deterministic build identity immedi
   const manifest = readFileSync("app/config.xml","utf8");
   assert.equal(info.version, pkg.version);
   assert.match(manifest, new RegExp('version="' + info.version.replace(/\./g,"\\.") + '"'));
-  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S6\.0 · b[0-9a-f]{12}$/);
+  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S6\.1 · b[0-9a-f]{12}$/);
   assert(!runtime.includes("VDR-Suite Samsung · S3.3"));
   const sim = simulate();
   assert.equal(sim.versionFooter.textContent, info.label);
