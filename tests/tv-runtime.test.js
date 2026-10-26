@@ -172,7 +172,7 @@ test("Installed Samsung runtime shows actual deterministic build identity immedi
   const manifest = readFileSync("app/config.xml","utf8");
   assert.equal(info.version, pkg.version);
   assert.match(manifest, new RegExp('version="' + info.version.replace(/\./g,"\\.") + '"'));
-  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S6\.2 · b[0-9a-f]{12}$/);
+  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S6\.3 · b[0-9a-f]{12}$/);
   assert(!runtime.includes("VDR-Suite Samsung · S3.3"));
   const sim = simulate();
   assert.equal(sim.versionFooter.textContent, info.label);
@@ -508,13 +508,13 @@ test("S3.3 restart reads KeyManager, explicit Live click verifies and displays r
   assert.match(h.calls[1].url,/\/api\/v1\/backends\?/);
   h.reply(1,200,backendPage);
   assert.match(h.calls[2].url,/\/api\/v1\/channels\?backendId=home/);
-  h.reply(2,200,channelPage("ch1_more"));
+  h.reply(2,200,channelPage("ch2_more"));
   assert.equal(sim.liveList.children.length,1);
   assert.equal(sim.liveList.children[0].children[0].textContent,"1 · Das Erste");
   assert.match(sim.liveBackendName.textContent,/Wohnzimmer/);
   assert.equal(sim.stateNodes["detail-state-live"].dataState,"ready");
   sim.nodes["detail-live-more"].click();
-  assert.match(h.calls[3].url,/cursor=ch1_more/);
+  assert.match(h.calls[3].url,/cursor=ch2_more/);
   h.reply(3,200,channelPage());
   assert.equal(sim.liveList.children.length,2);
   assert.equal(sim.pairResult.getAttribute("data-pair-state"),"authenticated");
