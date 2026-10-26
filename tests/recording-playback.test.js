@@ -141,3 +141,34 @@ test("S5.2 late session-stop timeout cannot mask original AVPlay failure",()=>{
   assert.match(main,/if \(recordingTeardownBusy\) \{/);
   assert.match(main,/recordingSelected = null; \/\/ Changing folder\/page/);
 });
+
+test("S6.2: native player buffering, completion and late callbacks respect generation teardown",()=>{
+  let ready;let listener;const calls=[];
+  const api={open(){calls.push("open");},close(){calls.push("close");},
+    stop(){calls.push("stop");},play(){calls.push("play");},
+    setListener(next){listener=next;},
+    prepareAsync(ok){ready=ok;},getState(){return "PLAYING";}
+  };
+  const events=[],p=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  p.start("https://example.invalid/test.ts",state=>events.push(state));
+  ready();listener.onbufferingstart();listener.onbufferingcomplete();
+  assert.deepEqual(events.filter(x=>["preparing","playing","buffering","ready"].includes(x)),
+    ["preparing","playing","buffering","ready"]);
+  listener.onstreamcompleted();
+  assert.equal(events.at(-1),"finished");
+  p.stop();
+  const count=events.length;
+  listener.onbufferingstart();listener.onbufferingcomplete();listener.onerror("secret;Cookie");
+  assert.equal(events.length,count);
+  assert.ok(calls.includes("stop"));
+  assert.ok(calls.includes("close"));
+});
+
+test("S6.2: cleanup remains secondary to media-access failure, no private endpoint fallback",()=>{
+  const code=readFileSync(new URL("../app/src/main.js",import.meta.url),"utf8");
+  assert.match(code,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error"/);
+  assert.match(code,/reason === "user" && currentView === "recordings" && !result\.ok/);
+  assert.match(code,/html5PlaybackDiagnosis\(detail\)/);
+  assert.match(code,/mode === "html5" \? "HTML5" : "AVPlay"/);
+  assert.doesNotMatch(code,/XMLHttpRequest\(.*\/api\/media\//);
+});
