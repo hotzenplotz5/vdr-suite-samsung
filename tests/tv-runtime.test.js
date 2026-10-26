@@ -962,17 +962,17 @@ test("S6.6 EPG row OK opens a readable detail, never silently ignores key",()=>{
   key(40);key(13);
   assert.equal(h.calls.length,7,"detail response starts image GET before next EPG window");
   assert.match(h.calls[6].url,/\/api\/v1\/epg\/window\?/);
-  const params=new URL(h.calls[7].url).searchParams;
+  const params=new URL(h.calls[6].url).searchParams;
   assert.equal(params.get("fromTime"),second.startTime);
   assert.equal(params.get("untilTime"),second.endTime);
   assert.match(detail["live-epg-detail-title"].textContent,/heute/);
-  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
+  h.reply(6,200,{backendId:"home",channelId:channel.channelId,
     items:[{...second,eventId:"13739"}],
     page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
   assert.equal(h.calls.length,8,"verified ID triggers native detail GET");
   assert.match(h.calls[7].url,/\/api\/v1\/epg\/event\?/);
-  assert.equal(new URL(h.calls[6].url).searchParams.get("eventId"),"13739");
-  h.reply(6,200,{backendId:"home",channelId:channel.channelId,
+  assert.equal(new URL(h.calls[7].url).searchParams.get("eventId"),"13739");
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
     eventId:"13739",title:"heute",subtitle:"",
     description:"Nachrichten und Wetter",startTime:second.startTime,
     endTime:second.endTime,durationSeconds:600});
