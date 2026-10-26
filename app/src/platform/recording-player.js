@@ -153,6 +153,8 @@ export function createSamsungRecordingPlayer(environment) {
   // Some 2020 AVPlay implementations report PLAYING transiently after pause().
   // Remember the last explicit pause command, not a guessed decoder result.
   var pauseRequested = false;
+  // Bounded, non-secret AVPlay telemetry; clock progress does not prove frames or audio.
+  var lastPlaybackMs = null, progressedSeconds = 0;
   function available() {
     return !!(api && typeof api.open === "function" &&
       typeof api.prepareAsync === "function" && typeof api.play === "function");
@@ -161,6 +163,8 @@ export function createSamsungRecordingPlayer(environment) {
     generation += 1;
     active = false;
     pauseRequested = false;
+    lastPlaybackMs = null;
+    progressedSeconds = 0;
     if (!api) return;
     try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
     try { if (typeof api.close === "function") api.close(); } catch (_) {}
@@ -199,6 +203,18 @@ export function createSamsungRecordingPlayer(environment) {
             if (token === generation) onState("ready");
           },
           onstreamcompleted:function () {if (token === generation) onState("finished");},
+          oncurrentplaytime:function(ms) {
+            if (token!==generation || !active || typeof ms!=="number" ||
+                !isFinite(ms) || ms<0 || ms>4294967295 ||
+                Math.floor(ms)!==ms) return;
+            var previous=lastPlaybackMs;
+            if (previous!==null && ms>previous)
+              progressedSeconds+=Math.min(30,Math.floor((ms-previous)/1000));
+            lastPlaybackMs=ms;
+            onState("progress",{seconds:Math.floor(ms/1000),
+              advanced:previous!==null && ms>previous,
+              deltaSeconds:progressedSeconds});
+          },
           onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
         });
       api.prepareAsync(function () {
@@ -263,12 +279,28 @@ export function createSamsungRecordingPlayer(environment) {
     } catch (_) {return "error";}
     return "unavailable";
   }
+  // Read-only, bounded evidence after a real remote command.
+  function inspectPlayback() {
+    var state="unavailable",timeSeconds=null;
+    if (!active || !api) return {state:state,seconds:null,deltaSeconds:progressedSeconds};
+    try {
+      var raw=typeof api.getState==="function" ? api.getState() : "";
+      if (["NONE","IDLE","READY","PLAYING","PAUSED"].indexOf(raw)>=0)
+        state=raw;
+    } catch (_) {}
+    try {
+      var ms=typeof api.getCurrentTime==="function" ? api.getCurrentTime() : null;
+      if (typeof ms==="number" && isFinite(ms) && ms>=0 &&
+          ms<=4294967295 && Math.floor(ms)===ms) timeSeconds=Math.floor(ms/1000);
+    } catch (_) {}
+    return {state:state,seconds:timeSeconds,deltaSeconds:progressedSeconds};
+  }
   function cycleAudioTrack() {
     if (!active || !api) return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
     return cycleSamsungAudio(api);
   }
   return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
-    cycleAudioTrack:cycleAudioTrack};
+    cycleAudioTrack:cycleAudioTrack,inspectPlayback:inspectPlayback};
 }
 // Advertise only the narrow H.264/AAC path observed via a TV decoder probe.
 // This is not proof that all VDR recordings are decodable.
