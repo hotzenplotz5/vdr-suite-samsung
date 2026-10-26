@@ -1260,3 +1260,20 @@ test("S6.13 TV sound routing diagnostics are read-only and fail closed",()=>{
   assert.equal(samsungTvSoundStatus(bad),"TV-Tonstatus nicht lesbar");
   assert.doesNotMatch(samsungTvSoundStatus(bad),/secret|untrusted/);
 });
+
+test("S6.14 native control latency and delayed AVPlay clock probe are read-only and fenced",()=>{
+  const source=readFileSync("app/src/main.js","utf8");
+  assert.match(source,/var beforeCall=Date\.now\(\)/);
+  assert.match(source,/var afterCall=Date\.now\(\)/);
+  assert.match(source,/Native-API .*?callMs.*?Snapshot .*?snapshotMs/s);
+  assert.match(source,/recordingPlayer\.inspectPlayback\(\)/);
+  assert.match(source,/window\.setTimeout\(function \(\) \{/);
+  assert.match(source,/recordingControlSequence!==controlTicket/);
+  assert.match(source,/recordingPlaybackSession!==controllingSession/);
+  assert.match(source,/recordingControlSequence\+\+/);
+  assert.match(source,/Uhr unverändert/);
+  assert.doesNotMatch(source,/setBufferingParam\(/,
+    "observability-only slice must not silently tune the native media buffer");
+  assert.doesNotMatch(source,/resume_requested.*setSelectTrack/s,
+    "do not switch audio based on remote resume requests");
+});
