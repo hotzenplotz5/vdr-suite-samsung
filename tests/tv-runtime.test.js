@@ -791,3 +791,56 @@ test("S6.4 live channel EPG is explicitly requested and never starts playback",(
   assert.match(sim.liveEpgStatus.textContent,/epg.view/);
   assert.equal(h.calls.every(req=>req.method==="GET"),true);
 });
+
+test("S6.4 selected VDR recording reads metadata/artwork only with Device header",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={kind:"recording",backendId:"home",
+    recordingId:"rec_00000000000000000000000000000001",title:"Ein Film",
+    description:"Beschreibung",recordedAt:"2026-10-25T08:00:00Z",
+    durationSeconds:3600,durationKnown:true,sizeMb:200};
+  h.reply(2,200,{items:[rec],page:{limit:100,offset:0,totalCount:1,hasMore:false},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  assert.equal(h.calls[3].method,"GET");
+  assert.match(h.calls[3].url,/\/api\/v1\/recordings\/rec_0{31}1\?backendId=home$/);
+  assert.match(h.calls[3].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(3,200,{...rec,metadata:{state:"available",
+    source:"restfulapi-scraper-bridge",contentKind:"movie",genreText:"Drama",
+    overview:"Ein echter Film"}});
+  assert.match(sim.recordingDetailInfo.textContent,/Drama/);
+  assert.match(h.calls[4].url,/\/artwork\?backendId=home$/);
+  h.reply(4,200,{backendId:"home",recordingId:rec.recordingId,items:[]});
+  assert.match(sim.recordingDetailInfo.textContent,/Kein Artwork/);
+  assert.equal(h.calls.every(req=>req.method==="GET"),true);
+  sim.nodes["nav-live"].click();
+  assert.equal(sim.recordingPoster.hidden,true);
+});
+
+test("S6.4 late recording detail response cannot revive an earlier selection",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first={kind:"recording",backendId:"home",recordingId:"rec_00000000000000000000000000000001",
+    title:"Erster Film",description:"1",recordedAt:"2026-10-25T08:00:00Z",
+    durationSeconds:60,durationKnown:true,sizeMb:1};
+  const second={...first,recordingId:"rec_00000000000000000000000000000002",title:"Zweiter Film"};
+  h.reply(2,200,{items:[first,second],
+    page:{limit:100,offset:0,totalCount:2,hasMore:false},meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  assert.equal(h.calls.length,4);
+  sim.recordingList.children[1].click();
+  assert.equal(h.calls[3].aborted,true);
+  assert.equal(h.calls.length,5);
+  h.reply(3,200,{...first,metadata:{state:"available",source:"none",contentKind:"movie"}});
+  assert.doesNotMatch(sim.recordingDetailInfo.textContent,/Erster Film/);
+  h.reply(4,404,{code:"not_found"});
+  assert.match(sim.recordingDetailInfo.textContent,/nicht vorhanden/);
+});
