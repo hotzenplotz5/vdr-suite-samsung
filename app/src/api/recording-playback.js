@@ -106,7 +106,13 @@ export function createRecordingPlaybackClient(environment) {
           if (!access || access.transport !== "http-cookie" ||
               typeof access.cookie !== "string" ||
               !/^vdr_suite_media=mg_[0-9a-f]{32}\.[A-Za-z0-9._~-]{8,256}$/.test(access.cookie)) {
-            done({ok:false,kind:"response"}); return;
+            // A legacy backend may have created a session but omitted this
+            // opt-in projection. Close THAT session before reporting failure;
+            // never leave an avoidable active stream/lease behind.
+            stop(credential,backendId,session.id,function () {
+              done({ok:false,kind:"response"});
+            });
+            return;
           }
           nativeCookie = access.cookie;
         }
