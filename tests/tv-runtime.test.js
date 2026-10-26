@@ -1307,3 +1307,24 @@ test("S6.15 remote digits, channel keys and Menu operate on the loaded TV UI wit
   key(10009);
   assert.equal(sim.panels.find(p=>p.route==="live").hidden,false);
 });
+
+
+test("S6.15 INFO on a real loaded channel requests existing authenticated now-next EPG",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  assert.equal(h.calls.length,3);
+  // Re-focus stays on the channel row after selecting it.
+  sim.listeners.keydown({keyCode:457,preventDefault(){}});
+  assert.equal(h.calls.length,4,"INFO must initiate the existing explicit EPG query");
+  assert.match(h.calls[3].url,/\/api\/v1\/epg\/now-next\?/);
+  assert.equal(h.calls[3].method,"GET");
+  assert.match(sim.liveEpgStatus.textContent,/wird geladen/);
+  assert.equal(h.calls.filter(req=>req.method!=="GET").length,0);
+});
