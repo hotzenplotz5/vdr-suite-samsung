@@ -450,3 +450,32 @@ Tonspurdiagnose: nur erkannte sichere Indices, Single-AAC-Fallback und
 explizite BLAU-Taste für die vorhandenen bekannten Audioformate.
 Die Authentifizierung, Device-MediaSession und Fullscreen-Engine werden
 nicht verändert. **Re-Test des Tons und Resume auf Tizen 5.5 bleibt OPEN.**
+
+
+## S6.5 – Real-TV-Re-Test nach CI-grünem Commit 9ebf6b9 (26.10.2026)
+
+**Evidenz:** Direktes Nutzerfeedback am Samsung GU43TU6979UXZG (Tizen 5.5) nach der S6.5-Testaufforderung. Die exakt angezeigte TV-Buildkennung wurde mit dieser Meldung noch nicht übermittelt; deshalb ist die Zuordnung zum erwarteten Paket weiterhin als gesondertes Gate zu bestätigen. Die neue Rückmeldung überschreibt frühere grüne CI- und Quelltests nicht, widerlegt aber einen Hardware-PASS für die betroffenen Funktionen.
+
+| Bereich | Tatsächliche TV-Beobachtung | Gate |
+|---|---|---|
+| AVPlay-Ton | Über mehrere getestete Wiedergaben weiterhin kein hörbarer Ton | FAIL |
+| Formatkompatibilität | Manche Aufnahmen zeigen Video, andere ausschließlich Schwarzbild | FAIL; Datei-/Container-/Codec-/Session-Matrix offen |
+| PLAY / PAUSE / STOP | Benutzer meldet keine wirksame Funktion der Tasten | FAIL; Key-Event-Eingang vs. Playerwirkung getrennt prüfen |
+| OK | Bild wird angehalten und bleibt trotz nachfolgender Tasten eingefroren | FAIL; kein nachgewiesener Resume-/Bildfortschritt |
+| BACK | Verlässt die Wiedergabe | PASS für sichtbares Zurück, Session-STOP-Cleanup separat offen |
+| EPG | Jetzt/Nächste sowie 24h sind mit der Fernbedienung erreichbar; Metadaten werden nicht sichtbar | FAIL; angekündigtes Foto und Status-/Antwortdiagnose auswerten |
+| Poster | Zunächst Platzhalter; Poster erscheint laut Nutzer erst beim Betätigen der Wiedergabetaste; zuvor anders | UX-Regression; genaue Auswahl-/Ladeabfolge prüfen |
+| Aufnahmedatum | Wirkt korrekt formatiert | Vorläufig positiv; noch nicht isoliert bestätigt |
+| Layout | Informationsanordnung wird als unbrauchbar/unattraktiv bewertet; Farben und Schrift sind ausdrücklich **nicht** das Problem | UX-Hardwareabnahme FAIL |
+
+**Quellenprüfung:** Der Client ruft in `app/src/main.js` die Aufnahme-Detail-/Artwork-Kette aktuell erst nach aktiver Aufnahmeauswahl ab; die Poster-Anzeige erfolgt asynchron nach Detail-, Artwork-Listen- und Byte-GET. Im AVPlay-Adapter bedeutet erfolgreiches `play()` und der Status `PLAYING` nicht automatisch weiterlaufende Videoframes oder hörbaren Ton. Das erklärt die Nachweisgrenze, belegt aber ohne weitere Hardwarediagnose **nicht** die konkrete Ursache der Fehler.
+
+**Nächste Gates – keine neue Architektur:**
+
+1. Auf echter DEV-App sichtbare Buildkennung, real empfangene Fernbedienungs-KeyCodes, AVPlay-`getState()`, `oncurrentplaytime`/`getCurrentTime()`, Pause/Resume-Befehl und tatsächlichen Bildfortschritt korrelieren. Keine Medien-Tastenwirkung allein aufgrund eines JS-Calls behaupten. STOP/BACK einschließlich Server-MediaSession-Cleanup getrennt abnehmen.
+2. Stumme und schwarz bleibende Aufnahmen exemplarisch nach geschütztem Session-Profil, Container, Video-/Audio-Codec und Tonspur/Index/Kanälen unterscheiden; Audiowiedergabe nur nach echtem Hörtest PASS. Keine ungeschützten URLs, vermuteten Cookie-Workarounds oder Backend-Transcodes auf Verdacht.
+3. EPG-Foto prüfen und entscheiden, ob ein sichtbares Status-/Berechtigungs-/Antwortproblem oder ein Darstellung-/Fokusproblem vorliegt. Vorher nicht erneut den API-Vertrag oder das Layout blind umstellen.
+4. Poster unmittelbar und stabil zur ausgewählten Aufnahme sichtbar machen, ohne bei schneller D-Pad-Navigation unkontrolliert GETs auszulösen; Race- und Wechseltests ergänzen.
+5. Informationsarchitektur des existierenden VDR-Suite-Webfrontends als Layout-Referenz heranziehen, auf TV-D-Pad/Fokus adaptieren. Schrift/Farbpalette beibehalten. Funktionale Gates priorisieren, bevor das UI als fertig gilt.
+
+**Status/Schutz:** S6.5 **HARDWARE FAIL**. PR #33 bleibt Draft, **kein Merge nach main**. Nur bestehender Branch `work/s6-tv-api-v1`, keine Produktivinstallation, kein neues DEV-Bootstrap, kein Neu-Pairing, kein ungefragtes Backend-Update.
