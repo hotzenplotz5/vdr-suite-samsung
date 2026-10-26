@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"1328686437e1","label":"Samsung v0.1.0 · S6.4 · b1328686437e1"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"df90799ddbe5","label":"Samsung v0.1.0 · S6.4 · bdf90799ddbe5"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -2569,6 +2569,9 @@
       if (!isVisibleFocus(id)) return false;
       var chosen = controls[id];
       focusedId = id;
+      // On Tizen TV, simply focusing a text input can open the native IME.
+      // Its arrow/Backspace keys belong to editing, not to the app focus graph.
+      if (currentView === "settings") editingServerAddress = id === "settings-base-input";
       if (currentView === "home") lastHomeFocus = id;
       if (!rowMemory[currentView]) rowMemory[currentView] = {};
       var rows = focusRows();
@@ -3979,6 +3982,9 @@
       }
       if (restoredBase) serverInput.value = restoredBase;
       serverInput.addEventListener("change", saveServerBase);
+      serverInput.addEventListener("focus", function () {
+        if (currentView === "settings") editingServerAddress = true;
+      });
       serverInput.addEventListener("blur", function () {
         editingServerAddress = false;
         saveServerBase();
@@ -3996,6 +4002,20 @@
     // Exactly one capture-phase keydown owner: catch events from the native
     // playback surface before focused elements can consume them.
     document.addEventListener("keydown", function (event) {
+      // Samsung Tizen 5.5 IME owns the keys while the address editor is focused.
+      // Do not preventDefault or navigate for Backspace, arrows, digits or OK,
+      // even if the native keyboard targets document instead of the input node.
+      if (currentView === "settings" && editingServerAddress) {
+        var imeCode = event.keyCode || event.which;
+        if (imeCode === 65376 || imeCode === 65385 || imeCode === 10009) {
+          // Samsung IME Done/Cancel and remote Return close the editor first.
+          // No global BACK route and no forced text mutation.
+          if (serverInput && typeof serverInput.blur === "function") serverInput.blur();
+          editingServerAddress = false;
+          setFocus("settings-test");
+        }
+        return;
+      }
       var key = normalizeRemoteKey(event);
       var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
         currentView === "recordings";
@@ -4009,14 +4029,6 @@
              raw <= 65535 && Math.floor(raw) === raw ? " · Code " + raw : "");
         }
         return;
-      }
-      if (editingServerAddress && event.target === serverInput) {
-        if (key === "BACK") {
-          event.preventDefault();
-          editingServerAddress = false;
-          setFocus("settings-test");
-        }
-        return; // Samsung virtual keyboard owns input keys while editing.
       }
       event.preventDefault();
       keyStatus.textContent = key;
