@@ -80,7 +80,7 @@ export function createHtml5RecordingPlayer(video, environment) {
     function buffering() {
       if (token!==generation || phase==="failed" || phase==="finished" ||
           phase==="stopped") return;
-      if (phase==="preparing") return; // startup watchdog already runs
+      if (phase==="preparing" || phase==="paused") return; // startup or intentional pause
       phase="buffering";
       onState("buffering");
       armWatchdog(token,20000,"stall_timeout",onState);
@@ -111,6 +111,7 @@ export function createHtml5RecordingPlayer(video, environment) {
     try {
       video.src=mediaUrl;
       video.load();
+      if (phase==="failed") return true; // synchronous media error keeps precedence
       onState("preparing");
       // Catches the real-device black-screen case where neither canplay nor
       // error is emitted; does not assert that the codec is the root cause.
