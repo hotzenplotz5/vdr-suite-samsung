@@ -1122,6 +1122,8 @@ test("S6.10 native AVPlay clock diagnosis is bounded and invalidated on stop",()
   assert.equal(player.start("https://tv.example.test/stream.ts",
     (state,detail)=>evidence.push({state,detail})),true);
   mock.listener.oncurrentplaytime(1000);
+  mock.listener.oncurrentplaytime(1500);
+  mock.listener.oncurrentplaytime(2100);
   mock.listener.oncurrentplaytime(3900);
   mock.time=3900;
   assert.equal(player.inspectPlayback().state,"PLAYING");
