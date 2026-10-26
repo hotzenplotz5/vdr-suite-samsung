@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"d04bdc499548","label":"Samsung v0.1.0 · S6.4 · bd04bdc499548"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"d6761de758bb","label":"Samsung v0.1.0 · S6.4 · bd6761de758bb"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -2408,22 +2408,27 @@
         "EPG: Sender mit OK auswählen. epg.view ist erforderlich.";
       if (liveEpgList) {liveEpgList.textContent = "";liveEpgList.hidden = true;}
     }
-    function epgRow(item) {
-      var start = new Date(Number(item.startTime)*1000);
-      var time = isFinite(start.getTime()) ?
-        start.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
-      return time + " · " + item.title +
-        (item.subtitle ? " · " + item.subtitle : "");
+    function epgRow(item,index,nowNext) {
+      var start=new Date(Number(item.startTime)*1000);
+      var end=new Date(Number(item.endTime)*1000);
+      var clock=function(value) {
+        return isFinite(value.getTime()) ?
+          value.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+      };
+      var label=nowNext ? (index===0 ? "Jetzt · " : "Danach · ") : "";
+      return label+clock(start)+"–"+clock(end)+" · "+item.title+
+        (item.subtitle ? " · "+item.subtitle : "");
     }
-    function showEpgRows(rows,append) {
+    function showEpgRows(rows,append,nowNext) {
       if (!liveEpgList) return;
-      if (!append) liveEpgList.textContent = "";
-      rows.forEach(function(item){
-        var node = document.createElement("li");
-        node.textContent = epgRow(item).slice(0,550);
+      if (!append) liveEpgList.textContent="";
+      rows.forEach(function(item,index){
+        var node=document.createElement("li");
+        node.textContent=epgRow(item,index,!!nowNext).slice(0,550);
         liveEpgList.appendChild(node);
       });
-      liveEpgList.hidden = !liveEpgList.children.length;
+      liveEpgList.hidden=!liveEpgList.children.length;
+      if (!append) liveEpgList.scrollTop=0;
     }
     function loadSelectedEpg(action) {
       if (!selectedLiveChannel || !liveCredential || !liveBackends.length) {
@@ -2446,7 +2451,7 @@
                 "EPG Jetzt/Nächste: " + mediaMetadataError(result);
               showEpgRows([],false);return;
             }
-            showEpgRows(result.value.items,false);
+            showEpgRows(result.value.items,false,true);
             if (liveEpgStatus) liveEpgStatus.textContent = result.value.items.length ?
               "EPG Jetzt/Nächste · "+result.value.items.length+" Einträge" :
               "EPG-Cache enthält keine passenden Sendungen.";
@@ -2712,18 +2717,30 @@
           return;
         }
         var item=detail.value,meta=item.metadata,fields=[];
+        fields.push((item.title || recording.title || "Aufnahme").slice(0,180));
         fields.push(meta.contentKind==="series-episode" ? "Serienepisode" :
           meta.contentKind==="series" ? "Serie" :
-          meta.contentKind==="movie" ? "Film" : "Aufnahme");
-        if (meta.seriesTitle) fields.push(meta.seriesTitle.slice(0,120));
-        if (meta.episodeTitle) fields.push(meta.episodeTitle.slice(0,120));
-        if (meta.subtitle && !meta.episodeTitle) fields.push(meta.subtitle.slice(0,120));
-        if (meta.seasonNumber!==undefined) fields.push("Staffel "+meta.seasonNumber);
-        if (meta.episodeNumber!==undefined) fields.push("Folge "+meta.episodeNumber);
-        if (meta.genreText) fields.push(meta.genreText.slice(0,90));
-        if (meta.overview) fields.push(meta.overview.slice(0,250));
-        if (meta.state==="absent") fields.push("Keine erweiterten Metadaten");
-        if (recordingDetailInfo) recordingDetailInfo.textContent=fields.join(" · ");
+          meta.contentKind==="movie" ? "Film" : "VDR-Aufnahme");
+        if (meta.providerTitle && meta.providerTitle!==item.title)
+          fields.push("Originaltitel: "+meta.providerTitle.slice(0,180));
+        if (meta.seriesTitle) fields.push("Serie: "+meta.seriesTitle.slice(0,150));
+        if (meta.episodeTitle) fields.push("Episode: "+meta.episodeTitle.slice(0,150));
+        if (meta.subtitle && !meta.episodeTitle)
+          fields.push("Untertitel: "+meta.subtitle.slice(0,150));
+        var episode=[];
+        if (meta.seasonNumber!==undefined) episode.push("Staffel "+meta.seasonNumber);
+        if (meta.episodeNumber!==undefined) episode.push("Folge "+meta.episodeNumber);
+        if (episode.length) fields.push(episode.join(" · "));
+        if (meta.genreText) fields.push("Genre: "+meta.genreText.slice(0,180));
+        if (meta.releaseDate) fields.push("Erscheinung: "+meta.releaseDate.slice(0,64));
+        if (item.recordedAt) fields.push("Aufgenommen: "+item.recordedAt.replace("T"," ").slice(0,19));
+        if (item.durationKnown) fields.push("Laufzeit: "+Math.round(item.durationSeconds/60)+" Min.");
+        if (meta.tagline) fields.push(meta.tagline.slice(0,220));
+        if (meta.overview) fields.push("Inhalt: "+meta.overview.slice(0,1800));
+        else if (item.description) fields.push("Inhalt: "+item.description.slice(0,1800));
+        if (meta.state==="absent") fields.push("Keine erweiterten Metadaten verfügbar");
+        if (meta.state==="partial") fields.push("Weitere Metadaten nicht vollständig");
+        if (recordingDetailInfo) recordingDetailInfo.textContent=fields.join("\n");
         recordingMetadata.artworkList(credential,backendId,recId,function(art){
           if (!current()) return;
           if (!art.ok) {
