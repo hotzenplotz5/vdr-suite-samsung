@@ -1277,3 +1277,33 @@ test("S6.14 native control latency and delayed AVPlay clock probe are read-only 
   assert.doesNotMatch(source,/resume_requested.*setSelectTrack/s,
     "do not switch audio based on remote resume requests");
 });
+
+
+test("S6.15 remote digits, channel keys and Menu operate on the loaded TV UI without requests",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first=channelPage().items[0];
+  const second={...first,channelId:"second-channel",channelNumber:17,name:"ZDF"};
+  const third={...first,channelId:"third-channel",channelNumber:230,name:"WDR"};
+  h.reply(2,200,{...channelPage(),items:[first,second,third]});
+  assert.equal(sim.liveList.children.length,3);
+  const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(428); // CH- enters loaded channel list.
+  assert.equal(sim.liveList.children[0].isFocused,true);
+  key(428); // Next loaded channel.
+  assert.equal(sim.liveList.children[1].isFocused,true);
+  key(427); // CH+ back.
+  assert.equal(sim.liveList.children[0].isFocused,true);
+  key(49);key(55); // Channel 17 (only current loaded page).
+  assert.equal(sim.liveList.children[1].isFocused,true);
+  assert.equal(h.calls.length,3,"remote browsing must not fetch, tune or mutate");
+  key(18); // Samsung Menu -> VDR-Suite settings, not TV installation.
+  assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  key(10009);
+  assert.equal(sim.panels.find(p=>p.route==="live").hidden,false);
+});
