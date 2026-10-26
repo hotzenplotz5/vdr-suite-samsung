@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
-import { createSamsungRecordingPlayer } from "../app/src/platform/recording-player.js";
+import { createSamsungRecordingPlayer, describeSamsungAudio, samsungTvSoundStatus } from "../app/src/platform/recording-player.js";
 
 const html = readFileSync("app/index.html", "utf8");
 const runtime = readFileSync("app/tv-runtime.js", "utf8");
@@ -1213,4 +1213,50 @@ test("S6.12 EPG DOWN from last programme focuses its scroll action immediately",
   key(38);
   assert.equal(sim.liveEpgList.children[1].isFocused,true);
   assert.equal(h.calls.length,4,"scroll navigation never fetches metadata");
+});
+
+test("S6.13 MPEG audio is not silently classified as MP3 or decoded sound",()=>{
+  const events=[],api={
+    state:"IDLE",listener:null,selected:0,
+    open(){this.state="IDLE";},
+    setListener(listener){this.listener=listener;},
+    prepareAsync(ok){this.state="READY";ok();},
+    play(){this.state="PLAYING";},
+    getState(){return this.state;},
+    getTotalTrackInfo(){return [{type:"AUDIO",index:1,
+      extra_info:JSON.stringify({fourCC:"mpeg",channels:"2",sample_rate:"48000"})}];},
+    getCurrentStreamInfo(){return [{type:"AUDIO",index:1,
+      extra_info:JSON.stringify({fourCC:"mpeg",channels:"2",sample_rate:"48000"})}];},
+    setSelectTrack(){this.selected++;},
+    stop(){this.state="IDLE";},close(){this.state="NONE";}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  assert.equal(player.start("https://example.test/media.ts",(state,detail)=>{
+    events.push({state,detail});
+  }),true);
+  const info=events.find(item=>item.state==="audio").detail;
+  assert.equal(info.status,"no_safe_switch");
+  assert.equal(info.currentIndex,1);
+  assert.equal(info.tracks[0].fourCC,"MPEG");
+  assert.equal(info.tracks[0].sampleRate,48000);
+  assert.match(describeSamsungAudio(info),/MPEG \[MPEG\].*48000Hz.*MP2\/MP3 nicht bestimmt/);
+  assert.equal(api.selected,0,"no speculative auto audio-track switching");
+  player.stop();
+});
+
+test("S6.13 TV sound routing diagnostics are read-only and fail closed",()=>{
+  let writes=0;
+  const good={tizen:{tvaudiocontrol:{
+    isMute(){return false;},getVolume(){return 30;},getOutputMode(){return "PCM";},
+    setMute(){writes++;},setVolume(){writes++;},playSound(){writes++;}
+  }}};
+  assert.match(samsungTvSoundStatus(good),/Stumm: nein · Lautstärke: 30 · Ausgabe: PCM/);
+  assert.equal(writes,0);
+  assert.equal(samsungTvSoundStatus({}),"TV-Tonstatus nicht verfügbar");
+  const bad={tizen:{tvaudiocontrol:{
+    isMute(){throw Error("credential secret");},
+    getVolume(){return -100;},getOutputMode(){return "untrusted-server-path";}
+  }}};
+  assert.equal(samsungTvSoundStatus(bad),"TV-Tonstatus nicht lesbar");
+  assert.doesNotMatch(samsungTvSoundStatus(bad),/secret|untrusted/);
 });
