@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"b376b6e2b281","label":"Samsung v0.1.0 · S5.1 · bb376b6e2b281"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"3fc8cee7c40e","label":"Samsung v0.1.0 · S5.1 · b3fc8cee7c40e"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1081,14 +1081,15 @@
         xhr.send(JSON.stringify(payload));
       } catch (_) {finish({ok:false,kind:"network"});}
     }
-    function begin(credential,backendId,recordingId,capabilities,done) {
+    function begin(credential,backendId,recordingId,capabilities,done,nativeMediaAccess) {
       if (!/^[A-Za-z0-9._-]{1,128}$/.test(backendId) ||
           !validId(recordingId,"rec") ||
           !capabilities || typeof capabilities !== "object") {
         done({ok:false,kind:"bad_request"}); return;
       }
       request(credential,"/api/v1/recording-playback-sessions","POST",
-        {backendId:backendId,recordingId:recordingId,capabilities:capabilities},
+        {backendId:backendId,recordingId:recordingId,capabilities:capabilities,
+          nativeMediaAccess:nativeMediaAccess === true},
         function (result) {
           if (!result.ok) {done(result); return;}
           var session=result.value && result.value.mediaSession;
@@ -1111,8 +1112,20 @@
           if (!path.startsWith(prefix+"/api/v1/media/sessions/"+session.id+"/")) {
             done({ok:false,kind:"response"}); return;
           }
+          // Only a session-scoped, explicitly requested native cookie is
+          // available to the external player. It must never be persisted/logged.
+          var nativeCookie = null;
+          if (nativeMediaAccess === true) {
+            var access = result.value && result.value.nativeMediaAccess;
+            if (!access || access.transport !== "http-cookie" ||
+                typeof access.cookie !== "string" ||
+                !/^vdr_suite_media=mg_[0-9a-f]{32}\.[A-Za-z0-9._~-]{8,256}$/.test(access.cookie)) {
+              done({ok:false,kind:"response"}); return;
+            }
+            nativeCookie = access.cookie;
+          }
           done({ok:true,sessionId:session.id,mediaUrl:origin[0]+path,
-            profile:session.presentationProfileId || ""});
+            profile:session.presentationProfileId || "",nativeCookie:nativeCookie});
         });
     }
     function stop(credential,backendId,sessionId,done) {
@@ -1240,7 +1253,7 @@
       try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
       try { if (typeof api.close === "function") api.close(); } catch (_) {}
     }
-    function start(mediaUrl,onState) {
+    function start(mediaUrl,onState,nativeCookie) {
       if (!available() || typeof mediaUrl !== "string" ||
           !/^https:\/\/[^\s?#]+$/.test(mediaUrl)) {
         onState("unsupported",{stage:"unsupported"}); return false;
@@ -1249,6 +1262,15 @@
       var token = generation;
       try {
         api.open(mediaUrl);
+        // Samsung AVPlay documents COOKIE for native HTTP requests in IDLE.
+        // This is the Device MediaSession's scoped credential, not the Device
+        // login and never a query string. Reject unsafe header syntax.
+        if (nativeCookie != null) {
+          if (!/^vdr_suite_media=mg_[0-9a-f]{32}\.[A-Za-z0-9._~-]{8,256}$/.test(nativeCookie) ||
+              typeof api.setStreamingProperty !== "function")
+            throw Error("Native cookie delivery unsupported");
+          api.setStreamingProperty("COOKIE",nativeCookie);
+        }
         if (typeof api.setDisplayRect === "function")
           api.setDisplayRect(0,0,1920,1080);
         // Fill the TV display area but preserve film aspect ratio.
