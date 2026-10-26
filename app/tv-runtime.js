@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"ae5dd57e211f","label":"Samsung v0.1.0 · S6.4 · bae5dd57e211f"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"cf7d130e2764","label":"Samsung v0.1.0 · S6.4 · bcf7d130e2764"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -34,8 +34,11 @@
   // Route input only while a recording player owns the remote. Never move menu focus.
   function playbackRemoteAction(key) {
     if (key === "STOP" || key === "BACK") return "stop";
-    if (key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE" || key === "OK")
-      return "toggle";
+    if (key === "PLAY") return "play";
+    if (key === "PAUSE") return "pause";
+    if (key === "PLAY_PAUSE" || key === "OK") return "toggle";
+    // Explicit, user-initiated audio track inspection/selection during AVPlay.
+    if (key === "BLUE") return "audio";
     return null;
   }
   // END app/src/navigation/remote.js
@@ -1515,8 +1518,9 @@
         selected.channels<=2) {result.status="active_compatible";return result;}
     // Samsung permits AUDIO track switching only in PLAYING. Avoid switching
     // single-track streams, guessing codecs or selecting unknown track IDs.
-    if (all.tracks.length<2 || !compatible ||
-        typeof api.setSelectTrack!=="function") {
+    // A single explicitly advertised AAC stereo track may still be unselected.
+    // Selecting it while PLAYING is safer than assuming that demuxed means active.
+    if (!compatible || typeof api.setSelectTrack!=="function") {
       result.status="no_safe_switch";return result;
     }
     try {api.setSelectTrack("AUDIO",compatible.index);}
@@ -1525,6 +1529,37 @@
     result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
     result.status=result.currentIndex===compatible.index ?
       "selected_confirmed" : "selection_requested";
+    return result;
+  }
+  // Explicit BLUE-key selection helps diagnose audio that is detected but silent.
+  // Only Tizen-reported AUDIO indices with a known codec/channel count are used.
+  // No guessed index, raw extra_info, media URL, credential or cookie escapes.
+  function cycleSamsungAudio(api) {
+    var state="";
+    try {state=typeof api.getState==="function" ? api.getState() : "";}
+    catch (_) {}
+    if (state!=="PLAYING") return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+    var all=samsungAudioRead(api,"getTotalTrackInfo");
+    if (!all.ok) return {status:"unavailable",total:0,currentIndex:null,tracks:[]};
+    var current=samsungAudioRead(api,"getCurrentStreamInfo");
+    var selected=current.tracks.length ? current.tracks[0] : null;
+    var result={status:"no_safe_switch",total:all.tracks.length,
+      currentIndex:selected ? selected.index : null,tracks:all.tracks};
+    var choices=all.tracks.filter(function(track) {
+      return ["AAC","AC3","EAC3","MPEG"].indexOf(track.codec)>=0 &&
+        track.channels!==null && track.channels<=6;
+    });
+    if (!choices.length || typeof api.setSelectTrack!=="function") return result;
+    var at=-1;
+    if (selected) for (var i=0;i<choices.length;i++)
+      if (choices[i].index===selected.index) {at=i;break;}
+    var target=choices[(at+1)%choices.length];
+    try {api.setSelectTrack("AUDIO",target.index);}
+    catch (_) {result.status="selection_failed";return result;}
+    var after=samsungAudioRead(api,"getCurrentStreamInfo");
+    result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
+    result.status=result.currentIndex===target.index ?
+      "manual_confirmed" : "manual_requested";
     return result;
   }
   function describeSamsungAudio(detail) {
@@ -1542,6 +1577,8 @@
       (current.language ? " "+current.language : "");
     var labels={active_compatible:"bereits aktiv",
       selected_confirmed:"AAC-Spur bestätigt",selection_requested:"AAC-Spur angefordert",
+      manual_confirmed:"Tonspur manuell bestätigt · Hörtest erforderlich",
+      manual_requested:"Tonspur manuell angefordert · Hörtest erforderlich",
       selection_failed:"Spurauswahl fehlgeschlagen",
       no_safe_switch:"keine sichere automatische Wahl",observed:"nur Diagnose"};
     return label+" · "+(labels[detail.status]||"Status unbekannt");
@@ -1627,18 +1664,35 @@
         return false;
       }
     }
-    function pauseOrResume() {
+    function pauseOrResume(action) {
       if (!active || !api) return "unavailable";
+      var intent=action==="play" || action==="pause" ? action : "toggle";
       try {
-        var state = typeof api.getState === "function" ? api.getState() : "";
-        if (state === "PLAYING" && typeof api.pause === "function") {
-          api.pause(); return "paused";
+        var state=typeof api.getState==="function" ? api.getState() : "";
+        if (state==="PLAYING") {
+          if (intent==="play") return "already_playing";
+          if (typeof api.pause!=="function") return "unavailable";
+          api.pause();return "paused";
         }
-        if (state === "PAUSED") {api.play();return "playing";}
+        if (state==="PAUSED") {
+          if (intent==="pause") return "already_paused";
+          api.play();
+          // AVPlay.play() from PAUSED requests resume. It is not evidence of
+          // progressing frames or an audible decoder; do not claim hardware PASS.
+          return "resume_requested";
+        }
+        if (state==="READY" && intent==="play") {
+          api.play();return "resume_requested";
+        }
       } catch (_) {return "error";}
       return "unavailable";
     }
-    return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};
+    function cycleAudioTrack() {
+      if (!active || !api) return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+      return cycleSamsungAudio(api);
+    }
+    return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
+      cycleAudioTrack:cycleAudioTrack};
   }
   // Advertise only the narrow H.264/AAC path observed via a TV decoder probe.
   // This is not proof that all VDR recordings are decodable.
@@ -1779,15 +1833,18 @@
         return true;
       } catch (_) {stop();onState("error",{stage:"html5",code:"load_failed"});return false;}
     }
-    function pauseOrResume() {
+    function pauseOrResume(action) {
       if (!active || !video || phase==="failed" || phase==="finished") return "unavailable";
+      var intent=action==="play" || action==="pause" ? action : "toggle";
       try {
         if (!video.paused) {
+          if (intent==="play") return "already_playing";
           video.pause();
           phase="paused";
           cancelWatchdog();
           return "paused";
         }
+        if (intent==="pause") return "already_paused";
         var token=generation;
         var attempt=video.play();
         phase="buffering";
@@ -1800,7 +1857,7 @@
             attempt.catch(function(){if (token===generation)failure("play_rejected");});
         }
         // This is a play request, not proof of frames: onplaying confirms it.
-        return "playing";
+        return "resume_requested";
       } catch (_) {return "error";}
     }
     return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};
@@ -3580,18 +3637,37 @@
         if (action === "stop") {
           stopRecordingPlayback("user"); return;
         }
-        if (action === "toggle") {
+        if (action === "audio") {
+          if (recordingPlayerMode !== "avplay") {
+            if (recordingAudioHint) recordingAudioHint.textContent =
+              "Audio · Spurauswahl nur bei AVPlay";
+            return;
+          }
+          var sound=recordingPlayer.cycleAudioTrack();
+          if (recordingAudioHint) recordingAudioHint.textContent =
+            describeSamsungAudio(sound);
+          if (recordingRemoteHint)
+            recordingRemoteHint.textContent="Fernbedienung · BLAU · Tonspur wechseln";
+          return;
+        }
+        if (action === "play" || action === "pause" || action === "toggle") {
           var playbackState = (recordingPlayerMode === "html5" ?
-            recordingHtml5Player : recordingPlayer).pauseOrResume();
+            recordingHtml5Player : recordingPlayer).pauseOrResume(action);
           if (recordingRemoteHint)
             recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
               " · Player: " + playbackState;
-          if (playbackState === "paused")
-            recordingStatus("ready","Wiedergabe pausiert","PLAY/PAUSE oder OK setzt fort.");
-          else if (playbackState === "playing")
-            recordingStatus("ready","Wiedergabe läuft","STOP oder Zurück beendet.");
+          if (playbackState === "paused" || playbackState === "already_paused")
+            recordingStatus("ready","Wiedergabe pausiert",
+              "PLAY setzt fort · OK oder PLAY/PAUSE schaltet um · STOP beendet.");
+          else if (playbackState === "already_playing")
+            recordingStatus("ready","Player meldet PLAYING",
+              "PLAY bereits aktiv · Bild/Ton am TV prüfen · PAUSE hält an.");
+          else if (playbackState === "resume_requested")
+            recordingStatus("loading","Fortsetzen angefordert",
+              "AVPlay/HTML5-Play aufgerufen; Bildfortschritt am TV prüfen · STOP beendet.");
           else if (playbackState === "error")
-            recordingStatus("error","Tastenaktion fehlgeschlagen","AVPlay konnte Pause/Fortsetzen nicht ausführen.");
+            recordingStatus("error","Tastenaktion fehlgeschlagen",
+              "PLAY/PAUSE im aktuellen Player-Zustand fehlgeschlagen.");
           else
             recordingStatus("loading","Taste erkannt","Player noch nicht bereit.");
           return;
