@@ -879,6 +879,13 @@ function boot() {
             "Der Server hat kein progressives MP4 ausgewählt. Bitte eine passende Aufnahme wählen.");
           return;
         }
+        if (mode === "avplay" && !result.nativeCookie) {
+          stopRecordingPlayback("failure");
+          recordingStatus("error","Nativer Medienzugang fehlt",
+            "Backend liefert noch keinen Device-MediaSession-Cookie. " +
+            "Server- und Samsung-Version prüfen.");
+          return;
+        }
         recordingPlayerMode = mode;
         if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
         if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
@@ -918,9 +925,9 @@ function boot() {
             stopRecordingPlayback("finished");
             recordingStatus("ready","Aufnahme beendet",rec.title);
           }
-        });
+        },mode === "avplay" ? result.nativeCookie : null);
         if (!started && recordingPlaybackSession) stopRecordingPlayback();
-      });
+      },mode === "avplay");
   }
 
   function fetchRecordingFolderPage(run, folderId, offset) {
