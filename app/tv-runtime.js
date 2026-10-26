@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.1","build":"331defcdb4b4","label":"Samsung v0.1.0 · S6.1 · b331defcdb4b4"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.2","build":"5957f1452f49","label":"Samsung v0.1.0 · S6.2 · b5957f1452f49"});
 
   // BEGIN app/src/navigation/remote.js
   // Samsung key events normalized once, before views consume them.
@@ -1388,7 +1388,9 @@
         if (typeof api.setListener === "function")
           api.setListener({
             onbufferingstart:function () {if (token === generation) onState("buffering");},
-            onbufferingcomplete:function () {if (token === generation) onState("ready");},
+            onbufferingcomplete:function () {
+              if (token === generation) onState("ready");
+            },
             onstreamcompleted:function () {if (token === generation) onState("finished");},
             onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
           });
@@ -1452,59 +1454,149 @@
   // END app/src/platform/recording-player.js
 
   // BEGIN app/src/platform/html5-recording-player.js
-  // Opt-in HTML5 progressive-MP4 alternative to native Samsung AVPlay.
-  // Uses the browser's normal Secure/HttpOnly cookie handling; does not read
-  // cookies, construct credential URLs or request extra server permissions.
-  function createHtml5RecordingPlayer(video) {
-    var generation=0,active=false;
+  // Opt-in HTML5 progressive-MP4 diagnostic. AVPlay remains the default player.
+  // Never expose the HttpOnly media cookie, URLs or native exception messages.
+  function html5PlaybackDiagnosis(detail) {
+    var code = detail && detail.code;
+    var explanations = {
+      "1":"Medienabruf abgebrochen",
+      "2":"Netzwerkfehler beim Medienabruf",
+      "3":"Decoder konnte den MP4-Stream nicht verarbeiten",
+      "4":"MP4-Container oder Codec wird nicht unterstützt",
+      "play_rejected":"Browser hat den Videostart abgelehnt",
+      "startup_timeout":"Schwarzes Bild: weder Videostart noch rechtzeitige Wiedergabebereitschaft",
+      "stall_timeout":"Videopufferung ohne Fortschritt abgebrochen",
+      "load_failed":"HTML5 konnte die Videoquelle nicht laden"
+    };
+    return "HTML5 MP4 · " + (explanations[code] || "Unbekannter Wiedergabefehler") +
+      " · kein automatischer AVPlay-Fallback.";
+  }
+  
+  function createHtml5RecordingPlayer(video, environment) {
+    var generation=0,active=false,phase="idle",watchdog=null,notifyFailure=null;
+    var env=environment || {};
+    var setTimer=typeof env.setTimeout==="function" ?
+      function(fn,ms){return env.setTimeout(fn,ms);} : null;
+    var clearTimer=typeof env.clearTimeout==="function" ?
+      function(id){env.clearTimeout(id);} : null;
     function available() {return !!(video && typeof video.play==="function" &&
       typeof video.pause==="function" && typeof video.load==="function");}
+    function cancelWatchdog() {
+      if (watchdog !== null && clearTimer) clearTimer(watchdog);
+      watchdog=null;
+    }
+    function armWatchdog(token,ms,code,onState) {
+      cancelWatchdog();
+      if (!setTimer || !clearTimer) return;
+      watchdog=setTimer(function(){
+        if (token!==generation || phase==="stopped" || phase==="finished" ||
+            phase==="failed") return;
+        watchdog=null;
+        phase="failed";
+        active=false;
+        onState("error",{stage:"html5",code:code});
+      },ms);
+    }
     function stop() {
       generation+=1;
       active=false;
+      phase="stopped";
+      cancelWatchdog();
+      notifyFailure=null;
       if (!video) return;
       try {video.pause();} catch (_) {}
       video.onplaying=null;video.oncanplay=null;video.onwaiting=null;
-      video.onerror=null;video.onended=null;
+      video.onstalled=null;video.onerror=null;video.onended=null;
       try {video.removeAttribute("src");video.load();} catch (_) {}
     }
     function start(mediaUrl,onState) {
-      if(!available()||typeof mediaUrl!=="string"||
-         !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/recording\/stream\.mp4$/.test(mediaUrl)){
+      if (!available() || typeof mediaUrl!=="string" ||
+          !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/recording\/stream\.mp4$/.test(mediaUrl)) {
         onState("unsupported",{stage:"html5"});return false;
       }
       stop();
       var token=generation;
-      video.onplaying=function () {if(token===generation){active=true;onState("playing");}};
-      video.onwaiting=function () {if(token===generation)onState("buffering");};
-      video.onerror=function () {
-        if(token!==generation)return;
-        var code=video.error && video.error.code;
-        onState("error",{stage:"html5",code:typeof code==="number"&&
-          code>=1&&code<=4?String(code):"unbekannt"});
+      phase="preparing";
+      function fail(code) {
+        if (token!==generation || phase==="failed" || phase==="finished" ||
+            phase==="stopped") return;
+        phase="failed";
+        active=false;
+        cancelWatchdog();
+        onState("error",{stage:"html5",code:code});
+      }
+      notifyFailure=fail;
+      video.onplaying=function () {
+        if (token!==generation || phase==="failed" || phase==="finished") return;
+        phase="playing";
+        active=true;
+        cancelWatchdog();
+        onState("playing");
       };
-      video.onended=function () {if(token===generation)onState("finished");};
+      function buffering() {
+        if (token!==generation || phase==="failed" || phase==="finished" ||
+            phase==="stopped") return;
+        if (phase==="preparing") return; // startup watchdog already runs
+        phase="buffering";
+        onState("buffering");
+        armWatchdog(token,20000,"stall_timeout",onState);
+      }
+      video.onwaiting=buffering;
+      video.onstalled=buffering;
+      video.onerror=function () {
+        var code=video.error && video.error.code;
+        fail(typeof code==="number" && code>=1 && code<=4 &&
+          Math.floor(code)===code ? String(code) : "load_failed");
+      };
+      video.onended=function () {
+        if (token!==generation || phase==="failed" || phase==="finished") return;
+        phase="finished";
+        active=false;
+        cancelWatchdog();
+        onState("finished");
+      };
       video.oncanplay=function () {
-        if(token!==generation)return;
+        if (token!==generation || phase==="failed" || phase==="finished") return;
         video.oncanplay=null;
         try {
           var attempt=video.play();
-          if(attempt&&typeof attempt.catch==="function")attempt.catch(function (){
-            if(token===generation)onState("error",{stage:"html5",code:"play_rejected"});
-          });
-        } catch (_) {if(token===generation)onState("error",{stage:"html5",code:"play_rejected"});}
+          if (attempt && typeof attempt.catch==="function")
+            attempt.catch(function () {fail("play_rejected");});
+        } catch (_) {fail("play_rejected");}
       };
-      try {video.src=mediaUrl;video.load();onState("preparing");return true;}
-      catch (_) {stop();onState("error",{stage:"html5"});return false;}
+      try {
+        video.src=mediaUrl;
+        video.load();
+        onState("preparing");
+        // Catches the real-device black-screen case where neither canplay nor
+        // error is emitted; does not assert that the codec is the root cause.
+        if (phase==="preparing") armWatchdog(token,12000,"startup_timeout",onState);
+        return true;
+      } catch (_) {stop();onState("error",{stage:"html5",code:"load_failed"});return false;}
     }
     function pauseOrResume() {
-      if(!active||!video)return "unavailable";
-      try{
-        if(!video.paused){video.pause();return "paused";}
+      if (!active || !video || phase==="failed" || phase==="finished") return "unavailable";
+      try {
+        if (!video.paused) {
+          video.pause();
+          phase="paused";
+          cancelWatchdog();
+          return "paused";
+        }
+        var token=generation;
         var attempt=video.play();
-        if(attempt&&typeof attempt.catch==="function")attempt.catch(function(){});
+        phase="buffering";
+        if (notifyFailure) {
+          var failure=notifyFailure;
+          armWatchdog(token,20000,"stall_timeout",function(state,detail){
+            if (state==="error") failure(detail.code);
+          });
+          if (attempt && typeof attempt.catch==="function")
+            attempt.catch(function(){if (token===generation)failure("play_rejected");});
+        }
+        // This is a play request, not proof of frames: onplaying confirms it.
         return "playing";
-      }catch(_){return "error";}
+      } catch (_) {return "error";}
     }
     return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};
   }
@@ -1588,7 +1680,8 @@
     var recordingAvplayObject = document.getElementById("recording-avplay-object");
     var recordingRemoteHint = document.getElementById("recording-remote-hint");
     var recordingAudioHint = document.getElementById("recording-audio-hint");
-    var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
+    var recordingLifecycleHint = document.getElementById("recording-lifecycle-hint");
+    var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video,window);
     var recordingPlayerMode = "avplay";
     // Samsung native AVPlay requires a viewport-level object, not one clipped by
     // .detail-page / .recording-catalog scrolling containers.
@@ -2338,8 +2431,10 @@
                 recordingPlaybackError(result) + " · Server-Idle-Timeout kann aufräumen.");
           });
       }
-      if (reason === "user") recordingStatus("ready","Wiedergabe beendet",
-        "Samsung AVPlay lokal gestoppt; Server-Stop angefordert.");
+      if (reason === "user") recordingStatus("ready",
+        session ? "Wiedergabe beendet" : "Wiedergabeversuch abgebrochen",
+        session ? "Player lokal gestoppt; MediaSession-Stop angefordert." :
+          "Player abgebrochen, bevor eine MediaSession bestätigt wurde. Ein unbekanntes Server-Ergebnis wird nicht erneut angefordert.");
     }
     function startSelectedRecording(mode) {
       mode = mode === "html5" ? "html5" : "avplay";
@@ -2419,6 +2514,9 @@
             return;
           }
           recordingPlayerMode = mode;
+          if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+            mode === "avplay" ? "AVPlay · MediaSession bereit · Player wird vorbereitet" :
+              "HTML5 MP4 · Player wird vorbereitet · 12s Startdiagnose";
           if (recordingAudioHint) recordingAudioHint.textContent =
             mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
               "Audio · HTML5 ohne AVPlay-Spurdiagnose";
@@ -2437,22 +2535,36 @@
           var player = mode === "html5" ? recordingHtml5Player : recordingPlayer;
           var started = player.start(result.mediaUrl,function (state,detail) {
             if (state === "playing") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                mode === "html5" ? "HTML5 · onplaying empfangen · Bild/Ton prüfen" :
+                  "AVPlay · play() ausgeführt · Bild/Ton prüfen";
               recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
                 " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
             } else if (state === "audio" && mode === "avplay") {
               if (recordingAudioHint)
                 recordingAudioHint.textContent = describeSamsungAudio(detail);
             } else if (state === "preparing" || state === "buffering") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                (mode === "html5" ? "HTML5" : "AVPlay") + " · " +
+                (state === "buffering" ? "Pufferung – auf Daten warten" : "Vorbereitung läuft");
               recordingStatus("loading",mode === "html5" ? "HTML5-Video startet" : "Samsung AVPlay startet",rec.title +
                 " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
+            } else if (state === "ready") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                "AVPlay · Pufferung abgeschlossen · Bild/Ton prüfen";
+              recordingStatus("ready","AVPlay-Pufferung abgeschlossen",
+                rec.title + " · Decoder und Tonausgabe auf dem TV prüfen.");
             } else if (state === "error" || state === "unsupported") {
               // The media gateway permits GET, not HEAD. Probe only the response
               // headers of the very same protected session while still active.
               // This does NOT prove what cookies native AVPlay transmits.
               var failedSession = recordingPlaybackSession;
               var playerFailure = mode === "html5"
-                ? "HTML5-Video " + (detail && detail.code ? "Fehlercode " + detail.code : "nicht abspielbar")
+                ? html5PlaybackDiagnosis(detail)
                 : samsungPlaybackDiagnosis(detail,transport);
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                mode === "html5" ? html5PlaybackDiagnosis(detail) :
+                  "AVPlay · Medienfehler · Zugang wird geprüft";
               recordingStatus("loading","Prüfe Medienzugriff",
                 playerFailure + " · Diagnose ohne Video-Download …");
               probeMediaHttpHeaders(window,result.mediaUrl,function (probe) {
@@ -2462,6 +2574,8 @@
                   playerFailure + " " + describeMediaAccessProbe(probe));
               });
             } else if (state === "finished") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                "Player · Aufnahme regulär beendet";
               stopRecordingPlayback("finished");
               recordingStatus("ready","Aufnahme beendet",rec.title);
             }
