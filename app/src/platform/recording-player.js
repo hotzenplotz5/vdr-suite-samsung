@@ -36,7 +36,7 @@ export function createSamsungRecordingPlayer(environment) {
     try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
     try { if (typeof api.close === "function") api.close(); } catch (_) {}
   }
-  function start(mediaUrl,onState) {
+  function start(mediaUrl,onState,nativeCookie) {
     if (!available() || typeof mediaUrl !== "string" ||
         !/^https:\/\/[^\s?#]+$/.test(mediaUrl)) {
       onState("unsupported",{stage:"unsupported"}); return false;
@@ -45,6 +45,15 @@ export function createSamsungRecordingPlayer(environment) {
     var token = generation;
     try {
       api.open(mediaUrl);
+      // Samsung AVPlay documents COOKIE for native HTTP requests in IDLE.
+      // This is the Device MediaSession's scoped credential, not the Device
+      // login and never a query string. Reject unsafe header syntax.
+      if (nativeCookie != null) {
+        if (!/^vdr_suite_media=mg_[0-9a-f]{32}\.[A-Za-z0-9._~-]{8,256}$/.test(nativeCookie) ||
+            typeof api.setStreamingProperty !== "function")
+          throw Error("Native cookie delivery unsupported");
+        api.setStreamingProperty("COOKIE",nativeCookie);
+      }
       if (typeof api.setDisplayRect === "function")
         api.setDisplayRect(0,0,1920,1080);
       // Fill the TV display area but preserve film aspect ratio.
