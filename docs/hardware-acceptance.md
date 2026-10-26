@@ -396,3 +396,23 @@ Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-Err
 **Aufnahme-Details:** Nach Auswahl einer tatsächlich geladenen Public-`rec_`-Identität fragt der Client ausschließlich `GET /api/v1/recordings/{id}?backendId=...`, `.../artwork` und optional das einzelne Poster-Binärbild per Device Authorization Header ab. Externe Art-URLs, native Pfade und Provider-Credentials werden weder verwendet noch protokolliert. JSON-Antworten sind streng bounded, Fotoantworten auf erlaubte Bildtypen und max. 2 MiB begrenzt. Object URLs werden nach Wechsel/Verlassen widerrufen. Keine automatische Scraper-Anforderung oder zusätzliche Berechtigung.
 
 **Noch nicht als Real-TV bestätigt:** EPG Now/Next und 24h-Ansicht, Event-Zeitformat auf Tizen 5.5, manuelle Aufnahme-Metadaten, Binary-Poster-Rendering und Rechteabweisung. Beim späteren gemeinsamen Hardwaretest zunächst installierten Daemon-Stand, `epg.view`, `recordings.view`, KeyManager-Identität und bestehende AVPlay-Wiedergabe prüfen. Ein Quell-/CI-PASS ist nicht gleich einem Hardware-PASS. Produktive App, yaVDR-Installation und die vorhandene DEV-Kopplung bleiben unangetastet.
+
+
+## S6.4 visible EPG and Recording metadata (2026-10-26)
+
+Samsung Tizen 5.5 real-TV observation after installing VDR-Suite main
+`c7cb87f7d95f4a7a32733f61c40d320081619e48`: numeric VDR channel order
+1 Das Erste HD, 2 ZDF HD, 3 arte HD, 4 NDR FS HH HD is correct (**S6.3 PASS**).
+The user selected a sender with OK and pressed „Jetzt / Nächste“;
+the EPG status was below the entire sender list and invisible on screen.
+The screenshot does not establish whether the authorized EPG GET succeeded or failed.
+
+This source change places EPG status, HTTP/grant errors and bounded now-next/24h
+entries directly into the visible live card. Recording detail title, genre,
+season/episode, description, date, duration and securely fetched poster now
+occupy the visible recording hero instead of sitting after the list.
+All metadata remains read-only through protected Public-v1 Device GETs.
+
+**S6.4 real-TV verification still OPEN**: device epg.view, actual programme data,
+recording detail/artwork quality, plus distinct AVPlay sound and image gates.
+No production TV reinstall or pairing was performed by this commit.

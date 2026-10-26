@@ -781,7 +781,7 @@ test("S6.4 live channel EPG is explicitly requested and never starts playback",(
       startTime:from,endTime:String(Number(from)+3600),durationSeconds:3600}],
     page:{limit:2,hasMore:false},meta:{partial:false}});
   assert.equal(sim.liveEpgList.children.length,1);
-  assert.match(sim.liveEpgList.children[0].textContent,/Heute/);
+  assert.match(sim.liveEpgList.children[0].textContent,/Jetzt.*Heute/);
   sim.nodes["detail-live-epg-window"].click();
   assert.match(h.calls[4].url,/\/api\/v1\/epg\/window\?/);
   const query=new URL(h.calls[4].url).searchParams;
@@ -813,6 +813,9 @@ test("S6.4 selected VDR recording reads metadata/artwork only with Device header
     source:"restfulapi-scraper-bridge",contentKind:"movie",genreText:"Drama",
     overview:"Ein echter Film"}});
   assert.match(sim.recordingDetailInfo.textContent,/Drama/);
+  assert.match(sim.recordingDetailInfo.textContent,/Ein Film/);
+  assert.match(sim.recordingDetailInfo.textContent,/Laufzeit: 60 Min/);
+  assert.match(sim.recordingDetailInfo.textContent,/Inhalt: Ein echter Film/);
   assert.match(h.calls[4].url,/\/artwork\?backendId=home$/);
   h.reply(4,200,{backendId:"home",recordingId:rec.recordingId,items:[]});
   assert.match(sim.recordingDetailInfo.textContent,/Kein Artwork/);
@@ -843,4 +846,19 @@ test("S6.4 late recording detail response cannot revive an earlier selection",()
   assert.doesNotMatch(sim.recordingDetailInfo.textContent,/Erster Film/);
   h.reply(4,404,{code:"not_found"});
   assert.match(sim.recordingDetailInfo.textContent,/nicht vorhanden/);
+});
+
+test("S6.4 on-TV EPG and Recording metadata are visible above their long lists",()=>{
+  const live=html.indexOf('data-panel="live"');
+  const recordings=html.indexOf('data-panel="recordings"');
+  const epg=html.indexOf('class="live-epg"',live);
+  const channels=html.indexOf('id="live-channel-list"',live);
+  const detail=html.indexOf('class="recording-detail"',recordings);
+  const list=html.indexOf('id="recording-list"',recordings);
+  assert.ok(live>=0 && epg>live && epg<channels,
+    "EPG status and entries appear in the top card before the sender list");
+  assert.ok(recordings>=0 && detail>recordings && detail<list,
+    "recording description and poster appear above the recording list");
+  assert.match(html.slice(live,channels),/id="detail-state-live"[\\s\\S]*id="live-epg-status"/);
+  assert.match(html.slice(recordings,list),/class="detail-art detail-art-recordings"[\\s\\S]*id="recording-detail-poster"/);
 });

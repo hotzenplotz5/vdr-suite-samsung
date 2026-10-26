@@ -328,3 +328,36 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
 .recording-detail img {width:128px; max-height:190px; object-fit:contain;
   border:1px solid #345571; border-radius:8px;}
 .recording-detail img[hidden] {display:none;}
+
+/* S6.4 real Samsung hardware: keep server EPG status and 24h preview above
+   the long, scrollable sender catalogue, without a second remote owner. */
+#detail-state-live { justify-content:flex-start; overflow:hidden; padding:16px 20px; }
+#detail-state-live > strong { font-size:21px; }
+#detail-state-live > p { margin:7px 0 4px; font-size:14px; line-height:1.25; max-height:2.5em; overflow:hidden; }
+#detail-state-live > .detail-status-hint { display:none; }
+#detail-state-live .live-epg { flex:1 1 auto; min-height:0; margin:8px 0 0; padding:9px 12px;
+  overflow:hidden; font-size:15px; line-height:1.3; }
+#detail-state-live #live-epg-status { margin:0 0 5px; font-weight:bold; color:#d5ecff; font-size:15px; }
+#detail-state-live .live-epg-events { margin:0; max-height:100%; overflow-y:auto; font-size:14px; }
+#detail-state-live .live-epg-events li { padding:5px 0; }
+
+/* Authorized metadata and poster remain in the always-visible recording hero,
+   not below a long list of VDR folders and recordings. */
+.detail-art-recordings { justify-content:flex-start; padding:50px 16px 14px; }
+.detail-art-recordings .recording-detail { display:flex; flex:1 1 auto; min-height:0;
+  margin:0; padding:12px; overflow:hidden; align-items:stretch; background:rgba(3,12,28,.82); }
+.detail-art-recordings .recording-detail p { min-width:0; flex:1 1 auto; margin:0; overflow-y:auto;
+  white-space:pre-wrap; overflow-wrap:break-word; color:#ebf4ff; line-height:1.35; font-size:15px; }
+.detail-art-recordings .recording-detail img { order:-1; flex:0 0 112px; width:112px;
+  height:100%; max-height:none; margin-right:12px; object-fit:contain; align-self:center; }
+@media(max-width:1380px) {
+  #detail-state-live { padding:11px 14px; }
+  #detail-state-live > strong { font-size:17px; }
+  #detail-state-live .live-epg { padding:6px 9px; margin-top:5px; }
+  #detail-state-live #live-epg-status { font-size:13px; }
+  #detail-state-live .live-epg-events { font-size:12px; }
+  .detail-art-recordings { padding:42px 12px 10px; }
+  .detail-art-recordings .recording-detail { padding:8px; }
+  .detail-art-recordings .recording-detail p { font-size:13px; }
+  .detail-art-recordings .recording-detail img { width:83px; flex-basis:83px; }
+}
