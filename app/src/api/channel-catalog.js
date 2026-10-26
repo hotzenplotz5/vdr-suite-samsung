@@ -92,7 +92,7 @@ export function createChannelCatalog(environment) {
       callback({ok:false,kind:"bad_request"}); return;
     }
     var path = "/api/v1/channels?backendId=" + encodeURIComponent(backendId) +
-      "&limit=20&sort=backendId,channelId&order=asc";
+      "&limit=20&sort=backendId,channelNumber,channelId&order=asc";
     if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
     fetchPage(credential, path, function (value) {
       return value.items.length <= 20 &&
@@ -120,6 +120,7 @@ export function channelCatalogError(result) {
   if (result.kind === "network") return "Server auf diesem TV nicht erreichbar (Netzwerk/TLS/CORS).";
   if (result.kind === "bad_response") return "Antwort entspricht nicht dem Public-API-v1-Vertrag.";
   if (result.kind === "http") {
+    if (result.status === 400) return "Dieser Server unterstützt die numerische VDR-Senderreihenfolge noch nicht (HTTP 400). Installierten API-v1-Stand prüfen; kein stiller Rückfall auf falsche Sortierung.";
     if (result.status === 401) return "Geräteanmeldung abgewiesen: Credential ungültig, abgelaufen oder widerrufen. Administrator kontaktieren.";
     if (result.status === 403) return "Senderzugriff verweigert. Der Administrator muss channels.view für dieses Backend freigeben.";
     if (result.status === 409) return "Senderliste hat sich geändert. Bitte mit „Sender laden“ neu beginnen.";
