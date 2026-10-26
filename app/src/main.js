@@ -572,7 +572,15 @@ function boot() {
     liveFocusIds = [];
     liveCurrentChannels = [];
     liveRows = 0;
-    if (rowMemory.live) rowMemory.live = {};
+    // Drop stale dynamic channel-row memories, but preserve the user's last
+    // focus on the static Live action row (e.g. Sender laden).
+    if (rowMemory.live) {
+      var lastAction = rowMemory.live[1];
+      rowMemory.live = {};
+      if (["detail-live-home","detail-live-preview","detail-live-more",
+           "detail-live-backend"].indexOf(lastAction) !== -1)
+        rowMemory.live[1] = lastAction;
+    }
     if (liveList) {
       liveList.textContent = "";
       liveList.hidden = true;
