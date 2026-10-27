@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"09b06af0abc7","label":"Samsung v0.1.0 · S6.4 · b09b06af0abc7"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"d4d66a7931ff","label":"Samsung v0.1.0 · S6.4 · bd4d66a7931ff"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1303,6 +1303,136 @@
   }
   // END app/src/api/search-timers.js
 
+  // BEGIN app/src/api/global-search.js
+  // S6.21: common TV search backed by the SAME server-side GlobalSearchService
+  // as the Web frontend. This is an authorized Public-v1 projection, not a
+  // client-side substring scan of recordings or 14 days of EPG.
+  function createPublicGlobalSearch(environment) {
+    var env=environment||{},serial=0;
+    var inflight={epg:null,recordings:null};
+    function cancel() {
+      serial++;
+      ["epg","recordings"].forEach(function(kind){
+        var old=inflight[kind];inflight[kind]=null;
+        if(old && typeof old.abort==="function")try{old.abort();}catch(_){}
+      });
+    }
+    function backend(value) {
+      return typeof value==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+    }
+    function credential(value) {
+      return value && typeof value.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(value.base) &&
+        backend(value.credentialId) &&
+        typeof value.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(value.credentialSecret);
+    }
+    function searchText(value) {
+      if(typeof value!=="string")return null;
+      var text=value.trim();
+      if(text.length<2 || /[\x00-\x1f\x7f]/.test(text))return null;
+      // Backend checks encoded request length and decoded UTF-8 byte limits.
+      try {
+        if(typeof TextEncoder==="function") {
+          if(new TextEncoder().encode(text).length>240)return null;
+        } else if(unescape(encodeURIComponent(text)).length>240)return null;
+        if(encodeURIComponent(text).length>360)return null;
+      } catch(_){return null;}
+      return text;
+    }
+    function validRow(item,scope,kind) {
+      if(!item || item.kind!==kind || item.backendId!==scope ||
+          typeof item.title!=="string" || !item.title ||
+          item.title.length>4096)return false;
+      if(kind==="recording")return /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+        typeof item.edited==="boolean";
+      return typeof item.channelId==="string" && item.channelId.length>0 &&
+        item.channelId.length<=256 &&
+        typeof item.eventId==="string" && item.eventId.length>0 &&
+        item.eventId.length<=160 &&
+        typeof item.subtitle==="string" && item.subtitle.length<=2048 &&
+        typeof item.startTime==="string" && item.startTime.length<=64 &&
+        typeof item.endTime==="string" && item.endTime.length<=64;
+    }
+    function validPage(value,scope,kind,offset) {
+      var page=value && value.page;
+      if(!page || !Array.isArray(value.items) || value.items.length>30 ||
+          page.limit!==30 || page.offset!==offset ||
+          !Number.isInteger(page.totalCount) ||
+          page.totalCount<offset+value.items.length ||
+          typeof page.hasMore!=="boolean" ||
+          page.hasMore!==(offset+value.items.length<page.totalCount))return false;
+      return value.items.every(function(item){return validRow(item,scope,kind);});
+    }
+    function request(value,scope,term,kind,offset,done) {
+      var normalized=searchText(term);
+      if(!credential(value) || !backend(scope) || !normalized ||
+          ["epg","recordings"].indexOf(kind)<0 ||
+          !Number.isInteger(offset) || offset<0 || offset>1000000 ||
+          typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"request"});return;
+      }
+      var old=inflight[kind];
+      if(old && typeof old.abort==="function")try{old.abort();}catch(_){}
+      var xhr=new env.XMLHttpRequest(),token=serial;
+      inflight[kind]=xhr;
+      var path="/api/v1/search/"+kind+"?backendId="+scope+
+        "&query="+encodeURIComponent(normalized)+"&limit=30&offset="+offset;
+      var url=value.base.replace(/\/$/,"")+path,finished=false;
+      function finish(result) {
+        if(finished || token!==serial || inflight[kind]!==xhr)return;
+        finished=true;inflight[kind]=null;done(result);
+      }
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=12000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          value.credentialId+"."+value.credentialSecret);
+        xhr.onload=function(){
+          if(xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if(xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var json=null;
+          try{json=JSON.parse(xhr.responseText);}catch(_){}
+          if(!validPage(json,scope,kind,offset)) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:json});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      }catch(_){finish({ok:false,kind:"network"});}
+    }
+    return {request:request,cancel:cancel,normalizeQuery:searchText};
+  }
+  function publicGlobalSearchError(result,kind) {
+    var scope=kind==="epg"?"EPG":"Aufnahmen";
+    if(!result)return scope+"-Suche fehlgeschlagen.";
+    if(result.kind==="http"){
+      if(result.status===401)return "Geräteanmeldung abgewiesen (HTTP 401).";
+      if(result.status===403)return kind==="epg" ?
+        "EPG-Suche benötigt epg.view für dieses Backend (HTTP 403)." :
+        "Aufnahmesuche benötigt recordings.view für dieses Backend (HTTP 403).";
+      if(result.status===503)return scope+
+        "-Suchindex/Backend nicht verfügbar (HTTP 503), nicht als 0 Treffer behandeln.";
+      if(result.status===404)return "Öffentlicher Suchendpunkt fehlt auf diesem Backend (HTTP 404).";
+      if(result.status===400)return "Suchbegriff oder Parameter abgewiesen (HTTP 400).";
+      return scope+"-Suche HTTP "+result.status+".";
+    }
+    if(result.kind==="timeout")return scope+"-Suche hat zu lange gedauert.";
+    if(result.kind==="network")return scope+"-Suche durch Netzwerk/TLS/CORS blockiert.";
+    if(result.kind==="response")return "Suchantwort entspricht nicht dem Public-v1-Vertrag.";
+    return "Mindestens zwei Zeichen eingeben und bestehende Anmeldung prüfen.";
+  }
+  // END app/src/api/global-search.js
+
   // BEGIN app/src/api/media-metadata.js
   // Public API v1 metadata reads for the Samsung Device client.
   // All calls use an explicit Device credential and backend-scoped grants.
@@ -2487,6 +2617,26 @@
     var vault = createDeviceVault(window);
     var channelCatalog = createChannelCatalog(window);
     var recordingCatalog = createRecordingCatalog(window);
+    var globalSearchClient = createPublicGlobalSearch(window);
+    var globalSearchMetadata = createPublicMediaMetadata(window);
+    var globalSearchCatalog = createChannelCatalog(window);
+    var globalSearchPairing = createPairingClient(window);
+    var globalSearchCredential = null;
+    var globalSearchBackends = [];
+    var globalSearchBackendIndex = 0;
+    var globalSearchRun = 0;
+    var globalSearchDetailRun = 0;
+    var globalSearchBusy = false;
+    var globalSearchEditing = false;
+    var globalSearchTerm = "";
+    var globalSearchPages = {epg:null,recordings:null};
+    var globalSearchRows = {epg:[],recordings:[]};
+    var globalSearchItems = {epg:[],recordings:[]};
+    var globalSearchInput = document.getElementById("global-search-input");
+    var globalSearchBackendLabel = document.getElementById("global-search-backend-name");
+    var globalSearchStatusLabel = document.getElementById("global-search-status");
+    var globalSearchDetailTitle = document.getElementById("global-search-detail-title");
+    var globalSearchDetailDescription = document.getElementById("global-search-detail-description");
     var nativeTimerCatalog = createNativeTimerCatalog(window);
     var searchTimerCatalog = createSearchTimerCatalog(window);
     var searchTimerBackendCatalog = createChannelCatalog(window);
@@ -2665,6 +2815,21 @@
         recordingFocusIds.forEach(function (id) { rows.push([id]); });
         rows.push(["detail-recordings-next"]);
         return rows;
+      }
+      if (currentView === "search") {
+        var searchRows=[NAV_ROW,
+          ["global-search-input","global-search-go","global-search-clear",
+            "global-search-backend"],
+          ["global-search-recording-more","global-search-epg-more"]];
+        var count=Math.max(globalSearchRows.recordings.length,globalSearchRows.epg.length);
+        for(var n=0;n<count;n++){
+          var group=[];
+          if(globalSearchRows.recordings[n])group.push(globalSearchRows.recordings[n]);
+          if(globalSearchRows.epg[n])group.push(globalSearchRows.epg[n]);
+          if(group.length)searchRows.push(group);
+        }
+        searchRows.push(["detail-search-home","detail-search-preview"]);
+        return searchRows;
       }
       if (currentView === "timers") {
         var timerRows=[NAV_ROW,["detail-timers-home","detail-timers-load",
@@ -3038,6 +3203,7 @@
       // On Tizen TV, simply focusing a text input can open the native IME.
       // Its arrow/Backspace keys belong to editing, not to the app focus graph.
       if (currentView === "settings") editingServerAddress = id === "settings-base-input";
+      if (currentView === "search") globalSearchEditing = id === "global-search-input";
       if (currentView === "home") lastHomeFocus = id;
       if (!rowMemory[currentView]) rowMemory[currentView] = {};
       var rows = focusRows();
@@ -3504,6 +3670,253 @@
     }
   
   
+  
+  
+    // S6.22 – common Web search index, separately authorized Public-v1 reads.
+    // EPG and recordings are independent panes (including errors and pagination).
+    function globalSearchMessage(message) {
+      if(globalSearchStatusLabel)globalSearchStatusLabel.textContent=message;
+    }
+    function globalSearchPane(kind) {
+      return {
+        list:document.getElementById("global-search-"+kind),
+        status:document.getElementById("global-search-"+(kind==="recordings"?"recording":"epg")+"-status"),
+        count:document.getElementById("global-search-"+(kind==="recordings"?"recording":"epg")+"-count")
+      };
+    }
+    function clearGlobalSearchRows() {
+      ["recordings","epg"].forEach(function(kind) {
+        globalSearchRows[kind].forEach(function(id){
+          var node=controls[id];delete controls[id];
+          var index=items.indexOf(node);
+          if(index!==-1)items.splice(index,1);
+        });
+        globalSearchRows[kind]=[];
+        globalSearchItems[kind]=[];
+        globalSearchPages[kind]=null;
+        var pane=globalSearchPane(kind);
+        if(pane.list){pane.list.textContent="";pane.list.hidden=true;}
+        if(pane.count)pane.count.textContent="–";
+      });
+      if(globalSearchDetailTitle)globalSearchDetailTitle.textContent="Noch kein Treffer ausgewählt";
+      if(globalSearchDetailDescription)
+        globalSearchDetailDescription.textContent="OK auf einem Treffer zeigt Details aus API v1.";
+      ++globalSearchDetailRun;
+      globalSearchMetadata.cancel();
+    }
+    function globalSearchDate(value) {
+      var raw=Number(value);
+      var date=(isFinite(raw) && raw>0) ?
+        new Date(raw<100000000000 ? raw*1000 : raw) : new Date(value);
+      return isFinite(date.getTime()) ?
+        date.toLocaleString("de-DE",{day:"2-digit",month:"2-digit",
+          hour:"2-digit",minute:"2-digit"}) : "Zeit unbekannt";
+    }
+    function appendGlobalSearchResults(kind,rows) {
+      var pane=globalSearchPane(kind);
+      if(!pane.list)return;
+      rows.forEach(function(row){
+        var index=globalSearchItems[kind].length;
+        var id="global-search-"+kind+"-row-"+index;
+        var node=document.createElement("li");
+        node.className="global-search-row tv-focusable";
+        node.tabIndex=-1;
+        node.setAttribute("role","button");
+        node.setAttribute("data-focus-id",id);
+        node.setAttribute("data-global-search-kind",kind);
+        node.setAttribute("data-global-search-index",String(index));
+        node.setAttribute("aria-label",row.title);
+        var title=document.createElement("strong");
+        title.textContent=row.title;
+        var info=document.createElement("span");
+        info.textContent=kind==="recordings" ?
+          "Aufnahme"+(row.edited?" · bearbeitet":"") :
+          globalSearchDate(row.startTime)+
+            (row.subtitle?" · "+row.subtitle:"")+
+            " · "+row.channelId;
+        node.appendChild(title);node.appendChild(info);
+        pane.list.appendChild(node);
+        pane.list.hidden=false;
+        controls[id]=node;items.push(node);
+        globalSearchRows[kind].push(id);
+        globalSearchItems[kind].push(row);
+        node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+      });
+    }
+    function globalSearchBackend() {
+      return globalSearchBackends[globalSearchBackendIndex] || null;
+    }
+    function globalSearchPage(kind,offset,run,term) {
+      var backend=globalSearchBackend();
+      if(run!==globalSearchRun || !globalSearchCredential || !backend)return;
+      var pane=globalSearchPane(kind);
+      if(pane.status)pane.status.textContent=
+        (kind==="epg"?"EPG":"Aufnahmen")+" werden durchsucht …";
+      globalSearchClient.request(globalSearchCredential,backend.backendId,term,
+        kind,offset,function(result){
+          if(run!==globalSearchRun || currentView!=="search" ||
+              globalSearchTerm!==term)return;
+          if(!result.ok) {
+            if(pane.status)pane.status.textContent=
+              publicGlobalSearchError(result,kind);
+            if(offset===0 && pane.count)pane.count.textContent="Fehler";
+            return;
+          }
+          if(offset===0) {
+            // Start has already cleared the old rows; leave the other pane alone.
+            globalSearchPages[kind]=null;
+          }
+          var value=result.value;
+          appendGlobalSearchResults(kind,value.items);
+          globalSearchPages[kind]=value.page;
+          if(pane.count)pane.count.textContent=value.page.totalCount+" Treffer";
+          if(pane.status)pane.status.textContent=
+            value.page.totalCount===0 ?
+              "Keine passenden "+(kind==="epg"?"Sendungen":"Aufnahmen")+
+                " im Suchindex." :
+              globalSearchItems[kind].length+" von "+value.page.totalCount+
+                " angezeigt · "+(value.page.hasMore?"Weitere Ergebnisse verfügbar":"Ende");
+        });
+    }
+    function performGlobalSearch() {
+      if(currentView!=="search" || globalSearchBusy)return;
+      var term=globalSearchClient.normalizeQuery(globalSearchInput &&
+        globalSearchInput.value);
+      if(!term){
+        globalSearchMessage("Mindestens zwei Zeichen eingeben; keine Suche gestartet.");
+        return;
+      }
+      var read=vault.read();
+      if(!read.ok || !read.credential){
+        globalSearchMessage("Gespeicherte Geräteanmeldung fehlt – Einstellungen prüfen.");
+        return;
+      }
+      var base=serverInput && normalizeSuiteBase(serverInput.value);
+      if(base && base!==read.credential.base){
+        globalSearchMessage("Geräteanmeldung und Serveradresse gehören nicht zusammen.");
+        return;
+      }
+      ++globalSearchRun;
+      globalSearchClient.cancel();
+      globalSearchCatalog.cancel();
+      globalSearchPairing.cancel();
+      clearGlobalSearchRows();
+      globalSearchCredential=read.credential;
+      globalSearchTerm=term;
+      var run=globalSearchRun;
+      globalSearchBusy=true;
+      globalSearchMessage("Prüfe gekoppelte Device-Identität …");
+      globalSearchPairing.verify(read.credential,function(result){
+        if(run!==globalSearchRun || currentView!=="search")return;
+        if(!result.ok){
+          globalSearchBusy=false;
+          globalSearchMessage(deviceVerificationError(result));return;
+        }
+        markDeviceAuthenticated(read.credential);
+        globalSearchCatalog.listBackends(read.credential,function(backends){
+          if(run!==globalSearchRun || currentView!=="search")return;
+          globalSearchBusy=false;
+          if(!backends.ok || !backends.value.items.length){
+            globalSearchMessage(backends.ok?
+              "Keine Backends freigegeben." : channelCatalogError(backends));
+            return;
+          }
+          globalSearchBackends=backends.value.items;
+          if(globalSearchBackendIndex>=globalSearchBackends.length)
+            globalSearchBackendIndex=0;
+          var backend=globalSearchBackend();
+          if(globalSearchBackendLabel)globalSearchBackendLabel.textContent=
+            "Backend: "+backend.name+" · "+backend.backendId;
+          globalSearchMessage("Suchbegriff: "+term+
+            " · EPG und Aufnahmen werden unabhängig geprüft.");
+          globalSearchPage("recordings",0,run,term);
+          globalSearchPage("epg",0,run,term);
+        });
+      });
+    }
+    function globalSearchAction(action) {
+      if(currentView!=="search")return;
+      if(action==="clear"){
+        ++globalSearchRun;globalSearchBusy=false;
+        globalSearchClient.cancel();
+        globalSearchCatalog.cancel();
+        globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+        globalSearchTerm="";
+        if(globalSearchInput)globalSearchInput.value="";
+        globalSearchMessage("Suchbegriff eingeben und Suchen drücken.");
+        return;
+      }
+      if(action==="backend"){
+        if(globalSearchBusy || globalSearchBackends.length<2) {
+          globalSearchMessage("Kein weiteres Backend verfügbar.");return;
+        }
+        globalSearchBackendIndex=(globalSearchBackendIndex+1)%
+          globalSearchBackends.length;
+        ++globalSearchRun;
+        globalSearchClient.cancel();
+        globalSearchCatalog.cancel();
+        globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+        globalSearchMessage("Backend gewechselt · Suche mit Suchen neu starten.");
+        var backend=globalSearchBackend();
+        if(globalSearchBackendLabel)globalSearchBackendLabel.textContent=
+          "Backend: "+backend.name+" · "+backend.backendId;
+        return;
+      }
+      if(action==="go"){performGlobalSearch();return;}
+      if(action!=="recordings-more" && action!=="epg-more")return;
+      var kind=action==="epg-more"?"epg":"recordings";
+      var page=globalSearchPages[kind];
+      if(!page || !page.hasMore || globalSearchItems[kind].length>=300) {
+        globalSearchMessage("Für "+(kind==="epg"?"EPG":"Aufnahmen")+
+          " ist keine weitere Seite verfügbar.");return;
+      }
+      globalSearchPage(kind,globalSearchItems[kind].length,
+        globalSearchRun,globalSearchTerm);
+    }
+    function selectGlobalSearchResult(kind,index) {
+      var row=globalSearchItems[kind][index],backend=globalSearchBackend();
+      if(!row || !backend || row.backendId!==backend.backendId ||
+          !globalSearchCredential)return;
+      ++globalSearchDetailRun;
+      globalSearchMetadata.cancel();
+      var token=globalSearchDetailRun,run=globalSearchRun;
+      if(globalSearchDetailTitle)globalSearchDetailTitle.textContent=row.title;
+      if(globalSearchDetailDescription)
+        globalSearchDetailDescription.textContent=
+          "Lade "+(kind==="epg"?"EPG-":"Aufnahme-")+"details über API v1 …";
+      function finish(result){
+        if(token!==globalSearchDetailRun || run!==globalSearchRun ||
+            currentView!=="search")return;
+        if(!result.ok){
+          if(globalSearchDetailDescription)
+            globalSearchDetailDescription.textContent=
+              mediaMetadataError(result);
+          return;
+        }
+        var data=result.value;
+        if(globalSearchDetailTitle)globalSearchDetailTitle.textContent=
+          data.title || row.title;
+        if(globalSearchDetailDescription) {
+          var fields=kind==="epg" ?
+            [globalSearchDate(data.startTime)+"–"+
+              globalSearchDate(data.endTime),
+              data.subtitle||"",data.description||""] :
+            [data.recordedAt||"",
+              data.durationKnown?Math.round(data.durationSeconds/60)+" Minuten":"",
+              data.metadata && data.metadata.overview || data.description ||""];
+          globalSearchDetailDescription.textContent=fields.filter(function(x){
+            return !!x;
+          }).join(" · ").slice(0,2100);
+        }
+      }
+      if(kind==="epg")
+        globalSearchMetadata.eventDetail(globalSearchCredential,
+          backend.backendId,row.channelId,row.eventId,finish);
+      else globalSearchMetadata.recordingDetail(globalSearchCredential,
+        backend.backendId,row.recordingId,finish);
+    }
   
     // S6.20: independent saved epgsearch rule browser. A rule is neither an
     // existing native VDR timer nor a Suite TimerAssignment.
@@ -4733,6 +5146,13 @@
         liveBusy = false;
         channelCatalog.cancel();
       }
+      if (currentView === "search" && view !== "search") {
+        ++globalSearchRun;++globalSearchDetailRun;
+        globalSearchBusy=false;globalSearchEditing=false;
+        globalSearchClient.cancel();globalSearchMetadata.cancel();
+        globalSearchCatalog.cancel();globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+      }
       if (currentView === "timers" && view !== "timers") {
         ++searchTimerRun;
         ++searchTimerSelectionRun;
@@ -4817,6 +5237,20 @@
           "„Timer laden“ liest native Timer über Public API v1 mit timers.view.");
         if (!rowMemory.timers) rowMemory.timers = {};
         rowMemory.timers[1]="detail-timers-load";
+      } else if (view === "search") {
+        ++globalSearchRun;++globalSearchDetailRun;
+        globalSearchBusy=false;globalSearchEditing=false;
+        globalSearchClient.cancel();globalSearchMetadata.cancel();
+        globalSearchCatalog.cancel();globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+        globalSearchCredential=null;
+        globalSearchBackends=[];globalSearchBackendIndex=0;
+        globalSearchTerm="";
+        if(globalSearchBackendLabel)
+          globalSearchBackendLabel.textContent="Backend noch nicht geladen";
+        globalSearchMessage("Suchbegriff eingeben und „Suchen“ drücken.");
+        if(!rowMemory.search)rowMemory.search={};
+        rowMemory.search[1]="global-search-go";
       } else if (PREVIEW_ROUTES.indexOf(view) >= 0) {
         renderPreview(view, "offline");
         // Preserve S2.2's DOWN-to-first-detail-button behavior.
@@ -4996,6 +5430,22 @@
         loadRecordings(recordingAction);
         return;
       }
+      var searchKind=item.getAttribute("data-global-search-kind");
+      var searchIndex=item.getAttribute("data-global-search-index");
+      if(currentView==="search" && searchKind && searchIndex!==null) {
+        selectGlobalSearchResult(searchKind,Number(searchIndex));return;
+      }
+      var searchAction=item.getAttribute("data-global-search-action");
+      if(currentView==="search" && searchAction) {
+        globalSearchAction(searchAction);return;
+      }
+      if(currentView==="search" &&
+          item.getAttribute("data-focus-id")==="global-search-input"){
+        globalSearchEditing=true;
+        if(globalSearchInput && typeof globalSearchInput.focus==="function")
+          globalSearchInput.focus();
+        return;
+      }
       var searchTimerIndex=item.getAttribute("data-searchtimer-index");
       if(searchTimerIndex!==null && currentView==="timers") {
         selectSearchTimer(Number(searchTimerIndex));return;
@@ -5077,6 +5527,15 @@
     }
   
   
+    if(globalSearchInput){
+      globalSearchInput.addEventListener("focus",function(){
+        if(currentView==="search")globalSearchEditing=true;
+      });
+      globalSearchInput.addEventListener("blur",function(){
+        globalSearchEditing=false;
+      });
+    }
+  
     var intro = createStartupVideo({
       overlay: document.getElementById("startup-cover"),
       video: document.getElementById("startup-video"),
@@ -5098,6 +5557,18 @@
           if (serverInput && typeof serverInput.blur === "function") serverInput.blur();
           editingServerAddress = false;
           setFocus("settings-test");
+        }
+        return;
+      }
+      // Samsung IME owns all text-editor keys, like the proven S6.16 address
+      // editor. Never intercept Backspace, arrows, digits or OK while editing.
+      if(currentView==="search" && globalSearchEditing){
+        var code=event.keyCode || event.which;
+        if(code===65376 || code===65385 || code===10009){
+          if(globalSearchInput && typeof globalSearchInput.blur==="function")
+            globalSearchInput.blur();
+          globalSearchEditing=false;
+          setFocus("global-search-go");
         }
         return;
       }
