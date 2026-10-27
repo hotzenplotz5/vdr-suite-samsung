@@ -16,9 +16,10 @@ export function html5PlaybackDiagnosis(detail) {
     " · kein automatischer AVPlay-Fallback.";
 }
 
-export function createHtml5RecordingPlayer(video, environment) {
+export function createHtml5RecordingPlayer(video, environment, resourceKind) {
   var generation=0,active=false,phase="idle",watchdog=null,notifyFailure=null;
   var env=environment || {};
+  var live=resourceKind==="live-channel";
   var setTimer=typeof env.setTimeout==="function" ?
     function(fn,ms){return env.setTimeout(fn,ms);} : null;
   var clearTimer=typeof env.clearTimeout==="function" ?
@@ -55,7 +56,8 @@ export function createHtml5RecordingPlayer(video, environment) {
   }
   function start(mediaUrl,onState) {
     if (!available() || typeof mediaUrl!=="string" ||
-        !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/recording\/stream\.mp4$/.test(mediaUrl)) {
+        !new RegExp("^https:\\/\\/[^\\s?#]+\\/[^?#]*\\/api\\/v1\\/media\\/sessions\\/ms_[0-9a-f]{32}\\/"+
+          (live ? "live\\/stream" : "recording\\/stream")+"\\.mp4$").test(mediaUrl)) {
       onState("unsupported",{stage:"html5"});return false;
     }
     stop();
