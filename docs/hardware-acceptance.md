@@ -695,3 +695,12 @@ Status: ALLE S8.1 REAL-TV-PUNKTE OFFEN bis zur konkreten Nutzerbestätigung. PR 
 **S8.2 nach erneuter WITs-Übertragung prüfen:** große Home-Artwork-Karten; Suchergebnisliste der Aufnahmen sichtbar und via D-Pad/OK fokussierbar; bei widersprüchlicher Public-v1-Antwort Trefferzahl ohne Items eine eindeutige Fehlermeldung; aus Live-EPG sowie EPG-Suche zukünftige Sendung wählen, erste Aktion liest ETag und zeigt Bestätigung, zweite Aktion erzeugt erst nach bewusstem OK einen echten einmaligen TimerIntent. Kein Test-POST ohne beabsichtigte Aufnahme. 202 nur Admission; anschließend manueller GET auf actor-owned Operation, succeeded/queued/outcome_unknown sauber unterscheiden. Grants epg.view und timers.create müssen explizit vorliegen. Verlorene/verzögerte Antwort nie durch neuen Timer-POST umgehen.
 
 **Live-TV OPEN/BLOCKIERT:** Public-v1-Live-Media bietet noch keine nachgewiesene AVPlay-Native-Cookie-Projektion. Keine Hardware-Abnahme ohne sichere serverseitige Erweiterung und realen AVPlay-Bild-/Ton-/STOP-Test. DEV-Pairing bewahren; PROD-App unverändert.
+
+
+## S8.3 – direktes Live-TV via Streamdev und AVPlay: Hardware OPEN (27.10.2026)
+
+Das bisherige Gerät GU43TU6979UXZG / Tizen 5.5 hat mit Browser-HTML5-MediaSession keinen verlässlich funktionierenden Live-TV-Ton/Bild-PASS; HTTP 401 wurde gemeldet. Statt der MediaSession-Cookie-Route wird ein separat markierter, ausdrücklich vom Besitzer gewünschter DEV-Test mit Streamdev MPEG-TS und Samsung AVPlay umgesetzt.
+
+**Abnahmekette:** Streamdev läuft auf demselben VDR, dessen echte Kanal-ID aus Public-v1-/channels stammt; Streamdev HTTP-Endpunkt im Heimnetz erreichbar; App bietet „Streamdev speichern“ und „Live-TV direkt starten“; TV-Buildkennung S8.3 nach echtem isoliertem WITs-Push sichtbar; echtes Bild **und** hörbarer Ton bei unverschlüsseltem Testsender; min. mehrere Minuten stabil; STOP/BACK und erneuter anderer Sender funktioniert, keine hängende AVPlay-Session. Alte HTML5-Aktion nicht als Beweis heranziehen.
+
+**Fallback:** Bei nicht erreichbarem Port oder unbrauchbarer HTTP-TS-Decodierung Fehlerzustand/AVPlay-Stufe aufnehmen; kein stiller Rückfall auf ungeschützte externe URLs, keine automatische Neu-Kopplung oder Install-Fallback. CI gilt für Programmlogik, nicht für den Decoder auf Hardware. AVPlay Native-Singleton bleibt mit Recording-Player geteilt; STOP muss ihn vor einer Aufnahme freigeben.
