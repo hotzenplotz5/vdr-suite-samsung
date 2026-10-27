@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.1","build":"f96da94ca60c","label":"Samsung v0.1.0 · S8.1 · bf96da94ca60c"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.2","build":"a798753f5463","label":"Samsung v0.1.0 · S8.2 · ba798753f5463"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1519,6 +1519,153 @@
   }
   // END app/src/api/global-search.js
 
+  // BEGIN app/src/api/epg-timer-intents.js
+  // S8.2: deliberately confirmed one-shot EPG TimerIntent through Public API v1.
+  // No native timer specs, private routes, automatic POST retries or scheduling claims.
+  function createEpgTimerIntents(environment) {
+    var env=environment||{},read=null,serial=0,postPending=false,attempted={};
+    function cancel() {
+      serial++;
+      if(read && typeof read.abort==="function")try{read.abort();}catch(_){}
+      read=null;
+      // Never abort/retry an in-flight CREATE on navigation: its outcome may be unknown.
+    }
+    function safeBackend(v){return typeof v==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(v);}
+    function safeChannel(v){return typeof v==="string" && /^[A-Za-z0-9._-]{1,256}$/.test(v);}
+    function safeEvent(v){return typeof v==="string" && /^[A-Za-z0-9._:-]{1,160}$/.test(v);}
+    function credOk(c){return c && typeof c.base==="string" &&
+      /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+      safeBackend(c.credentialId) &&
+      typeof c.credentialSecret==="string" &&
+      /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);}
+    function strongTag(v){return typeof v==="string" &&
+      /^"[\x21\x23-\x7e]{1,220}"$/.test(v);}
+    function request(c,method,path,body,headers,done) {
+      if(!credOk(c)||typeof env.XMLHttpRequest!=="function"){
+        done({ok:false,kind:"request"});return null;
+      }
+      var xhr=new env.XMLHttpRequest(),url=c.base.replace(/\/$/,"")+path;
+      try{
+        xhr.open(method,url,true);xhr.timeout=12000;xhr.withCredentials=false;
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          c.credentialId+"."+c.credentialSecret);
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        Object.keys(headers||{}).forEach(function(k){xhr.setRequestHeader(k,headers[k]);});
+        xhr.onload=function(){
+          if(xhr.responseURL && xhr.responseURL!==url){
+            done({ok:false,kind:"redirect"});return;
+          }
+          var data=null;
+          if(xhr.responseText)try{data=JSON.parse(xhr.responseText);}catch(_){}
+          done({ok:xhr.status===200||xhr.status===202,
+            status:xhr.status,data:data,
+            etag:typeof xhr.getResponseHeader==="function" ?
+              xhr.getResponseHeader("ETag"):null});
+        };
+        xhr.onerror=function(){done({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){done({ok:false,kind:"timeout"});};
+        xhr.send(body);
+        return xhr;
+      }catch(_){done({ok:false,kind:"network"});return null;}
+    }
+    function freshEvent(c,bid,cid,eid,done){
+      if(!safeBackend(bid)||!safeChannel(cid)||!safeEvent(eid)){
+        done({ok:false,kind:"request"});return;
+      }
+      cancel();
+      var token=serial;
+      read=request(c,"GET","/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&eventId="+encodeURIComponent(eid),
+        null,{},function(r){
+          if(token!==serial)return;
+          read=null;
+          if(!r.ok||r.status!==200){done(r.ok?{ok:false,kind:"response"}:r);return;}
+          var v=r.data;
+          if(!strongTag(r.etag)||!v||v.backendId!==bid||
+             v.channelId!==cid||v.eventId!==eid||
+             typeof v.title!=="string"||!v.title||
+             typeof v.startTime!=="string"||!/^[0-9]{10,12}$/.test(v.startTime)||
+             typeof v.endTime!=="string"||!/^[0-9]{10,12}$/.test(v.endTime)||
+             Number(v.endTime)<=Math.floor(Date.now()/1000)){
+            done({ok:false,kind:"stale"});return;
+          }
+          done({ok:true,value:v,etag:r.etag});
+        });
+    }
+    function idempotencyKey(){
+      if(!env.crypto||typeof env.crypto.getRandomValues!=="function")return null;
+      var bytes=new Uint8Array(16);
+      try{env.crypto.getRandomValues(bytes);}catch(_){return null;}
+      return "samsung-epg-"+Array.prototype.map.call(bytes,function(x){
+        return ("0"+x.toString(16)).slice(-2);
+      }).join("");
+    }
+    function create(c,bid,cid,eid,etag,done){
+      if(postPending||!safeBackend(bid)||!safeChannel(cid)||
+         !safeEvent(eid)||!strongTag(etag)||!credOk(c)){
+        done({ok:false,kind:"request"});return;
+      }
+      // Same event cannot generate another CREATE on the same TV runtime.
+      var logical=bid+"|"+cid+"|"+eid;
+      if(attempted[logical]){done({ok:false,kind:"already"});return;}
+      var key=idempotencyKey();
+      if(!key){done({ok:false,kind:"crypto"});return;}
+      attempted[logical]=key;
+      postPending=true;
+      request(c,"POST","/api/v1/epg/timer-intents",
+        JSON.stringify({backendId:bid,channelId:cid,eventId:eid}),
+        {"Content-Type":"application/json","If-Match":etag,"Idempotency-Key":key},
+        function(r){
+          postPending=false;
+          if(!r.ok||r.status!==202){done(r.ok?{ok:false,kind:"response"}:r);return;}
+          var v=r.data;
+          if(!v||typeof v.operationId!=="string"||
+             !/^op_[A-Za-z0-9._:-]{1,160}$/.test(v.operationId)||
+             v.backendId!==bid||typeof v.state!=="string"){
+            done({ok:false,kind:"response"});return;
+          }
+          done({ok:true,value:v});
+        });
+    }
+    function operation(c,operationId,done){
+      if(typeof operationId!=="string"||
+         !/^op_[A-Za-z0-9._:-]{1,160}$/.test(operationId)){
+        done({ok:false,kind:"request"});return;
+      }
+      cancel();var token=serial;
+      read=request(c,"GET","/api/v1/operations/"+encodeURIComponent(operationId),
+        null,{},function(r){
+          if(token!==serial)return;
+          read=null;
+          if(!r.ok||r.status!==200){done(r.ok?{ok:false,kind:"response"}:r);return;}
+          if(!r.data||r.data.operationId!==operationId||
+             typeof r.data.state!=="string"){
+            done({ok:false,kind:"response"});return;
+          }
+          done({ok:true,value:r.data});
+        });
+    }
+    return {freshEvent:freshEvent,create:create,operation:operation,cancel:cancel};
+  }
+  function epgTimerIntentError(r){
+    if(!r)return "Timer-Anfrage nicht verfügbar.";
+    if(r.kind==="stale")return "Sendung ist vorbei, wurde geändert oder liefert keinen gültigen ETag. EPG neu laden.";
+    if(r.kind==="already")return "Für diese Sendung wurde schon ein Timerauftrag versucht. Status am Server prüfen, nicht doppelt anlegen.";
+    if(r.kind==="crypto")return "Sichere Zufallsquelle fehlt – keine Timerbuchung durchgeführt.";
+    if(r.kind==="timeout"||r.kind==="network")return
+      "Netzwerkantwort unklar. Keinen weiteren Timer anlegen; zuerst Timerstatus am Server prüfen.";
+    if(r.kind==="http"){
+      if(r.status===401)return "Geräteanmeldung abgewiesen (401).";
+      if(r.status===403)return "timers.create fehlt oder Backend ist schreibgeschützt (403).";
+      if(r.status===409||r.status===412)return "EPG/Backend wurde verändert. Bitte neu auswählen (409/412).";
+      if(r.status===503)return "Backend/Agent derzeit nicht bereit (503).";
+      return "Timer-API HTTP "+r.status+".";
+    }
+    return "Timer-API-Vertrag nicht erfüllt; keine Erfolgsmeldung.";
+  }
+  // END app/src/api/epg-timer-intents.js
+
   // BEGIN app/src/api/media-metadata.js
   // Public API v1 metadata reads for the Samsung Device client.
   // All calls use an explicit Device credential and backend-scoped grants.
@@ -2746,6 +2893,13 @@
     var globalSearchStatusLabel = document.getElementById("global-search-status");
     var globalSearchDetailTitle = document.getElementById("global-search-detail-title");
     var globalSearchDetailDescription = document.getElementById("global-search-detail-description");
+    var epgTimerClient=createEpgTimerIntents(window);
+    var epgTimerStage=null,epgTimerEpoch=0;
+    var selectedSearchEpg=null,selectedLiveEpg=null,selectedLiveEpgId=null;
+    var liveEpgRecord=document.getElementById("live-epg-record");
+    var liveEpgOperation=document.getElementById("live-epg-operation");
+    var searchEpgRecord=document.getElementById("search-epg-record");
+    var searchEpgOperation=document.getElementById("search-epg-operation");
     var nativeTimerCatalog = createNativeTimerCatalog(window);
     var searchTimerCatalog = createSearchTimerCatalog(window);
     var searchTimerBackendCatalog = createChannelCatalog(window);
@@ -2922,6 +3076,9 @@
           if (liveEpgFocusIds[i]) cells.push(liveEpgFocusIds[i]);
           if (cells.length) liveFocusRows.push(cells);
         }
+        if(liveEpgRecord && !liveEpgRecord.hidden)
+          liveFocusRows.push(["live-epg-record"].concat(
+            liveEpgOperation && !liveEpgOperation.hidden ? ["live-epg-operation"] : []));
         if (liveEpgScrollActions && !liveEpgScrollActions.hidden)
           liveFocusRows.push(["live-epg-scroll-up","live-epg-scroll-down"]);
         return liveFocusRows;
@@ -2949,6 +3106,9 @@
           if(globalSearchRows.epg[n])group.push(globalSearchRows.epg[n]);
           if(group.length)searchRows.push(group);
         }
+        if(searchEpgRecord && !searchEpgRecord.hidden)
+          searchRows.push(["search-epg-record"].concat(
+            searchEpgOperation && !searchEpgOperation.hidden ? ["search-epg-operation"] : []));
         searchRows.push(["detail-search-home","detail-search-preview"]);
         return searchRows;
       }
@@ -3817,6 +3977,99 @@
       liveEpgArtworkUrl=null;
       if (liveEpgArtworkStatus) liveEpgArtworkStatus.textContent="";
     }
+    function epgTimerMessage(source,message){
+      var el=document.getElementById(source==="live"?
+        "live-epg-timer-status":"search-epg-timer-status");
+      if(el)el.textContent=message;
+    }
+    function epgTimerReset(source){
+      ++epgTimerEpoch;epgTimerClient.cancel();epgTimerStage=null;
+      var action=source==="live"?liveEpgRecord:searchEpgRecord;
+      var status=source==="live"?liveEpgOperation:searchEpgOperation;
+      if(action){action.textContent=source==="live"?
+        "Sendung aufnehmen":"EPG-Sendung aufnehmen";action.hidden=true;action.disabled=false;}
+      if(status)status.hidden=true;
+      epgTimerMessage(source,"");
+    }
+    function epgTimerShow(source){
+      var action=source==="live"?liveEpgRecord:searchEpgRecord;
+      if(action)action.hidden=false;
+      epgTimerMessage(source,"OK auf „Aufnehmen“ prüft das aktuelle EPG. Erst die zweite Bestätigung legt einen Timer an.");
+    }
+    function epgTimerAction(action){
+      var source=currentView;
+      if(source!=="live" && source!=="search")return;
+      var token=epgTimerEpoch;
+      if(action==="status"){
+        var stage=epgTimerStage;
+        if(!stage || stage.source!==source || !stage.operationId)return;
+        epgTimerMessage(source,"Lese bestätigten Timerauftrag …");
+        epgTimerClient.operation(stage.cred,stage.operationId,function(r){
+          if(token!==epgTimerEpoch || currentView!==source)return;
+          if(!r.ok){epgTimerMessage(source,epgTimerIntentError(r));return;}
+          var state=r.value.state;
+          epgTimerMessage(source,state==="succeeded"?
+            "Timer im VDR bestätigt (Operation succeeded)." :
+            state==="outcome_unknown"?
+            "Timer-Ausgang UNGEKLÄRT. Nicht erneut anlegen; Serverstatus prüfen.":
+            "Timerauftrag: "+state+" · kein automatischer erneuter CREATE.");
+        });
+        return;
+      }
+      if(action!=="prepare")return;
+      var selected=source==="live"?selectedLiveEpg:selectedSearchEpg;
+      var id=source==="live"?selectedLiveEpgId:selected && selected.eventId;
+      var backend=source==="live"?liveBackends[liveBackendIndex]:
+        globalSearchBackend();
+      var cred=source==="live"?liveCredential:globalSearchCredential;
+      if(!selected || !backend || !id || !cred){
+        epgTimerMessage(source,"Zuerst eine aktuelle EPG-Sendung mit Event-ID auswählen.");
+        return;
+      }
+      var stage=epgTimerStage;
+      if(stage && stage.source===source && stage.phase==="confirm"){
+        stage.phase="submitting";
+        var button=source==="live"?liveEpgRecord:searchEpgRecord;
+        if(button){button.textContent="Timer wird angelegt …";button.disabled=true;}
+        epgTimerMessage(source,"Sende einen bestätigten Timerauftrag; keine automatische Wiederholung …");
+        epgTimerClient.create(stage.cred,stage.bid,stage.cid,stage.eid,
+          stage.etag,function(result){
+            if(token!==epgTimerEpoch||currentView!==source)return;
+            if(button){button.disabled=false;button.hidden=true;}
+            stage.phase="submitted";
+            if(!result.ok){
+              epgTimerMessage(source,epgTimerIntentError(result)+
+                " Kein automatischer zweiter Versuch.");return;
+            }
+            stage.operationId=result.value.operationId;
+            var status=source==="live"?liveEpgOperation:searchEpgOperation;
+            if(status)status.hidden=false;
+            epgTimerMessage(source,"Timerauftrag angenommen (HTTP 202). "+
+              "Mit „Timerstatus prüfen“ den tatsächlichen VDR-Ausgang kontrollieren.");
+          });
+        return;
+      }
+      if(stage && stage.source===source)return;
+      var bid=backend.backendId,cid=selected.channelId,eid=id;
+      epgTimerMessage(source,"Lese aktuelle EPG-Revision und Aufnahmedaten …");
+      epgTimerClient.freshEvent(cred,bid,cid,eid,function(result){
+        if(token!==epgTimerEpoch||currentView!==source)return;
+        if(!result.ok){epgTimerMessage(source,epgTimerIntentError(result));return;}
+        var data=result.value;
+        if(data.startTime!==selected.startTime ||
+           data.endTime!==selected.endTime || data.title!==selected.title){
+          epgTimerMessage(source,"Die Sendung wurde im EPG verändert. Bitte Treffer neu wählen.");
+          return;
+        }
+        epgTimerStage={source:source,cred:cred,bid:bid,cid:cid,eid:eid,
+          etag:result.etag,phase:"confirm",operationId:null};
+        var button=source==="live"?liveEpgRecord:searchEpgRecord;
+        if(button)button.textContent="Timer jetzt wirklich anlegen";
+        epgTimerMessage(source,"Bestätigen: „"+data.title+"“, "+
+          globalSearchDate(data.startTime)+" bis "+globalSearchDate(data.endTime)+
+          ". OK legt einen echten VDR-Timer an.");
+      });
+    }
     function clearEpgFocusRows() {
       if (currentView==="live" && liveEpgFocusIds.indexOf(focusedId)>=0)
         setFocus("detail-live-epg-now");
@@ -3828,6 +4081,8 @@
       });
       liveEpgFocusIds=[];
       liveEpgRows=[];
+      selectedLiveEpg=null;selectedLiveEpgId=null;
+      epgTimerReset("live");
       liveDetailMetadata.cancel();
       liveArtworkMetadata.cancel();
       clearEpgArtwork();
@@ -3859,6 +4114,8 @@
     // OK on a focusable EPG row must do something visible. A description
     // can only be fetched if Public v1 advertises a proven native eventId.
     function selectEpgEvent(item,loadDescription) {
+      epgTimerReset("live");
+      selectedLiveEpg=item;selectedLiveEpgId=item && item.eventId || null;
       liveDetailMetadata.cancel();
       liveArtworkMetadata.cancel();
       clearEpgArtwork();
@@ -3874,6 +4131,8 @@
         start.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"}) : "";
       liveEpgDetail.hidden=false;
       liveEpgDetail.scrollTop=0;
+      if(selectedLiveEpgId && Number(item.endTime)>Math.floor(Date.now()/1000))
+        epgTimerShow("live");
       if (liveEpgScrollActions) liveEpgScrollActions.hidden=false;
       if (liveEpgDetailTime) liveEpgDetailTime.textContent =
         date+" · "+clock(start)+"–"+clock(end);
@@ -3954,6 +4213,9 @@
       }
       function loadEventDetail(id) {
         if (!stillSelected()) return;
+        selectedLiveEpgId=id;
+        if(Number(item.endTime)>Math.floor(Date.now()/1000))
+          epgTimerShow("live");
         liveEpgDetailDescription.textContent="Lade Sendungsbeschreibung …";
         liveDetailMetadata.eventDetail(liveCredential,backend.backendId,
           channel.channelId,id,function(result) {
@@ -4245,6 +4507,7 @@
         if(pane.list){pane.list.textContent="";pane.list.hidden=true;}
         if(pane.count)pane.count.textContent="–";
       });
+      selectedSearchEpg=null;epgTimerReset("search");
       if(globalSearchDetailTitle)globalSearchDetailTitle.textContent="Noch kein Treffer ausgewählt";
       if(globalSearchDetailDescription)
         globalSearchDetailDescription.textContent="OK auf einem Treffer zeigt Details aus API v1.";
@@ -4426,6 +4689,10 @@
       var row=globalSearchItems[kind][index],backend=globalSearchBackend();
       if(!row || !backend || row.backendId!==backend.backendId ||
           !globalSearchCredential)return;
+      epgTimerReset("search");
+      selectedSearchEpg=kind==="epg"?row:null;
+      if(selectedSearchEpg && Number(row.endTime)>Math.floor(Date.now()/1000))
+        epgTimerShow("search");
       ++globalSearchDetailRun;
       globalSearchMetadata.cancel();
       var token=globalSearchDetailRun,run=globalSearchRun;
@@ -5687,6 +5954,7 @@
       if (ROUTES.indexOf(view) < 0) return false;
       if (currentView === "home" && view !== "home") homeCancelReads();
       if (currentView === "live" && view !== "live") {
+        epgTimerReset("live");
         if (livePlaybackSession || livePlayBusy) stopLivePlayback("navigate");
         clearLiveEpg();
         // In-flight responses cannot update a hidden view after navigation.
@@ -5695,6 +5963,7 @@
         channelCatalog.cancel();
       }
       if (currentView === "search" && view !== "search") {
+        epgTimerReset("search");
         ++globalSearchRun;++globalSearchDetailRun;
         globalSearchBusy=false;globalSearchEditing=false;
         globalSearchClient.cancel();globalSearchMetadata.cancel();
@@ -5934,6 +6203,8 @@
         }
         return;
       }
+      var epgTimer=item.getAttribute("data-epg-timer-action");
+      if(epgTimer){epgTimerAction(epgTimer);return;}
       var epgScroll=item.getAttribute("data-epg-scroll");
       if (epgScroll!==null && currentView==="live") {
         if (liveEpgDetail && !liveEpgDetail.hidden) {
