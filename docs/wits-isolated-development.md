@@ -20,7 +20,7 @@ No device installation, uninstall, new pairing, grant or credential export is au
    ```
 
    **Am 27.10.2026 real beobachtet:** Port `4050` gehörte bereits einem `node …/@tizentv/wits/lib/cli.js --watch`-Prozess. Ein zweites `npm.cmd run tv:watch` endete daher mit `EADDRINUSE`, obwohl der Samsung erreichbar war. **EADDRINUSE bedeutet Port belegt, nicht `DEV host fehlt` und nicht `neu installieren`.** Ein laufender Watch-Prozess ist allerdings noch **kein Beweis**, dass die neuen Dateien synchronisiert wurden.
-3. **Wenn der korrekte DEV-Watch bereits läuft:** **Kein zweites `npm.cmd run tv:watch` starten.** Den bestehenden Watch und seine Ausgabe verwenden. In einem zweiten Terminal, im Repository-Hauptverzeichnis, nach erfolgtem Build/Check bei Bedarf `npm.cmd run tv:dev:prepare` ausführen, damit die neuen Dateien im überwachten DEV-Staging liegen. Watch-Ausgabe auf Übertragung/Reload prüfen. **`tv:dev:prepare` selbst hat keinen TV-Kontakt.**
+3. **Wenn der korrekte DEV-Watch bereits läuft:** **Kein zweites `npm.cmd run tv:watch` starten.** Nach Build/Check bei Bedarf `npm.cmd run tv:dev:prepare` ausführen. **WICHTIG: Ein bloß laufender alter Watch (z. B. PID 39448 am 27.10.2026) und die `tv:dev:prepare`-Ausgabe belegen KEINE tatsächliche Übertragung.** Im echten Watch-Terminal prüfen, ob die Änderung synchronisiert und die neue Funktion am TV sichtbar wurde. Falls der Watch trotz geänderter DEV-Dateien keine Übertragung anzeigt oder der neue Button am Fernseher fehlt: **denselben bestehenden Watch wie in Schritt 5 kontrolliert beenden und neu starten**, damit der installierte DEV-Host erneut verbunden wird und den Datei-Push anfordern kann. Kein zweiter Watch und keine Installation.
 4. **Wenn kein Watch läuft:** Nach vorbereiteten DEV-Dateien **genau einmal** im VS-Code-PowerShell-Terminal, Repository-Hauptverzeichnis:
 
    ```powershell
@@ -28,7 +28,16 @@ No device installation, uninstall, new pairing, grant or credential export is au
    ```
 
    **Dieses Terminal offen lassen.** Der Wrapper führt `wits --watch` **innerhalb der isolierten `.tizen-wits-dev/`-Kopie** aus; weder `--start` noch `Run Project` sind für dieses Update nötig.
-5. **Nur wenn der Watch bewusst neu gestartet werden muss:** Ausschließlich den **identifizierten, eigenen DEV-Watch** über **Strg+C in dessen zugehörigem Terminal** beenden, prüfen, dass Port 4050 frei ist, und erst dann **einmal** `npm.cmd run tv:watch` aus dem Repository-Hauptverzeichnis starten. Niemals blind Node-Prozesse/PIDs abschießen oder an einem unbekannten Listener `Stop-Process` ausführen. Wenn unklar ist, wem der Listener gehört oder aus welchem Projekt er stammt, **zuerst Ausgabe/Prozess untersuchen, nicht neu installieren**.
+5. **Fehlende Übertragung bei einem älteren Watch: genau diesen Watch kontrolliert neu verbinden.** Nur den **identifizierten, eigenen DEV-Watch** im **zugehörigen Terminal mit Strg+C** beenden und warten, bis Port 4050 frei ist. Dann im Repository-Hauptverzeichnis **genau einmal**:
+
+   ```powershell
+   if (Get-NetTCPConnection -LocalPort 4050 -State Listen -ErrorAction SilentlyContinue) {
+     throw "Port 4050 noch belegt; keinen zweiten Watch starten."
+   }
+   npm.cmd run tv:watch
+   ```
+
+   Das vorhandene Terminal offen lassen. **Das ist der fehlende TV-Übertragungsschritt nach bereits bestandenem Build und erfolgreichem `tv:dev:prepare`; beides NICHT nochmals ausführen.** Samsung-WITs `watch.js` startet dabei den bereits installierten DEV-Host neu (ohne Uninstall/Install); `watchHelper.js` erwartet die Verbindung des DEV-Hosts und dessen `push_request`, dann werden die DEV-Staging-Dateien via `sdb push` zum TV übertragen. Im Watch-Terminal auf `a user connected`, `socket on::::push_request`, `Total File Number : ...`, erfolgreiche Push-Statusmeldungen und den sichtbaren neuen TV-Build achten. **Wenn diese fehlen, ist der Transfer nicht bestätigt!** Ein `EADDRINUSE` besagt nur, dass der Port durch einen anderen Listener belegt ist, **NICHT**, dass der DEV-Host fehlt. Niemals blind Node-Prozesse/PIDs abschießen oder an einem unbekannten Listener `Stop-Process` ausführen. Bei unklarem Portbesitzer die Prozessausgabe untersuchen, **nicht neu installieren**.
 6. **Wirkliche Übertragung belegen:** Auf dem Samsung **VDR-Suite DEV** öffnen und an der **neuen sichtbaren Funktion/Buildkennung** prüfen, ob der aktuelle Stand geladen ist. **Realer Erfolg 27.10.2026:** S6.17-Button **`HLS-TS + AAC-Ton testen`** sichtbar, Nutzer bestätigt hörbaren Ton. Das bloße Vorhandensein des Watch-Prozesses, die `Success to connect`-Meldung, `195/195` Quelltests, die vorbereitete Staging-Datei oder ein Git-Pull reichen **nicht** aus. Die bestehende Geräteanmeldung nach dem Update prüfen, **ohne neu zu koppeln**.
 7. **Falls die Änderung am TV fehlt:** Watch-Terminal-Ausgabe und WITs-Arbeitsverzeichnis/DEV-Konfiguration prüfen; nicht wiederholt den Watch starten. Der unten beschriebene `--smoke`-Marker ist **nur ein optionaler Diagnosetest**, keine vorgeschriebene Update-/Installationsstufe. Er überträgt selbst keine Daten und muss anschließend aus dem Staging entfernt werden.
 
