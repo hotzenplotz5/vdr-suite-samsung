@@ -587,3 +587,44 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .searchtimer-actions .action-button { min-width:125px; }
   .searchtimer-preview-list { max-height:160px; }
 }
+
+/* S6.22: unified search parity with Web – TV-sized controls and 2 results. */
+.general-search-bar { padding:16px 18px; margin:16px 0; background:#091d30;
+  border:1px solid #284866; border-radius:14px; }
+.general-search-bar > label { display:block; color:#eaf6ff; font-weight:750;
+  font-size:19px; margin-bottom:8px; }
+.general-search-entry { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+#global-search-input { box-sizing:border-box; flex:1 1 360px; min-width:260px;
+  min-height:53px; border:2px solid #3b6b94; border-radius:10px;
+  padding:10px 16px; color:#fff; background:#020f1d; font-size:21px; }
+#global-search-input:focus, #global-search-input.is-focused { border-color:#66beff;
+  outline:3px solid rgba(102,190,255,.35); }
+#global-search-backend-name,#global-search-status { font-size:15px;
+  color:#bed4e8; margin:8px 0 0; }
+.general-search-grid { display:grid; grid-template-columns:minmax(0,1fr)
+  minmax(0,1fr); gap:14px; }
+.general-search-group { min-width:0; padding:15px; border:1px solid #244967;
+  border-radius:14px; background:#0a1e32; }
+.general-search-group header { display:flex; justify-content:space-between;
+  align-items:center; gap:8px; margin-bottom:12px; }
+.general-search-group h2 { color:#f2f8ff; margin:0; font-size:23px; }
+.general-search-group header span { color:#94d7ff; font-size:15px; }
+.general-search-group > p { color:#b8d0e5; font-size:14px; min-height:21px; }
+.global-search-results { list-style:none; padding:0; margin:10px 0;
+  min-height:0; max-height:34vh; overflow-y:auto; }
+.global-search-results[hidden] { display:none; }
+.global-search-row { margin:0 0 7px; padding:12px 13px; cursor:pointer;
+  border:1px solid #2b4f70; border-radius:9px; background:#102b46; }
+.global-search-row strong { display:block; font-size:18px; color:#f2faff; }
+.global-search-row span { display:block; font-size:13px; margin-top:5px;
+  color:#b8d5ed; }
+.global-search-row:focus, .global-search-row.is-focused { outline:3px solid #62baff;
+  background:#1a476f; }
+.general-search-detail { margin:14px 0; padding:14px; background:#08192b;
+  border:1px solid #254766; border-radius:12px; white-space:pre-wrap; }
+.general-search-detail strong { color:#f1f8ff; font-size:19px; }
+.general-search-detail p { color:#c2d8eb; font-size:15px; }
+@media(max-width:1000px) {
+  .general-search-grid { grid-template-columns:1fr; }
+  .global-search-results { max-height:22vh; }
+}
