@@ -258,3 +258,12 @@ OK- oder PLAY-Druck ausdrücklich `play()` statt einer zweiten Pause an.
 Ein separater PAUSE-Druck bleibt idempotent. Die Absicht wird bei STOP,
 neuer Session und Fortsetzungsanforderung zurückgesetzt. Dies ist kein
 Beweis, dass Decoder, Stream oder MediaSession danach Fortschritt liefern.
+
+
+## S6.17 – Expliziter HLS-TS/AAC-Vergleich statt blindem Codecwechsel
+
+Die bisherige breite Samsung-AVPlay-Fähigkeitsmeldung lässt Public v1 unter `hls` und `progressive` sowie `mpeg-ts`, `mp4`, `fmp4` wählen, aber die reale VDR-Aufnahme zeigte `MPEG`-Audio ohne Ton und eine teilweise stehende AVPlay-Uhr. `MPEG` ist ohne unabhängiges `ffprobe`-Ergebnis nicht präzise MP2/MP3; Samsungs 2020er Liste führt nur MPEG (MP3) explizit.
+
+Als **manueller Vergleich**, nicht als globaler Codec-/Player-Fallback, begrenzt `HLS-TS + AAC-Ton testen` die beim Session-CREATE angegebenen Fähigkeiten auf HLS/MPEG-TS/H.264/AAC und zwei Audiokanäle. Die existierende VDR-Suite-Medienprofilauswahl `MediaPresentationSelector` kann diese Ausgabe mit transkodierter inkompatibler Tonspur planen und bei kompatiblem Video `-c:v copy` lassen. Ob der installierte Backend-Worker den konkreten Stream korrekt liefert, ist nicht bewiesen; HLS-Playlist-/PTS-Probleme können fortbestehen. `presentationProfileId` muss exakt `hls-ts` sein, sonst wird die zuvor autorisierte eigene MediaSession gestoppt. Keine beliebige Medien-URL und kein Ersetzen von Session-Credentials, keine zweite Sitzung, keine automatische Session-Neuvergabe. Native AVPlay verwendet wie bisher den gekapselten Session-Cookie.
+
+**Hardware OPEN:** Vergleich nach sichtbar bestätigtem DEV-Watch-Update, unter derselben Aufnahme und jeweils nach vorherigem STOP: Standard AVPlay vs. HLS-TS/AAC. Logge nur begrenzte UI-Informationen (Profil/Transportunterstützung, AVPlay-Codec AAC vs MPEG, Zeitdelta, Ton hörbar, sichtbarer Filmfortschritt). Eine korrekte HLS-TS-Playlist oder ein gemeldetes AAC-Audio ist ausdrücklich **kein** Ton-PASS. Bei nicht unterstütztem Serverprofil kein unsicherer Browser-/Direktpfad. Bereits gekoppelte DEV-App erhalten und PROD unberührt lassen.
