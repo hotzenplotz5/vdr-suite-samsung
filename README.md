@@ -185,3 +185,10 @@ Die Mediathek ist **nicht auf 20 oder 100 Aufnahmen insgesamt begrenzt**. Es wer
 Das neue Premium-Home nutzt vorhandene Navigationspunkte, eine dezente Verbindungsmeldung am Logo und zeigt echte Inhalte statt doppelter Funktionskacheln. Hero, Weitersehen mit serverseitigem Continue-Watching, Aus deiner Mediathek, Jetzt im TV und der kompakte native Aufnahmeplaner lesen vorhandene öffentliche API v1. Aufnahme- und EPG-Bilder werden nur als Device-autorisierte Binärdaten geladen; bei fehlendem Artwork bleibt das dunkelblaue Fallback. Metadaten und Fortschritte werden nicht erfunden.
 
 Bei sichtbarem Home-Eintritt werden Device, Backend und getrennte Lesedomänen automatisch abgefragt. Fehlende einzelne Grants blockieren nicht die ganze Seite. Die Katalogliste ist nach Recording-ID sortiert, nicht nach Aufnahmedatum. Home startet keine Wiedergabe. Source-/CI- und TV-Abnahme bleiben getrennt: der neue Stand ist auf dem Samsung erst nach tatsächlichem WITs-Push sichtbar. Siehe ROADMAP.md, docs/api-contracts.md, docs/hardware-acceptance.md und docs/wits-isolated-development.md. PR #33 bleibt Draft; Produktiv-App unverändert.
+
+
+## S8.3 – Streamdev Direkt-Live-TV (Samsung DEV, Hardware OPEN)
+
+Erster TV-Versuch ohne Browser-Cookie-Umweg: Auf **Live-TV** die lokal erreichbare Streamdev-Serveradresse des VDR eingeben, z. B. `http://192.168.178.20:3000`, mit „Streamdev speichern“ sichern, danach „Sender laden“, Sender per OK auswählen und „Live-TV direkt starten“. Der Stream läuft als roher VDR MPEG-TS `/TS/<VDR-channelId>` in Samsung **AVPlay**, ohne VDR-OSD im Videobild. Back/STOP beendet den AVPlay-Stream und gibt den Decoder wieder frei. TV-Bild/Ton/Haltbarkeit und die Erreichbarkeit des Plugins müssen auf realer Hardware geprüft werden.
+
+Die eingegebene LAN-Adresse liegt nur im lokalen TV-Speicher, nicht im Repository. Damit ist **kein** VDR-Suite-Public-v1-MediaSession-POST verbunden. Der Legacy-HTML5-Test bleibt getrennt. Ein Streamdev-HTTP-Port darf nur im eigenen Heimnetz erreichbar sein, nicht im Internet freigegeben werden. Es werden weder Backend-Einstellungen noch Tizen-Installation oder Kopplung geändert.
