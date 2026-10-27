@@ -153,6 +153,10 @@ Normal: `VDRSuiteTV.VDRSuite` / Paket `VDRSuiteTV`. Isolierter WITs-Host: `VDRSu
 
 **Einschränkung:** Die DEV-App hat eigene Tizen-KeyManager-Daten. Die reale Persistenz der DEV-Kopplung über Watch/Restart ist noch **nicht nachgewiesen**; Datenbewahrung für produktive Updates bleibt separat offen. Keine automatische Neu-Kopplung, Credential-Exports oder Grants.
 
+## S6.19 – Echte VDR-Timer lesen (27.10.2026)
+
+Im Samsung-DEV-Tab **Timer** lässt sich die echte native VDR-Timerliste über die öffentliche API v1 laden. **`Timer laden`** ruft `GET /api/v1/native-timers?backendId=...&offset=0&limit=30` auf, **`Weitere Timer`** paginiert und **`Backend wechseln`** wechselt zwischen autorisierten Backends. D-Pad/OK zeigen Titel, VDR-Uhrzeit und Aufnahmezustand. Benötigt `timers.view` für das gewünschte Backend – unabhängig von `epg.view` und `media.live.play`. Alles **rein lesend**, kein Timer wird erstellt, gelöscht oder geändert. Samsung-Hardwareprüfung noch offen. Siehe [Roadmap](ROADMAP.md), [API-Vertrag](docs/api-contracts.md) und [Hardware-Abnahme](docs/hardware-acceptance.md). DEV-Übertragung nach Build/Staging **nur** mit dem dokumentierten einmaligen WITs-Watch und sichtbarem TV-Push; kein `wits --start`, kein Pairing-Reset.
+
 ## S6.18 – Erster Live-TV-Praxistest über API v1 (27.10.2026)
 
 Neue manuelle Schaltfläche **`Live-TV testen`** nach Auswahl eines echten Senders mit OK. Die gekoppelte DEV-App erstellt eine autorisierte `live-channel`-Session über `POST /api/v1/live-playback-sessions` mit gesondertem `media.live.play`-Grant und prüft den geschützten `live/stream.mp4`-Pfad mit HTML5-MP4. STOP/ZURÜCK und Ansichtswechsel lösen Server-Session-STOP aus; kein automatisches Zappen und keine ungeschützten Media-URLs. **Source/CI PASS, realer Samsung-Live-Test noch offen**; kein AVPlay-Cookie im veröffentlichten Live-Device-Vertrag. Siehe [API-Vertragskarte](docs/api-contracts.md), [Hardware-Abnahme](docs/hardware-acceptance.md) und [DEV-Updateweg](docs/wits-isolated-development.md).
