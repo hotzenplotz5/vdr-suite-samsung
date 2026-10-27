@@ -448,11 +448,13 @@ function boot() {
           });
       });
   }
-  function homeSelectRecording(row,kind){
+  function homeSelectRecording(row,kind,force){
     if(!row || !homeCredential || !homeBackendId)return;
     var token=homeRun;
     ++homeFeatureRun;homeFeatureMetadata.cancel();
-    homeFeatureShow(row,"recordings",kind==="continue"?3:2,
+    if(force)homeFeaturePriority=0;
+    var priority=force?4:kind==="continue"?3:2;
+    homeFeatureShow(row,"recordings",priority,
       kind==="continue" ?
         "Gespeicherte Position: "+Math.floor(row.positionSeconds/60)+" Min." :
         (row.recordedAt ? "Aufgenommen: "+row.recordedAt : "Aufnahme"));
@@ -465,7 +467,7 @@ function boot() {
             "Gespeicherte Position: "+Math.floor(row.positionSeconds/60)+" Min." :
             "Metadaten aus VDR-Suite";
           // Upgraded title, overview and genre are authoritative, never made up.
-          homeFeatureShow(result.value,"recordings",kind==="continue"?3:2,
+          homeFeatureShow(result.value,"recordings",priority,
             [desc,result.value.metadata.genreText||""].filter(Boolean).join(" · "));
         } else if(homeFeatureMeta)
           homeFeatureMeta.textContent="Details: "+mediaMetadataError(result);
@@ -3128,7 +3130,7 @@ function boot() {
           selected.event.subtitle || selected.channel.name;
         if(homeFeatureMeta)homeFeatureMeta.textContent=
           globalSearchDate(selected.event.startTime)+" · "+selected.channel.name;
-      } else if(selected)homeSelectRecording(selected,homeKind);
+      } else if(selected)homeSelectRecording(selected,homeKind,true);
       return;
     }
     var homeAction=item.getAttribute("data-home-action");
