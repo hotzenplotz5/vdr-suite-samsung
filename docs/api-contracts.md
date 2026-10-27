@@ -145,3 +145,24 @@ Backend-Quellen `hotzenplotz5/vdr-suite` `main` geprüft: `api/public-v1-generic
 - Aktuelle **Public-v1-Projektion hat keine vollständige Personen-/Artwork-/Match-Reason-Projektion** des Webfrontends: bewusst nicht erfinden oder geheime Provider-URLs von Browser-Endpunkten verwenden. Erweiterung dieses UI-Paritätsumfangs würde erst eine ausdrücklich dokumentierte Public-v1-Erweiterung erfordern.
 
 Samsung-Hardware-Gate OPEN: WITs-Übertragung wirklich bestätigen und gegen Webresultate desselben Backends testen. Bestehende `app/AGENTS.md` beachten.
+
+
+## S8.1 – Media Home über vorhandene öffentliche API v1
+
+Alle Home-Reads verwenden dieselbe gespeicherte, verifizierte Device-Anmeldung und genau ein zugängliches Backend pro Zyklus. Fehler und Grants bleiben unabhängig, alle Calls sind GET:
+
+| Inhalt | Public-v1-Endpunkt | Grant |
+| --- | --- | --- |
+| Backend | /api/v1/backends | Device-gebundene Sichtbarkeit |
+| Continue Watching | /api/v1/recording-playback-sessions/continue-watching?backendId=… | media.recording.play |
+| Erste Aufnahmeseite | /api/v1/recordings?backendId=…&limit=100&sort=recordingId&order=asc | recordings.view |
+| Aufnahmedetails | /api/v1/recordings/{recordingId}?backendId=… | recordings.view |
+| Aufnahmebilder | /api/v1/recordings/{recordingId}/artwork und /artwork/{artworkId} mit Backend-Scope | recordings.view, Device-autorisierter Binärabruf |
+| Sender | /api/v1/channels?backendId=… | channels.view |
+| Aktuelles EPG | /api/v1/epg/now-next?backendId=…&channelId=…&fromTime=…&limit=2 | epg.view |
+| EPG-Bild | /api/v1/epg/preferred-artwork?backendId=…&channelId=…&eventId=… | epg.view, bestätigte Event-ID |
+| Native Timer | /api/v1/native-timers?backendId=…&offset=0&limit=30 | timers.view |
+
+Continue Watching verwendet ausschließlich positive serverseitige Positionen und optional verifizierte Dauer, kein lokales Ersatz-Resume. Die Existenz eines serverseitigen Checkpoints beweist keine erfolgreiche Samsung-Seek-/Resume-Wiedergabe. Aufnahmen werden nur nach Recording-ID sortiert; die EPG-Reihe zeigt aktuell laufende echte Events der ersten bis zu drei TV-Sender. Bilder werden MIME-/Größen-validiert, nur über Blob-URLs eingebunden und bei Abbruch widerrufen. Kein privater Browser-Endpunkt, kein Autoplay, kein zusätzlicher Metadaten-Owner, keine Mutation.
+
+Referenzen: VDR-Suite api/device-recording-playback.md (P1), ADR-0058 sowie die bestehenden Samsung-Clients recording-catalog.js, home-continue.js, media-metadata.js und native-timers.js. REAL-TV OPEN.
