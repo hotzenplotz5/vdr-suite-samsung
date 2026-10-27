@@ -71,6 +71,10 @@ function boot() {
   var homeFeatureKind = "recordings";
   var homeFeaturePriority = 0;
   var homeArtworkUrl = null;
+  var homeCardArtworkClients = [];
+  var homeCardDetailClients = [];
+  var homeCardUrls = [];
+  var homeEpgReaders = [];
   var homeCardIds = {continue:[],recordings:[],epg:[]};
   var homeCardItems = {continue:[],recordings:[],epg:[]};
   var homeFeaturePoster = document.getElementById("home-feature-poster");
@@ -351,6 +355,15 @@ function boot() {
     homeEpgMetadata.cancel();homeFeatureMetadata.cancel();
     homeFeatureArtwork.cancel();
     homeContinueMetadata.forEach(function(client){client.cancel();});
+    homeCardArtworkClients.forEach(function(client){client.cancel();});
+    homeCardDetailClients.forEach(function(client){client.cancel();});
+    homeEpgReaders.forEach(function(client){client.cancel();});
+    homeCardArtworkClients=[];homeCardDetailClients=[];homeEpgReaders=[];
+    homeCardUrls.forEach(function(url){
+      if(window.URL && typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(url);
+    });
+    homeCardUrls=[];
     homeClearArtwork();
   }
   function homeClearCards(){
@@ -577,6 +590,7 @@ function boot() {
   function homeRefresh(){
     if(currentView!=="home")return;
     homeCancelReads();homeClearCards();
+    homeCredential=null;homeBackendId=null;
     var saved=vault.read();
     if(!saved.ok || !saved.credential){
       homeMessage("home-content-status",
@@ -3048,6 +3062,7 @@ function boot() {
     message.textContent = view === "home"
       ? "Media Home · Inhalte über Public API v1 · Pfeile · OK · Zurück"
       : "Bereich: " + view + (discoveredBase ? " · Public API v1 erreichbar" : " · Server noch nicht geprüft") + " · Zurück = vorherige Ansicht";
+    if(view==="home" && document.visibilityState==="visible")homeRefresh();
     return true;
   }
 
@@ -3616,6 +3631,11 @@ function boot() {
     });
   });
 
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible" && currentView==="home")homeRefresh();
+    else if(document.visibilityState==="hidden" && currentView==="home")
+      homeCancelReads();
+  });
   storedStatus();
   showView("home");
   setFocus("nav-home");
