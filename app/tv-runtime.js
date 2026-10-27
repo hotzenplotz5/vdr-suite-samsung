@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"df90799ddbe5","label":"Samsung v0.1.0 · S6.4 · bdf90799ddbe5"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"aa65714f8d15","label":"Samsung v0.1.0 · S6.4 · baa65714f8d15"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1849,6 +1849,20 @@
       videoCodecs:["h264"],audioCodecs:["aac"],supportsByteRanges:true,
       maxVideoWidth:1920,maxVideoHeight:1080,maxAudioChannels:2};
   }
+  
+  // Explicit Tizen 5.5 comparison path: request HLS TS with AAC stereo via Public v1.
+  // The server's typed selector may transcode incompatible audio, preserving video.
+  // Neither this request nor AVPlay track enumeration proves audible playback.
+  function samsungAacHlsTsCapabilities(environment) {
+    var base=conservativeSamsungCapabilities(environment);
+    if (!base) return null;
+    return {
+      protocols:["hls"],containers:["mpeg-ts"],
+      videoCodecs:["h264"],audioCodecs:["aac"],
+      supportsByteRanges:true,maxVideoWidth:1920,maxVideoHeight:1080,
+      maxAudioChannels:2
+    };
+  }
   // END app/src/platform/recording-player.js
 
   // BEGIN app/src/platform/html5-recording-player.js
@@ -2204,7 +2218,8 @@
           ["detail-recordings-home", "detail-recordings-load",
            "detail-recordings-backend", "detail-recordings-up",
            "detail-recordings-all", "detail-recordings-play",
-           "detail-recordings-html5", "detail-recordings-previous"]];
+           "detail-recordings-html5", "detail-recordings-aac-hls",
+           "detail-recordings-previous"]];
         recordingFocusIds.forEach(function (id) { rows.push([id]); });
         rows.push(["detail-recordings-next"]);
         return rows;
@@ -3339,6 +3354,8 @@
     }
     function startSelectedRecording(mode) {
       recordingControlSequence++;
+      // Explicit manual transport comparison, never automatic fallback.
+      var aacHlsTsTest = mode === "aac-hls";
       mode = mode === "html5" ? "html5" : "avplay";
       if (recordingPlayBusy || recordingPlaybackSession) return;
       if (recordingTeardownBusy) {
@@ -3361,7 +3378,9 @@
           "Browser-Videoelement fehlt; keine neue MediaSession gestartet.");
         return;
       }
-      var caps = conservativeSamsungCapabilities({document:document});
+      var caps = aacHlsTsTest ?
+        samsungAacHlsTsCapabilities({document:document}) :
+        conservativeSamsungCapabilities({document:document});
       if (!caps) {
         recordingStatus("error","Decoderprobe unklar",
           "H.264/AAC-Unterstützung nicht nachgewiesen; keine Fähigkeiten erfinden.");
@@ -3385,7 +3404,8 @@
       var rec = recordingSelected;
       recordingPlayBusy = true;
       recordingStatus("loading","MediaSession wird angefordert",
-        rec.title + " · media.recording.play erforderlich");
+        rec.title + (aacHlsTsTest ? " · HLS-TS/AAC Stereo gezielt angefordert" :
+          " · media.recording.play erforderlich"));
       recordingPlaybackClient.begin(safe.credential,backendId,rec.recordingId,caps,
         function (result) {
           recordingPlayBusy = false;
@@ -3401,6 +3421,15 @@
           recordingPlaybackSession = {
             credential:safe.credential,backendId:backendId,sessionId:result.sessionId
           };
+          // The comparison test must not silently use direct TS/MP4 or fMP4 HLS.
+          // Reject and STOP this owned MediaSession if the server chose otherwise.
+          if (aacHlsTsTest && (result.profile !== "hls-ts" ||
+              !/\/hls\/master\.m3u8$/.test(result.mediaUrl))) {
+            stopRecordingPlayback("failure");
+            recordingStatus("error","HLS-TS/AAC-Profil nicht bereitgestellt",
+              "Serverantwort passt nicht zum expliziten AAC-HLS-TS-Test. Sitzung beendet.");
+            return;
+          }
           if (mode === "html5" &&
               !/\/recording\/stream\.mp4$/.test(result.mediaUrl)) {
             stopRecordingPlayback("failure");
@@ -3420,6 +3449,7 @@
             mode === "avplay" ? "AVPlay · MediaSession bereit · Player wird vorbereitet" :
               "HTML5 MP4 · Player wird vorbereitet · 12s Startdiagnose";
           if (recordingAudioHint) recordingAudioHint.textContent =
+            aacHlsTsTest ? "Audio · HLS-TS mit AAC Stereo angefordert; auf AVPlay-Spuren warten" :
             mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
               "Audio · HTML5 ohne AVPlay-Spurdiagnose";
           if (recordingRemoteHint) recordingRemoteHint.textContent =
@@ -3453,9 +3483,14 @@
                   " · Fortschritt "+detail.deltaSeconds+"s · Bild/Ton separat prüfen";
               }
             } else if (state === "audio" && mode === "avplay") {
-              if (recordingAudioHint)
+              if (recordingAudioHint) {
+                var mismatch = aacHlsTsTest && detail &&
+                  Array.isArray(detail.tracks) &&
+                  detail.tracks.some(function(t) {return t.codec==="MPEG";});
                 recordingAudioHint.textContent = describeSamsungAudio(detail)+
+                  (mismatch ? " · ACHTUNG: TV meldet MPEG trotz AAC-Anforderung" : "")+
                   " | "+samsungTvSoundStatus(window);
+              }
             } else if (state === "preparing" || state === "buffering") {
               if (recordingLifecycleHint) recordingLifecycleHint.textContent =
                 (mode === "html5" ? "HTML5" : "AVPlay") + " · " +
@@ -3588,7 +3623,8 @@
   
     function loadRecordings(action) {
       if (recordingBusy || recordingPlayBusy || recordingPlaybackSession) return;
-      if (action === "play" || action === "html5") {startSelectedRecording(action);return;}
+      if (action === "play" || action === "html5" ||
+          action === "aac-hls") {startSelectedRecording(action);return;}
       if (action === "up") {
         if (!recordingFolderUp())
           recordingStatus("ready","Oberstes Verzeichnis","Kein übergeordneter VDR-Ordner.");
