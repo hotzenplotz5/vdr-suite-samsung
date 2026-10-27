@@ -282,9 +282,10 @@ function boot() {
         if (liveEpgFocusIds[i]) cells.push(liveEpgFocusIds[i]);
         if (cells.length) liveFocusRows.push(cells);
       }
-      if(liveEpgRecord && !liveEpgRecord.hidden)
-        liveFocusRows.push(["live-epg-record"].concat(
-          liveEpgOperation && !liveEpgOperation.hidden ? ["live-epg-operation"] : []));
+      var liveTimerActions=[];
+      if(liveEpgRecord && !liveEpgRecord.hidden)liveTimerActions.push("live-epg-record");
+      if(liveEpgOperation && !liveEpgOperation.hidden)liveTimerActions.push("live-epg-operation");
+      if(liveTimerActions.length)liveFocusRows.push(liveTimerActions);
       if (liveEpgScrollActions && !liveEpgScrollActions.hidden)
         liveFocusRows.push(["live-epg-scroll-up","live-epg-scroll-down"]);
       return liveFocusRows;
@@ -312,9 +313,10 @@ function boot() {
         if(globalSearchRows.epg[n])group.push(globalSearchRows.epg[n]);
         if(group.length)searchRows.push(group);
       }
-      if(searchEpgRecord && !searchEpgRecord.hidden)
-        searchRows.push(["search-epg-record"].concat(
-          searchEpgOperation && !searchEpgOperation.hidden ? ["search-epg-operation"] : []));
+      var searchTimerActions=[];
+      if(searchEpgRecord && !searchEpgRecord.hidden)searchTimerActions.push("search-epg-record");
+      if(searchEpgOperation && !searchEpgOperation.hidden)searchTimerActions.push("search-epg-operation");
+      if(searchTimerActions.length)searchRows.push(searchTimerActions);
       searchRows.push(["detail-search-home","detail-search-preview"]);
       return searchRows;
     }
@@ -1241,17 +1243,19 @@ function boot() {
       epgTimerClient.create(stage.cred,stage.bid,stage.cid,stage.eid,
         stage.etag,function(result){
           if(token!==epgTimerEpoch||currentView!==source)return;
-          if(button){button.disabled=false;button.hidden=true;}
           stage.phase="submitted";
+          if(button){button.disabled=true;button.textContent="Timerauftrag wurde versucht";}
           if(!result.ok){
             epgTimerMessage(source,epgTimerIntentError(result)+
               " Kein automatischer zweiter Versuch.");return;
           }
+          if(button)button.hidden=true;
           stage.operationId=result.value.operationId;
           var status=source==="live"?liveEpgOperation:searchEpgOperation;
           if(status)status.hidden=false;
           epgTimerMessage(source,"Timerauftrag angenommen (HTTP 202). "+
             "Mit „Timerstatus prüfen“ den tatsächlichen VDR-Ausgang kontrollieren.");
+          setFocus(source==="live"?"live-epg-operation":"search-epg-operation");
         });
       return;
     }
