@@ -404,7 +404,8 @@ test("S2.3 no backend requests, external images or media playback in view code",
   const views = readFileSync("app/src/views/view-state.js", "utf8");
   const app = readFileSync("app/src/main.js", "utf8");
   assert.doesNotMatch(views + app, /fetch\(|XMLHttpRequest|http:\/\//);
-  assert.match(html, /Statusvorschau – keine echten Serverdaten/);
+  assert.match(html, /data-global-search-action="go"/);
+  assert.match(html, /data-global-search-action="epg-more"/);
   assert.match(html, /data-live-action="load"/);
   assert.match(html, /data-recordings-action="load"/);
   assert.doesNotMatch(html, /data-preview-route="recordings"/);
