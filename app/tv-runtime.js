@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"d4d66a7931ff","label":"Samsung v0.1.0 · S6.4 · bd4d66a7931ff"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"4a7a387444d3","label":"Samsung v0.1.0 · S6.4 · b4a7a387444d3"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1333,18 +1333,20 @@
       if(text.length<2 || /[\x00-\x1f\x7f]/.test(text))return null;
       // Backend checks encoded request length and decoded UTF-8 byte limits.
       try {
-        if(typeof TextEncoder==="function") {
-          if(new TextEncoder().encode(text).length>240)return null;
-        } else if(unescape(encodeURIComponent(text)).length>240)return null;
-        if(encodeURIComponent(text).length>360)return null;
+        // Percent escapes represent individual UTF-8 bytes; no TextEncoder or
+        // deprecated unescape() is needed on Tizen Chromium M69 or Node VM.
+        var encoded=encodeURIComponent(text);
+        if(encoded.replace(/%[0-9A-Fa-f]{2}/g,"x").length>240 ||
+            encoded.length>360)return null;
       } catch(_){return null;}
       return text;
     }
     function validRow(item,scope,kind) {
-      if(!item || item.kind!==kind || item.backendId!==scope ||
+      if(!item || item.kind!==(kind==="recordings"?"recording":"epg") ||
+          item.backendId!==scope ||
           typeof item.title!=="string" || !item.title ||
           item.title.length>4096)return false;
-      if(kind==="recording")return /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+      if(kind==="recordings")return /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
         typeof item.edited==="boolean";
       return typeof item.channelId==="string" && item.channelId.length>0 &&
         item.channelId.length<=256 &&
@@ -5238,6 +5240,7 @@
         if (!rowMemory.timers) rowMemory.timers = {};
         rowMemory.timers[1]="detail-timers-load";
       } else if (view === "search") {
+        renderPreview("search","offline");
         ++globalSearchRun;++globalSearchDetailRun;
         globalSearchBusy=false;globalSearchEditing=false;
         globalSearchClient.cancel();globalSearchMetadata.cancel();
