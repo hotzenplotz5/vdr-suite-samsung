@@ -25,7 +25,7 @@ function transport() {
  }
  return {calls,XMLHttpRequest:XHR,reply};
 }
-test("S6.22 matching Web search terms use distinct backend-scoped public Device GETs",()=>{
+test("S6.23 matching Web search terms use distinct backend-scoped public Device GETs",()=>{
  const t=transport(),api=createPublicGlobalSearch(t),results={};
  api.request(cred,"default","Hobbit","recordings",0,x=>results.recordings=x);
  api.request(cred,"default","Hobbit","epg",0,x=>results.epg=x);
@@ -42,7 +42,7 @@ test("S6.22 matching Web search terms use distinct backend-scoped public Device 
  assert.equal(results.epg.ok,true);
  assert.equal(results.epg.value.items[0].subtitle,"Hobbit in der Schule");
 });
-test("S6.22 per-kind pagination 30, independent errors and edit flag",()=>{
+test("S6.23 per-kind pagination 30, independent errors and edit flag",()=>{
  const t=transport(),api=createPublicGlobalSearch(t);
  let result;
  api.request(cred,"default","HOBBIT","recordings",30,x=>result=x);
@@ -56,7 +56,7 @@ test("S6.22 per-kind pagination 30, independent errors and edit flag",()=>{
  assert.match(publicGlobalSearchError({kind:"http",status:403},"recordings"),
   /recordings.view/);
 });
-test("S6.22 invalid queries, scope and bad response never turn into zero matches",()=>{
+test("S6.23 invalid queries, scope and bad response never turn into zero matches",()=>{
  const t=transport(),api=createPublicGlobalSearch(t),invalid=[];
  for(const [scope,term,kind,offset] of [
   ["default","a","epg",0],["../bad","Hobbit","epg",0],
@@ -79,7 +79,7 @@ test("S6.22 invalid queries, scope and bad response never turn into zero matches
  }
  assert.match(publicGlobalSearchError({kind:"http",status:503},"epg"),/nicht als 0 Treffer/);
 });
-test("S6.22 cancel invalidates both kinds and each new page aborts old same-kind GET",()=>{
+test("S6.23 cancel invalidates both kinds and each new page aborts old same-kind GET",()=>{
  const t=transport(),api=createPublicGlobalSearch(t),out=[];
  api.request(cred,"default","Hobbit","epg",0,x=>out.push(x));
  api.request(cred,"default","Hobbit","recordings",0,x=>out.push(x));
