@@ -628,3 +628,80 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .general-search-grid { grid-template-columns:1fr; }
   .global-search-results { max-height:22vh; }
 }
+
+/* S8.1 Media Home: content-first TV dashboard, no duplicated navigation.
+   Samsung Tizen 5.5 / Chromium 69: flex/grid, no gap/:has/container APIs. */
+.topbar .brand { flex-basis:236px; }
+.brand-label { display:flex; flex-direction:column; justify-content:center; }
+.brand-label strong { font-size:27px; line-height:1.1; }
+.brand-connection { display:block; margin-top:3px; font-size:11px;
+  color:#8eaac5; font-weight:normal; white-space:nowrap; }
+.brand-connection .status-dot { width:6px; height:6px; margin-right:3px; }
+.home-page { overflow-y:auto; padding:6px 12px 28px; display:block;
+  scrollbar-color:#275079 transparent; }
+.home-heading { display:flex; justify-content:space-between; align-items:flex-end;
+  min-height:91px; margin-bottom:17px; }
+.home-kicker { color:#79beff; font-size:12px; letter-spacing:2.2px; }
+.home-heading h1 { color:#f2f8ff; margin:7px 0 0; font-size:38px;
+  letter-spacing:-.8px; }
+.home-heading-actions { display:flex; align-items:center; justify-content:flex-end; }
+.home-heading-actions > span { color:#a5c2df; max-width:380px;
+  font-size:13px; text-align:right; margin-right:12px; }
+.home-heading-actions .action-button { padding:12px 18px; min-width:168px; }
+.home-feature-layout { display:grid; grid-template-columns:minmax(0,3.1fr)
+  minmax(225px,1fr); grid-column-gap:14px; min-height:255px; }
+.home-feature { position:relative; display:block; width:100%; min-height:255px;
+  padding:25px 30px; overflow:hidden; text-align:left; border:1px solid #456d96;
+  border-radius:18px; background:linear-gradient(113deg,#101e38 0%,#0c284b 56%,#081329 100%); }
+.home-feature-glow { position:absolute; right:0; top:-35%; width:55%; height:170%;
+  border-radius:50%; background:radial-gradient(ellipse at center,rgba(40,142,224,.34),
+  rgba(23,69,122,.17) 50%,transparent 70%); pointer-events:none; }
+.home-feature-copy { position:relative; z-index:2; display:block; width:66%; }
+.home-feature-kicker { display:block; color:#84c7ff; letter-spacing:1.5px;
+  font-size:12px; margin:1px 0 20px; }
+.home-feature-copy > strong { display:block; font-size:36px; line-height:1.16;
+  color:#fff; letter-spacing:-.5px; margin-bottom:11px; }
+.home-feature-copy > span:not(.home-feature-kicker) { display:block; }
+#home-feature-description { color:#bed0e3; font-size:16px; line-height:1.45;
+  max-height:72px; overflow:hidden; }
+.home-feature-meta { color:#8bcaff; font-size:13px; margin-top:18px; }
+.home-feature-poster:not([hidden]) { position:absolute; right:0; top:0;
+  width:37%; height:100%; object-fit:cover; opacity:.65;
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 42%); }
+.home-plan-card { padding:25px 22px; border:1px solid #284866; border-radius:18px;
+  background:linear-gradient(145deg,#112c4b,#091626); display:flex;
+  flex-direction:column; align-items:flex-start; }
+.home-card-kicker { color:#75c9f5; font-size:12px; letter-spacing:1.3px; }
+.home-plan-card > strong { font-size:23px; margin:19px 0 4px; color:#f2f7ff; }
+.home-plan-card p { color:#aec8e0; font-size:15px; line-height:1.4; flex:1; }
+.home-plan-card .action-button { margin-left:0; padding:12px 14px; font-size:15px; }
+.home-content-rails { padding-top:12px; }
+.home-section { margin-top:14px; }
+.home-section-heading { display:flex; align-items:baseline; margin:0 0 9px;
+  border-bottom:1px solid #1c3854; padding-bottom:6px; }
+.home-section-heading strong { font-size:19px; color:#eaf6ff; }
+.home-section-heading span { font-size:12px; color:#92b0ce; margin-left:15px; }
+.home-cards { display:flex; overflow-x:auto; overflow-y:hidden; min-height:95px;
+  scrollbar-color:#345e83 transparent; }
+.home-media-card { position:relative; display:flex; flex-direction:column;
+  flex:0 0 224px; height:97px; margin-right:11px; overflow:hidden;
+  padding:12px 13px; text-align:left; border:1px solid #284e70;
+  border-radius:11px; background:linear-gradient(120deg,#133452,#0b1a31); }
+.home-media-card strong { display:block; font-size:16px; color:#fff;
+  line-height:1.2; max-height:42px; overflow:hidden; }
+.home-media-card small { color:#b1d0e7; font-size:12px; margin-top:6px;
+  display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.home-media-card .home-card-progress { height:4px; background:#2a4563;
+  border-radius:3px; margin-top:auto; display:block; width:100%; }
+.home-media-card .home-card-progress > span { display:block; height:100%;
+  background:#58b8ff; border-radius:3px; }
+.home-media-card:focus,.home-media-card.is-focused { border-color:#90ccff; }
+@media(max-width:1380px) {
+  .home-heading h1 { font-size:31px; }
+  .home-feature-layout { min-height:218px; }
+  .home-feature { min-height:218px; padding:20px; }
+  .home-feature-copy > strong { font-size:29px; }
+  .home-feature-kicker { margin-bottom:13px; }
+  .home-plan-card { padding:17px; }
+  .home-media-card { flex-basis:198px; height:86px; }
+}
