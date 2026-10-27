@@ -648,9 +648,16 @@ function boot() {
       }
       var list=result.value.items;
       var recording=list.filter(function(x){return x.recording;}).length;
-      if(homeTimerSummary)homeTimerSummary.textContent=
-        (result.value.page.hasMore?"Mindestens ":"")+list.length+
-        " native VDR-Timer · "+recording+" davon gerade in Aufnahme";
+      if(homeTimerSummary){
+        var upcoming=list.filter(function(x){return x.enabled && !x.recording;})
+          .slice(0,2).map(function(x){
+            return x.title+" ("+x.day+" "+x.startTime+")";
+          });
+        homeTimerSummary.textContent=
+          (result.value.page.hasMore?"Mindestens ":"")+list.length+
+          " native VDR-Timer · "+recording+" gerade aktiv"+
+          (upcoming.length?" · Geplant: "+upcoming.join(" · "):"");
+      }
     });
   }
   function homeDisplayEpg(credential,backendId,token){
