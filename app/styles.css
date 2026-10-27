@@ -563,3 +563,27 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .native-timer-row strong { font-size:16px; }
   .native-timer-row span { font-size:12px; }
 }
+
+/* S6.20: saved epgsearch rules and the bounded real EPG hit preview. */
+.searchtimer-area { margin-top:26px; padding:20px 18px; border:1px solid #244869;
+  border-radius:14px; background:#0c2034; }
+.searchtimer-heading h2 { color:#eef7ff; font-size:22px; margin:0 0 6px; }
+.searchtimer-heading p { color:#abc6df; font-size:15px; margin:0 0 12px; }
+.searchtimer-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.searchtimer-actions .action-button { min-width:160px; margin:0; }
+.searchtimer-status { font-size:14px; color:#bad0e4; margin:10px 0; }
+.searchtimer-results { padding:14px 16px; margin-top:15px;
+  background:#08192b; border:1px solid #244261; border-radius:10px; }
+.searchtimer-results > strong { color:#f2f8ff; font-size:18px; }
+.searchtimer-results > p { color:#bad0e4; font-size:14px; }
+.searchtimer-preview-list { list-style:none; padding:0; margin:8px 0 0;
+  max-height:220px; overflow-y:auto; }
+.searchtimer-preview-list[hidden] { display:none; }
+.searchtimer-preview-list li { padding:8px 4px; border-bottom:1px solid #25425d; }
+.searchtimer-preview-list strong { display:block; color:#eaf6ff; font-size:16px; }
+.searchtimer-preview-list span { display:block; color:#b5cde3; font-size:13px; }
+@media(max-width:1380px) {
+  .searchtimer-area { padding:12px; }
+  .searchtimer-actions .action-button { min-width:125px; }
+  .searchtimer-preview-list { max-height:160px; }
+}
