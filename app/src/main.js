@@ -616,30 +616,38 @@ function boot() {
       if(!result.ok){
         homeMessage("home-epg-status",channelCatalogError(result));return;
       }
-      var channel=result.value.items.filter(function(x){
+      var channels=result.value.items.filter(function(x){
         return x.enabled && !x.radio;
-      })[0];
-      if(!channel){
-        homeMessage("home-epg-status","Keine TV-Sender in der ersten Seite verfügbar.");
+      }).slice(0,3);
+      if(!channels.length){
+        homeMessage("home-epg-status","Keine TV-Sender auf der ersten Seite verfügbar.");
         return;
       }
-      homeMessage("home-epg-status","Jetzt/Nächste · "+channel.name);
-      homeEpgMetadata.nowNext(credential,backendId,channel.channelId,
-        Math.floor(Date.now()/1000),function(epg){
+      homeMessage("home-epg-status","Jetzt im TV · "+channels.length+" Sender");
+      var now=Math.floor(Date.now()/1000),found=0,failures=0;
+      channels.forEach(function(channel){
+        var reader=createPublicMediaMetadata(window);
+        homeEpgReaders.push(reader);
+        reader.nowNext(credential,backendId,channel.channelId,now,function(epg){
           if(!homeAlive(token))return;
           if(!epg.ok){
-            homeMessage("home-epg-status",mediaMetadataError(epg));return;
-          }
-          if(!epg.value.items.length){
-            homeMessage("home-epg-status","Kein aktuelles EPG für "+channel.name);
+            failures++;
+            if(!found)homeMessage("home-epg-status",mediaMetadataError(epg));
             return;
           }
-          epg.value.items.forEach(function(event){
-            homeCard("epg",{event:event,channel:channel},event.title,
-              channel.name+" · "+globalSearchDate(event.startTime)+
-              (event.subtitle?" · "+event.subtitle:""),null);
-          });
+          var event=epg.value.items.filter(function(x){
+            return Number(x.startTime)<=now && Number(x.endTime)>now;
+          })[0];
+          if(!event)return;
+          found++;
+          homeMessage("home-epg-status","Jetzt im TV · "+found+" Sendungen");
+          var row={event:event,channel:channel};
+          var card=homeCard("epg",row,event.title,
+            channel.name+" · "+globalSearchDate(event.startTime)+
+            (event.subtitle?" · "+event.subtitle:""),null);
+          homeAttachCardArt(credential,backendId,"epg",row,card,token);
         });
+      });
     });
   }
   function homeRefresh(){
