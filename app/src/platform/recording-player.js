@@ -356,3 +356,17 @@ export function conservativeSamsungCapabilities(environment) {
     videoCodecs:["h264"],audioCodecs:["aac"],supportsByteRanges:true,
     maxVideoWidth:1920,maxVideoHeight:1080,maxAudioChannels:2};
 }
+
+// Explicit Tizen 5.5 comparison path: request HLS TS with AAC stereo via Public v1.
+// The server's typed selector may transcode incompatible audio, preserving video.
+// Neither this request nor AVPlay track enumeration proves audible playback.
+export function samsungAacHlsTsCapabilities(environment) {
+  var base=conservativeSamsungCapabilities(environment);
+  if (!base) return null;
+  return {
+    protocols:["hls"],containers:["mpeg-ts"],
+    videoCodecs:["h264"],audioCodecs:["aac"],
+    supportsByteRanges:true,maxVideoWidth:1920,maxVideoHeight:1080,
+    maxAudioChannels:2
+  };
+}
