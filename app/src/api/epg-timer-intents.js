@@ -1,7 +1,7 @@
 // S8.2: deliberately confirmed one-shot EPG TimerIntent through Public API v1.
 // No native timer specs, private routes, automatic POST retries or scheduling claims.
 export function createEpgTimerIntents(environment) {
-  var env=environment||{},read=null,serial=0,postPending=false;
+  var env=environment||{},read=null,serial=0,postPending=false,attempted={};
   function cancel() {
     serial++;
     if(read && typeof read.abort==="function")try{read.abort();}catch(_){}
@@ -84,8 +84,12 @@ export function createEpgTimerIntents(environment) {
        !safeEvent(eid)||!strongTag(etag)||!credOk(c)){
       done({ok:false,kind:"request"});return;
     }
+    // Same event cannot generate another CREATE on the same TV runtime.
+    var logical=bid+"|"+cid+"|"+eid;
+    if(attempted[logical]){done({ok:false,kind:"already"});return;}
     var key=idempotencyKey();
     if(!key){done({ok:false,kind:"crypto"});return;}
+    attempted[logical]=key;
     postPending=true;
     request(c,"POST","/api/v1/epg/timer-intents",
       JSON.stringify({backendId:bid,channelId:cid,eventId:eid}),
@@ -125,6 +129,7 @@ export function createEpgTimerIntents(environment) {
 export function epgTimerIntentError(r){
   if(!r)return "Timer-Anfrage nicht verfügbar.";
   if(r.kind==="stale")return "Sendung ist vorbei, wurde geändert oder liefert keinen gültigen ETag. EPG neu laden.";
+  if(r.kind==="already")return "Für diese Sendung wurde schon ein Timerauftrag versucht. Status am Server prüfen, nicht doppelt anlegen.";
   if(r.kind==="crypto")return "Sichere Zufallsquelle fehlt – keine Timerbuchung durchgeführt.";
   if(r.kind==="timeout"||r.kind==="network")return
     "Netzwerkantwort unklar. Keinen weiteren Timer anlegen; zuerst Timerstatus am Server prüfen.";
