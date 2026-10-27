@@ -1784,12 +1784,21 @@ function boot() {
         }
         var value=result.value;
         appendGlobalSearchResults(kind,value.items);
+        // Samsung TV: make the first real recording result visible instead of
+        // leaving the focus on the Search button above the result viewport.
+        if(kind==="recordings" && offset===0 && value.items.length &&
+            focusedId==="global-search-go")
+          setFocus(globalSearchRows.recordings[0]);
         globalSearchPages[kind]=value.page;
         if(pane.count)pane.count.textContent=value.page.totalCount+" Treffer";
         if(pane.status)pane.status.textContent=
           value.page.totalCount===0 ?
             "Keine passenden "+(kind==="epg"?"Sendungen":"Aufnahmen")+
               " im Suchindex." :
+          !value.items.length && offset===0 ?
+            "Suchindex meldet "+value.page.totalCount+
+              " Treffer, liefert aber keine sichtbaren Einträge. "+
+              "Server-Suchseite prüfen." :
             globalSearchItems[kind].length+" von "+value.page.totalCount+
               " angezeigt · "+(value.page.hasMore?"Weitere Ergebnisse verfügbar":"Ende");
       });
