@@ -25,7 +25,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -73,6 +73,21 @@ function simulate(options = {}) {
     get textContent(){return this._text;},
     appendChild(item){this.children.push(item);}
   };
+  const globalSearchNodes={};
+  for(const kind of ["epg","recordings"]) {
+    const list={
+      hidden:true,children:[],_text:"",
+      set textContent(v){this._text=v;if(v==="")this.children=[];},
+      get textContent(){return this._text;},
+      appendChild(node){this.children.push(node);}
+    };
+    globalSearchNodes["global-search-"+kind]=list;
+  }
+  for(const id of ["global-search-backend-name","global-search-status",
+      "global-search-recording-count","global-search-epg-count",
+      "global-search-recording-status","global-search-epg-status",
+      "global-search-detail-title","global-search-detail-description"])
+    globalSearchNodes[id]={textContent:""};
   const searchTimerNodes={
     "searchtimer-list":searchTimerList,
     "searchtimer-preview-list":searchTimerPreviewList,
@@ -184,6 +199,8 @@ function simulate(options = {}) {
       if (id === "native-timer-list") return nativeTimerList;
       if (id === "native-timer-backend-name") return nativeTimerBackendName;
       if (searchTimerNodes[id]) return searchTimerNodes[id];
+      if (globalSearchNodes[id]) return globalSearchNodes[id];
+      if (id === "global-search-input") return nodes["global-search-input"];
       if (id === "live-epg-status") return liveEpgStatus;
       if (id === "live-epg-list") return liveEpgList;
       if (id === "live-epg-scroll-actions") return epgScrollActions;
@@ -243,7 +260,7 @@ function simulate(options = {}) {
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -369,14 +386,9 @@ test("S2.3 all media detail routes cycle purely local preview states", () => {
     assert.equal(sim.stateNodes["detail-state-" + route].dataState, "offline");
     assert.equal(sim.stateNodes["detail-state-title-" + route].textContent,
       route === "timers" ? "Bereit für echte VDR-Timer" : "Noch keine Serververbindung");
-    if (route === "timers") {
-      // S6.19 adds real Timer buttons before the retained purely local preview.
-      // Explicitly focus the preview rather than accidentally loading timers.
-      sim.nodes["detail-timers-preview"].click();
-    } else {
-      key(40); // down to detail Home button
-      key(39); // right to local state preview
-    }
+    // The Search and Timer routes now have real controls; the old standalone
+    // presentation preview remains an explicitly selected, LOCAL-only test.
+    sim.nodes["detail-" + route + "-preview"].click();
     assert.equal(sim.nodes["detail-" + route + "-preview"].isFocused, true);
     for (const [mode, skeleton] of [["loading",false],["empty",true],["error",true],["offline",true]]) {
       key(13);
@@ -1729,4 +1741,67 @@ test("S6.20 exit discards pending epgsearch, no reappear or mutation",()=>{
   h.reply(2,200,searchRulePage());
   assert.equal(sim.searchTimerList.children.length,0);
   assert.equal(sim.searchTimerList.hidden,true);
+});
+
+
+test("S6.22 general search is idle on navigation, queries two separate v1 scopes",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  assert.equal(h.calls.length,0);
+  assert.match(sim.globalSearchNodes["global-search-status"].textContent,/Suchbegriff/);
+  sim.nodes["global-search-input"].value="Hobbit";
+  sim.nodes["global-search-go"].click();
+  assert.equal(h.calls.length,1,"verify current paired device");
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,4);
+  assert.match(h.calls[2].url,/\/api\/v1\/search\/recordings\?backendId=home&query=Hobbit&limit=30&offset=0$/);
+  assert.match(h.calls[3].url,/\/api\/v1\/search\/epg\?backendId=home&query=Hobbit&limit=30&offset=0$/);
+  const recording={kind:"recording",backendId:"home",
+    recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Der Hobbit",edited:false};
+  const event={kind:"epg",backendId:"home",
+    channelId:"S19.2E-1-100",eventId:"123",
+    title:"Young Sheldon",subtitle:"Hobbit",startTime:"1793131200",endTime:"1793134800"};
+  const page=items=>({items,page:{offset:0,limit:30,totalCount:items.length,hasMore:false}});
+  h.reply(2,200,page([recording]));
+  h.reply(3,200,page([event]));
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,1);
+  assert.equal(sim.globalSearchNodes["global-search-epg"].children.length,1);
+  assert.equal(sim.globalSearchNodes["global-search-recording-count"].textContent,"1 Treffer");
+  assert.equal(sim.globalSearchNodes["global-search-epg-count"].textContent,"1 Treffer");
+  assert.equal(h.calls.length,4,"no hidden player or write API called");
+});
+test("S6.22 EPG 403 is separate from successful recordings and old results clear",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  sim.nodes["global-search-input"].value="Hobbit";
+  sim.nodes["global-search-go"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,{items:[{kind:"recording",backendId:"home",
+    recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Hobbit",edited:false}],page:{offset:0,limit:30,totalCount:1,hasMore:false}});
+  h.reply(3,403,{code:"forbidden"});
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,1);
+  assert.match(sim.globalSearchNodes["global-search-epg-status"].textContent,/epg.view/);
+  sim.nodes["global-search-clear"].click();
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,0);
+  assert.equal(sim.globalSearchNodes["global-search-epg"].children.length,0);
+});
+test("S6.22 searching via Samsung IME yields keys to native keyboard",()=>{
+  const sim=simulate();sim.video.finish();sim.nodes["nav-search"].click();
+  const press=keyCode=>{
+    let blocked=false;sim.listeners.keydown({keyCode,preventDefault(){blocked=true;}});
+    return blocked;
+  };
+  press(40);
+  assert.equal(sim.nodes["global-search-go"].isFocused,true);
+  press(37);
+  assert.equal(sim.nodes["global-search-input"].isFocused,true);
+  for(const key of [8,37,38,39,40,13,49])
+    assert.equal(press(key),false,"IME captures "+key);
+  assert.equal(press(65376),false);
+  assert.equal(sim.nodes["global-search-go"].isFocused,true);
+  assert.equal(press(10009),true,"Back again navigates after IME Done");
 });
