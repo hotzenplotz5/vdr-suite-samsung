@@ -285,6 +285,7 @@ function simulate(options = {}) {
     window.URL=options.artworkApi;
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
+  if(options.crypto)window.crypto=options.crypto;
   runInNewContext(runtime, { document, window, URL });
   return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, homeNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
@@ -619,10 +620,12 @@ function liveTransport() {
   XHR.prototype.send=function(body){this.body=body;};
   XHR.prototype.abort=function(){this.aborted=true;};
   XHR.prototype.getResponseHeader=function(name){
-    return name==="Content-Type" ? (this.mime || null) : null;
+    return name==="ETag" ? (this.etag || null) :
+      name==="Content-Type" ? (this.mime || null) : null;
   };
-  function reply(i,status,value) {
+  function reply(i,status,value,etag) {
     calls[i].status=status;calls[i].responseURL=calls[i].url;
+    calls[i].etag=etag || null;
     calls[i].responseText=JSON.stringify(value);
     calls[i].onload();
   }
@@ -1839,6 +1842,69 @@ test("S6.23 searching via Samsung IME yields keys to native keyboard",()=>{
   assert.equal(press(10009),true,"Back again navigates after IME Done");
 });
 
+
+
+test("S8.2 recording search focuses first actual hit instead of only showing count",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  sim.nodes["global-search-input"].value="Hobbit";
+  sim.nodes["global-search-go"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,{items:[{kind:"recording",backendId:"home",
+    recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Der Hobbit",edited:false}],
+    page:{offset:0,limit:30,totalCount:1,hasMore:false}});
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,1);
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children[0].isFocused,true);
+  assert.match(sim.globalSearchNodes["global-search-recording-status"].textContent,/1 von 1 angezeigt/);
+});
+test("S8.2 TV EPG search requires double confirmation, then explicit Operation GET",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,crypto:{getRandomValues(buf){buf.fill(8);return buf;}}});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  sim.nodes["global-search-input"].value="Krimi";
+  sim.nodes["global-search-go"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const start=String(Math.floor(Date.now()/1000)+3600),
+    end=String(Number(start)+1200);
+  const event={kind:"epg",backendId:"home",channelId:"S19.2E-1-100",
+    eventId:"123",title:"Krimi",subtitle:"",
+    startTime:start,endTime:end};
+  h.reply(2,200,{items:[],page:{offset:0,limit:30,totalCount:0,hasMore:false}});
+  h.reply(3,200,{items:[event],page:{offset:0,limit:30,totalCount:1,hasMore:false}});
+  assert.equal(sim.nodes["search-epg-record"].hidden,true);
+  sim.globalSearchNodes["global-search-epg"].children[0].click();
+  assert.equal(sim.nodes["search-epg-record"].hidden,false);
+  const before=h.calls.length;
+  sim.nodes["search-epg-record"].click();
+  assert.equal(h.calls.length,before+1);
+  assert.equal(h.calls[before].method,"GET");
+  h.reply(before,200,{backendId:"home",channelId:event.channelId,eventId:event.eventId,
+    title:event.title,startTime:start,endTime:end},'"epg-fresh"');
+  assert.match(sim.nodes["search-epg-record"].textContent,/wirklich anlegen/);
+  assert.equal(h.calls.filter(x=>x.method==="POST").length,0);
+  sim.nodes["search-epg-record"].click();
+  const post=h.calls[h.calls.length-1];
+  assert.equal(post.method,"POST");
+  assert.match(post.url,/\/api\/v1\/epg\/timer-intents$/);
+  assert.equal(post.headers["If-Match"],'"epg-fresh"');
+  assert.deepEqual(JSON.parse(post.body),{
+    backendId:"home",channelId:event.channelId,eventId:event.eventId
+  });
+  h.reply(h.calls.length-1,202,{operationId:"op_0123456789abcdef",
+    backendId:"home",state:"queued"});
+  assert.equal(sim.nodes["search-epg-operation"].hidden,false);
+  assert.match(sim.globalSearchNodes["search-epg-timer-status"].textContent,/202/);
+  sim.nodes["search-epg-operation"].click();
+  const last=h.calls[h.calls.length-1];
+  assert.equal(last.method,"GET");
+  assert.match(last.url,/\/api\/v1\/operations\/op_0123456789abcdef$/);
+  h.reply(h.calls.length-1,200,{operationId:"op_0123456789abcdef",
+    backendId:"home",state:"succeeded"});
+  assert.match(sim.globalSearchNodes["search-epg-timer-status"].textContent,/im VDR bestätigt/);
+});
 
 test("S8.1 foreground Home composes real backend-scoped Continue, timers and EPG independently",()=>{
   const h=liveTransport();
