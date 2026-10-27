@@ -12,7 +12,10 @@ test("Samsung S2.1 loads a classic offline runtime and renders premium home", ()
   assert.match(html, /<script src="tv-runtime\.js"><\/script>/);
   assert.doesNotMatch(html, /type="module"/);
   assert.match(html, /Fernsehen neu erleben/);
-  assert.match(html, /DESIGNVORSCHAU · KEINE LIVE-DATEN/);
+  assert.match(html, /data-home-action="refresh"/);
+  assert.match(html, /home-continue-list/);
+  assert.match(html, /home-feature-poster/);
+  assert.doesNotMatch(html, /DESIGNVORSCHAU · KEINE LIVE-DATEN/);
   for (const route of ["home","live","recordings","search","timers","settings"]) {
     assert.match(html, new RegExp('data-panel="' + route + '"'));
   }
@@ -25,7 +28,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action", "data-home-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -54,6 +57,23 @@ function simulate(options = {}) {
     appendChild(child) { this.children.push(child); }
   };
   const liveBackendName = {textContent:""};
+  const homeNodes={};
+  for (const id of ["home-continue-list","home-recordings-list","home-epg-list"]) {
+    homeNodes[id]={
+      children:[],_text:"",
+      set textContent(v){this._text=v;if(v==="")this.children=[];},
+      get textContent(){return this._text;},
+      appendChild(n){this.children.push(n);}
+    };
+  }
+  for (const id of ["home-content-status","home-feature-kicker",
+      "home-feature-title","home-feature-description","home-feature-meta",
+      "home-timer-summary","home-continue-status","home-recordings-status",
+      "home-epg-status"])homeNodes[id]={textContent:""};
+  homeNodes["home-feature-poster"]={
+    hidden:true,src:"",onerror:null,onload:null,
+    removeAttribute(k){if(k==="src")this.src="";}
+  };
   const nativeTimerList = {
     hidden:true,children:[],_text:"",
     set textContent(value){this._text=value;if(value==="")this.children=[];},
@@ -190,6 +210,7 @@ function simulate(options = {}) {
       if (id === "suite-connection-result") return serverStatus;
       if (id === "home-server-state") return textNodes["message"];
       if (id === "topbar-server-status") return textNodes["message"];
+      if (homeNodes[id]) return homeNodes[id];
       if (id === "app-build-version") return versionFooter;
       if (id === "settings-app-build-version") return versionSettings;
       if (id === "pairing-result") return pairResult;
@@ -226,7 +247,7 @@ function simulate(options = {}) {
         return {canPlayType(){return options.mediaCanPlayType;}};
       const attrs={};
       const node={
-        tagName:tag.toUpperCase(),children:[],textContent:"",tabIndex:-1,isFocused:false,
+        tagName:tag.toUpperCase(),children:[],textContent:"",style:{},tabIndex:-1,isFocused:false,
         classList:{toggle(name,enabled){if(name==="is-focused")node.isFocused=enabled;}},
         appendChild(child){this.children.push(child);},
         setAttribute(name,value){attrs[name]=value;},
@@ -260,7 +281,7 @@ function simulate(options = {}) {
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, homeNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -291,15 +312,16 @@ test("S2.1 runtime boots original intro, capability probes and D-pad navigation"
   function key(keyCode) {
     sim.listeners.keydown({ keyCode, preventDefault() {} });
   }
-  key(40); // down: home nav -> stage
-  key(39); // right: hero
-  assert.equal(sim.nodes["stage-hero"].isFocused, true);
-  key(13); // OK -> live view
-  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
-  assert.equal(sim.nodes["nav-live"].isFocused, true);
-  key(10009); // BACK -> home with exact previous card focused
+  key(40); // Home refresh: explicit action, no network by navigation
+  assert.equal(sim.nodes["home-refresh"].isFocused, true);
+  key(40); // editorial hero
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
+  key(13); // open canonical Recordings view
+  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  assert.equal(sim.nodes["nav-recordings"].isFocused, true);
+  key(10009); // BACK restores editorial Home feature
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
 });
 
 
@@ -307,37 +329,34 @@ test("S2.2 D-Pad remembers the selected tile and Back restores Home focus", () =
   const sim = simulate();
   sim.video.finish();
   const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
-  key(40); // from Home menu to first stage card
-  key(39); // hero card
-  key(40); // middle action button
-  key(40); // middle rail card
-  key(39); // search rail card
-  assert.equal(sim.nodes["rail-search"].isFocused, true);
-  key(38); // previous action row
-  assert.equal(sim.nodes["action-recordings"].isFocused, true);
-  key(40); // return to remembered rail card, not default column
-  assert.equal(sim.nodes["rail-search"].isFocused, true);
-  key(13); // open search
-  assert.equal(sim.panels.find(p => p.route === "search").hidden, false);
-  assert.equal(sim.nodes["nav-search"].isFocused, true);
-  assert.equal(sim.nodes["rail-search"].isFocused, false); // never focus a hidden tile
-  sim.listeners.focusin({ target: sim.nodes["rail-live"] }); // hidden panel can't hijack focus
-  assert.equal(sim.nodes["nav-search"].isFocused, true);
-  key(10009); // return to the exact Home card
-  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["rail-search"].isFocused, true);
-  key(10009); // Back from Home calls Tizen application exit
-  assert.equal(sim.exits.count, 1);
+  key(40); // refresh
+  key(40); // feature
+  key(39); // Timer summary
+  assert.equal(sim.nodes["home-timer-open"].isFocused,true);
+  key(38); // action row
+  assert.equal(sim.nodes["home-refresh"].isFocused,true);
+  key(40); // remembered Timer summary
+  assert.equal(sim.nodes["home-timer-open"].isFocused,true);
+  key(13); // canonical Timer route
+  assert.equal(sim.panels.find(p => p.route === "timers").hidden,false);
+  assert.equal(sim.nodes["nav-timers"].isFocused,true);
+  sim.listeners.focusin({target:sim.nodes["home-feature"]});
+  assert.equal(sim.nodes["nav-timers"].isFocused,true);
+  key(10009);
+  assert.equal(sim.panels.find(p => p.route === "home").hidden,false);
+  assert.equal(sim.nodes["home-timer-open"].isFocused,true);
+  key(10009);
+  assert.equal(sim.exits.count,1);
 });
 
 test("S2.2 Back traverses detail history without losing the original Home tile", () => {
   const sim = simulate();
   sim.video.finish();
   const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
-  key(40); // stage-favorites
-  key(39); // stage-hero
-  key(13); // live
-  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
+  key(40); // Home refresh
+  key(40); // Hero
+  key(13); // Recordings
+  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
   key(39); // nav-recordings
   key(13); // recordings from live
   assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
@@ -346,20 +365,21 @@ test("S2.2 Back traverses detail history without losing the original Home tile",
   assert.equal(sim.nodes["nav-recordings"].isFocused, true);
   key(10009);
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
 });
 
 test("S2.2 explicit Home clears history and restores origin from detail Home button", () => {
   const sim = simulate();
   sim.video.finish();
   const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
-  key(40); // stage-favorites
-  key(13); // live
-  key(40); // focus detail-live-home
-  assert.equal(sim.nodes["detail-live-home"].isFocused, true);
-  key(13); // explicit back to Home
+  key(40); // refresh
+  key(40); // Hero
+  key(13); // Recordings
+  key(40); // detail-recordings-home
+  assert.equal(sim.nodes["detail-recordings-home"].isFocused, true);
+  key(13); // explicit Home
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["stage-favorites"].isFocused, true);
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
   key(10009);
   assert.equal(sim.exits.count, 1); // no stale detail history
 });
