@@ -25,7 +25,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -61,6 +61,27 @@ function simulate(options = {}) {
     appendChild(child){this.children.push(child);}
   };
   const nativeTimerBackendName={textContent:""};
+  const searchTimerList={
+    hidden:true,children:[],_text:"",
+    set textContent(v){this._text=v;if(v==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(item){this.children.push(item);}
+  };
+  const searchTimerPreviewList={
+    hidden:true,children:[],_text:"",
+    set textContent(v){this._text=v;if(v==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(item){this.children.push(item);}
+  };
+  const searchTimerNodes={
+    "searchtimer-list":searchTimerList,
+    "searchtimer-preview-list":searchTimerPreviewList,
+    "searchtimer-backend":{textContent:""},
+    "searchtimer-status":{textContent:""},
+    "searchtimer-detail-title":{textContent:""},
+    "searchtimer-detail-info":{textContent:""},
+    "searchtimer-preview-status":{textContent:""}
+  };
   const liveEpgStatus = {textContent:""};
   const liveEpgList = {
     hidden:true,children:[],_text:"",
@@ -162,6 +183,7 @@ function simulate(options = {}) {
       if (id === "live-backend-name") return liveBackendName;
       if (id === "native-timer-list") return nativeTimerList;
       if (id === "native-timer-backend-name") return nativeTimerBackendName;
+      if (searchTimerNodes[id]) return searchTimerNodes[id];
       if (id === "live-epg-status") return liveEpgStatus;
       if (id === "live-epg-list") return liveEpgList;
       if (id === "live-epg-scroll-actions") return epgScrollActions;
@@ -221,7 +243,7 @@ function simulate(options = {}) {
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -1629,4 +1651,82 @@ test("S6.19 leaving Timer view invalidates late server result",()=>{
    page:{limit:30,offset:0,hasMore:false,nextOffset:null},meta:{partial:false}});
  assert.equal(sim.nativeTimerList.children.length,0);
  assert.equal(sim.nativeTimerList.hidden,true);
+});
+
+
+const searchRuleId="st_0123456789abcdef0123456789abcdef";
+function searchRulePage(nextCursor=null) {
+  return {items:[{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active"}],
+    page:{limit:30,hasMore:!!nextCursor,nextCursor},
+    meta:{partial:false}};
+}
+test("S6.20 SearchTimer list uses separate Device grant and does not require native timer loading",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();
+  assert.equal(h.calls.length,0,"no network on navigation");
+  sim.nodes["searchtimer-load"].click();
+  assert.equal(h.calls.length,1,"verified Device credential");
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.match(h.calls[2].url,/\/api\/v1\/search-timers\?backend=home&limit=30$/);
+  assert.equal(h.calls[2].method,"GET");
+  assert.match(h.calls[2].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(2,200,searchRulePage());
+  assert.equal(sim.searchTimerList.children.length,1);
+  assert.equal(sim.searchTimerList.children[0].children[0].textContent,"Krimis");
+  sim.searchTimerList.children[0].click();
+  assert.match(h.calls[3].url,/\/api\/v1\/search-timers\/st_[a-f0-9]{32}\?backend=home$/);
+  h.reply(3,200,{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active",meta:{partial:false}});
+  assert.match(sim.searchTimerNodes["searchtimer-detail-info"].textContent,/Tatort/);
+  assert.equal(h.calls.length,4,"list+detail are read-only, no implicit EPG preview");
+  assert.equal(sim.nativeTimerList.children.length,0,"no need for timers.view");
+});
+test("S6.20 SearchTimer EPG preview requires explicit button and displays server count",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["searchtimer-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,searchRulePage());
+  sim.searchTimerList.children[0].click();
+  h.reply(3,200,{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active",meta:{partial:false}});
+  sim.nodes["searchtimer-preview"].click();
+  assert.match(h.calls[4].url,
+    /\/api\/v1\/search-timers\/st_[a-f0-9]{32}\/preview\?backend=home&limit=30$/);
+  h.reply(4,200,{backendId:"home",searchTimerId:searchRuleId,totalCount:9,
+    items:[{title:"Tatort",subtitle:"Neuer Fall",channelId:"ch-1",
+      startTime:"1793131200",endTime:"1793134800"}],
+    meta:{partial:false,epgInput:"ready"}});
+  assert.match(sim.searchTimerNodes["searchtimer-preview-status"].textContent,
+    /9 EPG-Texttreffer/);
+  assert.equal(sim.searchTimerPreviewList.children.length,1);
+  assert.equal(sim.searchTimerPreviewList.children[0].children[0].textContent,"Tatort");
+  assert.ok(h.calls.every(x=>x.method==="GET"));
+});
+test("S6.20 preview 403 clears preview without faking no EPG matches",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["searchtimer-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,searchRulePage());
+  sim.searchTimerList.children[0].click();
+  h.reply(3,200,{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active",meta:{partial:false}});
+  sim.nodes["searchtimer-preview"].click();
+  h.reply(4,403,{code:"forbidden"});
+  assert.match(sim.searchTimerNodes["searchtimer-preview-status"].textContent,
+    /epg.view/);
+  assert.equal(sim.searchTimerPreviewList.children.length,0);
+});
+test("S6.20 exit discards pending epgsearch, no reappear or mutation",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["searchtimer-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,3);
+  sim.nodes["nav-home"].click();
+  assert.equal(h.calls[2].aborted,true);
+  h.reply(2,200,searchRulePage());
+  assert.equal(sim.searchTimerList.children.length,0);
+  assert.equal(sim.searchTimerList.hidden,true);
 });
