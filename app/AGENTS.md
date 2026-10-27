@@ -28,16 +28,24 @@ npm.cmd run tv:dev:prepare
 - Auch `Copy-Item` und ein erfolgreicher GitHub-CI-Lauf sind **keine bestätigte TV-Aktualisierung**.
 - Erst ein tatsächlich funktionierender **WITs-Watch**, der die DEV-Dateien überträgt und die laufende DEV-App neu lädt, ermöglicht ein TV-seitiges Update. Den tatsächlichen Eingang anhand sichtbarer Buildkennung oder eines kontrollierten visuellen Markers am **TV** bestätigen. Kein `Hardware PASS` allein aus CI-/PowerShell-Ausgaben ableiten.
 
-## Bereits vorhandene, gekoppelte DEV-App aktualisieren
+## Bereits vorhandene, gekoppelte DEV-App aktualisieren – Pflichtablauf (27.10.2026)
 
-Nur wenn das einmalig isoliert installierte WITs-Hostpaket vorhanden ist und die DEV-Kopplung erhalten bleiben soll:
+**Entscheidender Befehl: `npm.cmd run tv:watch` aus dem Repository-Hauptverzeichnis, aber NUR, wenn kein DEV-Watch läuft.** Die einzige verbindliche ausführliche Schrittfolge steht in `../docs/wits-isolated-development.md` unter **„Wichtigster Praxisablauf“** und ist VOR jeder Empfehlung zu lesen. Der Watch nutzt intern `.tizen-wits-dev/`, nicht `app/`.
 
-1. Nach ggf. erforderlichem, **sicherem branchrichtigem Git-Update** lokal `npm.cmd run build:tv`, `npm.cmd run check` und `npm.cmd run tv:dev:prepare` durchführen. Wenn das bereits erledigt ist, **nicht wiederholen**.
-2. Den **bereits laufenden** Watch verwenden. Nur wenn **noch keiner läuft**, im Repo-Hauptverzeichnis `npm.cmd run tv:watch` starten und das Terminal offen lassen. Das Skript arbeitet ausschließlich mit `../.tizen-wits-dev/` und ruft `wits --watch` auf, **nicht** `--start`.
-3. **Watch-Ausgabe auf erfolgreiche Dateisynchronisation und Reload prüfen.** Ein vorhandener `node.exe`-Prozess oder Listener auf Port 4050 beweist **nicht**, dass der Watch gerade die richtigen Dateien überträgt.
-4. Für eine sichtbare Prüfung bei nachweislich laufendem Watch in **zweitem** Terminal, im Repository-Hauptverzeichnis: `node scripts/tv-wits-isolated.mjs --smoke`. Das verändert ausschließlich die DEV-Staging-`index.html` und muss am Samsung den Schriftzug `VDR-Suite · DEV-RELOAD-TEST` sichtbar machen. **Das Skript selbst sendet nichts an den TV.** Bleibt der Marker aus, keine erfolgreiche Übertragung behaupten; die konkrete Watch-Ausgabe und die lokale WITs-Konfiguration gezielt prüfen.
-5. Nach erfolgreicher Prüfung Marker mit `npm.cmd run tv:dev:prepare` zurücksetzen und den tatsächlichen TV-Reload ebenfalls bestätigen. `tv:watch:check` ist ein **Offline-Preflight**, kein Sync.
-6. Bei ausbleibendem Update nicht durch Neustarts, erneutes Kopieren, pauschales Stoppen von Prozessen oder Neuinstallation raten. Zuerst den realen Watch-Zustand, dessen Arbeitsverzeichnis und Übertragungsprotokoll feststellen. Fehler und **noch unbestätigten** TV-Stand ehrlich ausweisen.
+1. Nach wirklich benötigtem, **sicherem branchrichtigem Git-Update** einmal `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:dev:prepare` ausführen. Falls bereits erfolgreich: **nicht wiederholen**. Keine Änderungen an lokal bearbeiteten fremden Dateien verwerfen.
+2. **Vor `npm.cmd run tv:watch` den laufenden Watch und Port 4050 lesen.** Ein vorhandener `node … wits/lib/cli.js --watch` bedeutet: **Watch läuft bereits; keinen zweiten starten!** Das ist allerdings noch **keine** Bestätigung eines TV-Reloads. In der realen PowerShell-Ausgabe vom 27.10.2026 lief ein `--watch` auf Port 4050; der zusätzliche Watch stürzte mit `EADDRINUSE` ab. **Nicht** als fehlenden DEV-Host oder Anlass für `wits --start` interpretieren.
+3. Wenn noch kein Watch läuft, **einmal** aus dem Repo-Hauptverzeichnis starten und das Terminal offen lassen:
+
+   ```powershell
+   npm.cmd run tv:watch
+   ```
+
+4. Bei **bereits laufendem, eindeutig richtigen** DEV-Watch dessen Terminal behalten; nach einem neuen Build in einem **zweiten** Terminal bei Bedarf `npm.cmd run tv:dev:prepare` ausführen. Dies schreibt nur die DEV-Staging-Dateien; die Synchronisation erfolgt (falls funktionsfähig) über den laufenden Watch. WITs-Ausgabe auf echte Synchronisierung und Reload prüfen.
+5. **Nur wenn ein identifizierter Watch neu gestartet werden muss**, im **zugehörigen eigenen Watch-Terminal** `Strg+C` drücken, warten bis Port 4050 frei ist, dann **einmal** `npm.cmd run tv:watch`. Keine PIDs blind beenden; bei unbekannter Belegung zuerst Ursache untersuchen.
+6. Erfolg am echten Samsung an neuer **Buildkennung oder sichtbarer Funktion** bestätigen, z. B. **S6.17: „HLS-TS + AAC-Ton testen“** im Aufnahmen-UI; anschließend bestehende Anmeldung prüfen. `npm.cmd run tv:dev:prepare`, `git pull`, grünes CI, `Success to connect` und ein vorhandener Listener sind **kein** TV-Erfolgsnachweis.
+7. Bei fehlender Änderung erst den **realen Watch-Log, Arbeitsordner und Staging** prüfen. `node scripts/tv-wits-isolated.mjs --smoke` ist ein **optionaler** Test zur Diagnose und **nicht** Teil jedes Updates; es schreibt nur einen DEV-HTML-Marker und überträgt selbst nichts. Danach Markierung mit `npm.cmd run tv:dev:prepare` entfernen und TV-Ergebnis beobachten. `tv:watch:check` ist ausschließlich Offline-Preflight, niemals Sync.
+
+**Verbotene Kurzschlüsse:** Kein zweiter Watch bei belegtem 4050; kein `wits --start`/`Run Project`, kein Install-/Uninstall-Fallback, kein Neu-Pairing, keine Änderung am PROD-Paket. Kein `Stop-Process` ohne verifizierte Prozessherkunft und Zustimmung.
 
 ## Strikte Sicherheitsgrenzen
 
