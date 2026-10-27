@@ -378,9 +378,7 @@ test("S2.2 explicit Home clears history and restores origin from detail Home but
   key(40); // Hero
   key(13); // Recordings
   key(40); // detail-recordings-home
-  assert.equal(sim.nodes["detail-recordings-home"].isFocused, true,
-    "actual focused: "+Object.keys(sim.nodes).filter(k=>sim.nodes[k].isFocused).join(",")+
-    " | visible: "+sim.panels.filter(p=>!p.hidden).map(p=>p.route).join(","));
+  assert.equal(sim.nodes["detail-recordings-home"].isFocused, true);
   key(13); // explicit Home
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
   assert.equal(sim.nodes["home-feature"].isFocused, true);
