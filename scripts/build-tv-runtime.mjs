@@ -20,6 +20,7 @@ const inputs = [
   "app/src/api/device-pairing.js",
   "app/src/api/channel-catalog.js",
   "app/src/api/recording-catalog.js",
+  "app/src/api/home-continue.js",
   "app/src/api/native-timers.js",
   "app/src/api/search-timers.js",
   "app/src/api/global-search.js",
