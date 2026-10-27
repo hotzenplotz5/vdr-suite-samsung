@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.3","build":"000000000000","label":"Samsung v0.1.0 · S8.3 · b000000000000"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.3","build":"efa280faa569","label":"Samsung v0.1.0 · S8.3 · befa280faa569"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
