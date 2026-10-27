@@ -771,3 +771,20 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .general-search-page {padding:12px 22px;}
   .global-search-results {max-height:30vh;}
 }
+
+
+/* S8.3: explicit Streamdev MPEG-TS + native AVPlay on Samsung DEV only.
+   AVPlay draws to the hardware video plane; never paint opaque web layers. */
+.live-streamdev-config {display:flex;flex-wrap:wrap;align-items:center;
+  padding:7px 12px;margin:4px 0 10px;border:1px solid #294766;border-radius:12px;
+  background:rgba(7,22,42,.82);}
+.live-streamdev-config label {font-size:14px;color:#b9d9f8;margin-right:14px;}
+#live-streamdev-base {background:#09192d;border:1px solid #38638c;color:#fff;
+  border-radius:8px;padding:9px 10px;font-size:17px;flex:0 1 350px;min-width:220px;}
+.live-streamdev-config .action-button {padding:9px 12px;margin:0 9px;font-size:15px;min-width:140px;}
+#live-streamdev-status {font-size:13px;color:#a7cae8;flex:1 1 250px;line-height:1.25;}
+html.streamdev-live-active,html.streamdev-live-active body {background:transparent!important;}
+html.streamdev-live-active .app {visibility:hidden;background:transparent!important;}
+html.streamdev-live-active .live-player-surface {background:transparent!important;}
+html.streamdev-live-active #live-html5-video {display:none!important;}
+html.streamdev-live-active #live-player-hint {display:block;}
