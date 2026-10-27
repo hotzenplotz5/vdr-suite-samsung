@@ -132,3 +132,16 @@ Samsung S6.19 verwendet nur Device-authentifizierte HTTPS-GETs (inkl. erstem Dev
 - UI & State: Nur benutzerausgelöste List-/Detail-/Preview-GETs. Sichere Seitengrenzen, nur `textContent` für Fremdtexte, Cancel/Generationsprüfung bei Navigation und Backendwechsel, Fehlermeldungen für 401/403/404/503. Getrennte Berechtigungen `timers.view` (native Timer), `searchtimers.view` (gespeicherte epgsearch-Regeln) und `epg.view` (Vorschau).
 
 **Noch nicht Teil des S6.20-Codes:** Neue Regel per `draft-preview` und `searchtimers.create` zunächst inaktiv anlegen; `UPDATE/ACTIVATE/DEACTIVATE/DELETE` erfordern separaten Backend-nativen Generation/CAS-Vertrag. Kein Schreibrecht wird aus einer Lesefreigabe abgeleitet. Source/CI ist kein installierter Backend-/Samsung-Hardware-PASS.
+
+
+## S6.23 – Globale Aufnahmen-/EPG-Suche, gemeinsamer Web-Suchindex (27.10.2026)
+
+Backend-Quellen `hotzenplotz5/vdr-suite` `main` geprüft: `api/public-v1-generic-search.md`, `docs/development/public-v1-search-parity.md` und `PublicApiRuntime.cpp::tryHandleBrowseReadGet`. Das Samsung-Frontend verwendet **nicht** die Browser-Route `/api/search`, sondern die vom selben `GlobalSearchService` gespeisten verifizierten **Device Public-v1 GETs**.
+
+- Aufnahme: `GET /api/v1/search/recordings?backendId=<id>&query=<encoded>&limit=30&offset=<n>` mit `recordings.view@backendId`. Antwort `items:[{kind:"recording",backendId,recordingId:"rec_<32hex>",title,edited}]`.
+- EPG: `GET /api/v1/search/epg?backendId=<id>&query=<encoded>&limit=30&offset=<n>` mit `epg.view@backendId`. Antwort `items:[{kind:"epg",backendId,channelId,eventId,title,subtitle,startTime,endTime}]`.
+- Beide: `page:{offset,limit,totalCount,hasMore}`, maximal 30 Ergebnisse, Offset bis 1.000.000, Suchbegriff mindestens 2/maximal 240 UTF-8-Bytes (URL/Query-Limits des Servers beachten). Nur Device-Authorization/HTTPS und jeweils ein explizites Backend; `cache: no-store`. Unterschiedliche Berechtigungsfehler erscheinen unabhängig. Aufnahmen-Details über `GET /api/v1/recordings/{rec_id}?backendId=...`; EPG-Details über `GET /api/v1/epg/event?backendId=...&channelId=...&eventId=...`. Ein Treffer allein berechtigt weder Wiedergabe noch Timer-Mutation.
+- Gleiche Match-Normalisierung, gleiche Web-Index-Daten und Ranking/Reihenfolge; keine auf TV neu implementierte Matching-Engine und keine Suchfilterung kompletter Recording-Listen. Das Server-EPG-Fenster reicht ca. 6h zurück / 14 Tage voraus. Gültiger Nulltreffer ist 200+0; nicht verfügbarer Index/Backend ist Fehler (oft 503), niemals Nulltreffer.
+- Aktuelle **Public-v1-Projektion hat keine vollständige Personen-/Artwork-/Match-Reason-Projektion** des Webfrontends: bewusst nicht erfinden oder geheime Provider-URLs von Browser-Endpunkten verwenden. Erweiterung dieses UI-Paritätsumfangs würde erst eine ausdrücklich dokumentierte Public-v1-Erweiterung erfordern.
+
+Samsung-Hardware-Gate OPEN: WITs-Übertragung wirklich bestätigen und gegen Webresultate desselben Backends testen. Bestehende `app/AGENTS.md` beachten.
