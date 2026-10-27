@@ -1309,7 +1309,7 @@ function boot() {
       globalSearchMessage("Für "+(kind==="epg"?"EPG":"Aufnahmen")+
         " ist keine weitere Seite verfügbar.");return;
     }
-    globalSearchPage(kind,page.offset+globalSearchItems[kind].length,
+    globalSearchPage(kind,globalSearchItems[kind].length,
       globalSearchRun,globalSearchTerm);
   }
   function selectGlobalSearchResult(kind,index) {
