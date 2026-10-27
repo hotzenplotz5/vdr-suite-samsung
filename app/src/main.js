@@ -288,8 +288,8 @@ function boot() {
     if (currentView === "live") {
       var liveFocusRows = [NAV_ROW,
         ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
-       "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"],
-        ["live-streamdev-base","live-streamdev-save"]];
+       "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more",
+         "live-streamdev-base","live-streamdev-save"]];
       var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
       for (var i=0;i<count;i++) {
         var cells=[];
@@ -1601,7 +1601,7 @@ function boot() {
     }
     var base=parseStreamdevBase(streamdevBaseInput && streamdevBaseInput.value);
     if(!base){
-      streamdevMessage("Bitte eine lokale Adresse wie http://192.168.178.20:3000 eingeben.");
+      streamdevMessage("Bitte die lokale Streamdev-Adresse im Format HTTP + LAN-IP + Port eingeben.");
       return;
     }
     streamdevBase=base;
