@@ -108,6 +108,13 @@ function simulate(options = {}) {
     getAttribute(name){return this.attributes[name] ?? null;}};
   const pairCode = {textContent:""};
   const playerSurface = {hidden:true};
+  const livePlayerSurface = {hidden:true};
+  const livePlayerHint = {textContent:""};
+  const liveHtml5Video = {
+    paused:true,src:"",error:null,onplaying:null,oncanplay:null,onerror:null,
+    play(){this.paused=false;return Promise.resolve();},
+    pause(){this.paused=true;},load(){},removeAttribute(name){if(name==="src")this.src="";}
+  };
   const remoteHint = {textContent:""};
   const audioHint = {textContent:""};
   const lifecycleHint = {textContent:""};
@@ -151,6 +158,9 @@ function simulate(options = {}) {
       if (id === "live-epg-scroll-actions") return epgScrollActions;
       if (epgDetailNodes[id]) return epgDetailNodes[id];
       if (id === "recording-list") return recordingList;
+      if (id === "live-player-surface") return livePlayerSurface;
+      if (id === "live-player-hint") return livePlayerHint;
+      if (id === "live-html5-video") return liveHtml5Video;
       if (id === "recording-player-surface") return playerSurface;
       if (id === "recording-remote-hint") return remoteHint;
       if (id === "recording-audio-hint") return audioHint;
@@ -202,7 +212,7 @@ function simulate(options = {}) {
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -1451,4 +1461,88 @@ test("S6.17 HLS-TS AAC profile passes same-session native cookie to AVPlay",()=>
   assert.equal(avplay.cookie,cookie);
   assert.match(sim.audioHint.textContent,/HLS-TS mit AAC Stereo angefordert/);
   assert.equal(sim.playerSurface.hidden,false);
+});
+
+
+test("S6.18 Live-TV only sends Device CREATE after explicit selected-channel play",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    mediaCanPlayType:"probably"});
+  sim.video.finish();sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  assert.equal(h.calls.length,3,"opening and loading list never creates MediaSession");
+  sim.liveList.children[0].click();
+  assert.equal(h.calls.length,3,"OK on sender only selects metadata");
+  sim.nodes["detail-live-play"].click();
+  assert.equal(h.calls.length,4,"explicit Live-TV button creates one session");
+  const create=h.calls[3];
+  assert.match(create.url,/\/api\/v1\/live-playback-sessions$/);
+  assert.equal(create.method,"POST");
+  assert.equal(create.withCredentials,true);
+  assert.match(create.headers.Authorization,/^VDR-Suite-Device /);
+  const request=JSON.parse(create.body);
+  assert.deepEqual(request.resourceKind,"live-channel");
+  assert.equal(request.backendId,"home");
+  assert.equal(request.channelId,first.channelId);
+  assert.deepEqual(Array.from(request.capabilities.protocols),["progressive"]);
+  assert.deepEqual(Array.from(request.capabilities.containers),["fmp4","mp4"]);
+  assert.deepEqual(Array.from(request.capabilities.audioCodecs),["aac"]);
+  assert.equal(request.capabilities.maxAudioChannels,2);
+  assert.equal(request.nativeMediaAccess,undefined);
+  const sid="ms_0123456789abcdef0123456789abcdef";
+  h.reply(3,201,{mediaSession:{id:sid,resourceKind:"live-channel",
+    backendId:"home",channelId:first.channelId,state:"ready",
+    presentationProfileId:"live-progressive-fmp4",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sid+"/live/stream.mp4"}});
+  assert.equal(sim.livePlayerSurface.hidden,false);
+  assert.match(sim.liveHtml5Video.src,/\/live\/stream\.mp4$/);
+  sim.liveHtml5Video.oncanplay();
+  sim.liveHtml5Video.onplaying();
+  assert.match(sim.livePlayerHint.textContent,/onplaying/);
+  const stop=(key)=>sim.listeners.keydown({keyCode:key,preventDefault(){}});
+  stop(413); // Samsung MediaStop
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  assert.equal(h.calls.length,5,"STOP releases session exactly once");
+  assert.match(h.calls[4].url,/\/api\/v1\/live-playback-sessions\/ms_[a-f0-9]{32}\/stop$/);
+  assert.equal(JSON.parse(h.calls[4].body).resourceKind,"live-channel");
+});
+test("S6.18 Live-TV refuses a missing play grant and never loads arbitrary media",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,mediaCanPlayType:"maybe"});
+  sim.video.finish();sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-play"].click();
+  h.reply(3,403,{error:{code:"forbidden"}});
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/media.live.play/);
+  assert.equal(h.calls.length,4,"forbidden is not retried with Browser routes");
+});
+test("S6.18 BACK during pending Live CREATE stops late session, never starts video",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,mediaCanPlayType:"probably"});
+  sim.video.finish();sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const ch=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-play"].click();
+  sim.listeners.keydown({keyCode:10009,preventDefault(){}});
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  const sid="ms_0123456789abcdef0123456789abcdef";
+  h.reply(3,201,{mediaSession:{id:sid,resourceKind:"live-channel",
+    backendId:"home",channelId:ch.channelId,state:"ready",
+    presentationProfileId:"live-progressive-fmp4",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sid+"/live/stream.mp4"}});
+  assert.equal(sim.livePlayerSurface.hidden,true,"stale callback cannot attach media");
+  assert.equal(sim.liveHtml5Video.src,"");
+  assert.match(h.calls[4].url,/\/stop$/);
+  assert.equal(h.calls.length,5);
 });
