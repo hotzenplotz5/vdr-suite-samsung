@@ -1389,7 +1389,7 @@ test("S6.17 HLS-TS AAC test requests only HLS TS and rejects wrong server profil
   h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
   h.reply(1,200,backendPage);
   const rec={backendId:"home",recordingId:"rec_0123456789abcdef0123456789abcdef",
-    title:"Ton-Test",recordedAt:"2026-10-26T10:00:00Z",
+    title:"Ton-Test",description:"Audio-Kompatibilität testen",recordedAt:"2026-10-26T10:00:00Z",
     durationSeconds:1200,durationKnown:true,sizeMb:100};
   h.reply(2,200,{items:[rec],page:{limit:100,hasMore:false,nextCursor:null},
     meta:{partial:false}});
@@ -1431,7 +1431,7 @@ test("S6.17 HLS-TS AAC profile passes same-session native cookie to AVPlay",()=>
   h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
   h.reply(1,200,backendPage);
   const rec={backendId:"home",recordingId:"rec_0123456789abcdef0123456789abcdef",
-    title:"Ton-Test",recordedAt:"2026-10-26T10:00:00Z",
+    title:"Ton-Test",description:"Audio-Kompatibilität testen",recordedAt:"2026-10-26T10:00:00Z",
     durationSeconds:1200,durationKnown:true,sizeMb:100};
   h.reply(2,200,{items:[rec],page:{limit:100,hasMore:false,nextCursor:null},
     meta:{partial:false}});
