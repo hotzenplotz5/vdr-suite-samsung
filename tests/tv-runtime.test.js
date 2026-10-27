@@ -1916,3 +1916,46 @@ test("S8.1 navigation invalidates pending Home metadata and preserves one D-Pad 
   assert.match(h.calls[h.calls.length-1].url,/\/api\/v1$/,
     "returning to Home requests a fresh verified snapshot");
 });
+
+
+test("S8.1 artwork cards read authorized bytes, reject unknown MIME and revoke URLs on exit",()=>{
+  const h=liveTransport(),revoked=[],created=[];
+  const artworkApi={
+    createObjectURL(blob){
+      created.push(blob);
+      return "blob:home-authorized-"+created.length;
+    },
+    revokeObjectURL(url){revoked.push(url);}
+  };
+  const sim=simulate({visibleHome:true,keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,artworkApi});
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rid="rec_0123456789abcdef0123456789abcdef";
+  const recording={backendId:"home",recordingId:rid,title:"Echte Aufnahme",
+    description:"Aus der Mediathek",recordedAt:"1793100000",
+    durationSeconds:7200,durationKnown:true,sizeMb:500};
+  h.reply(3,200,{items:[recording],page:{
+    limit:100,hasMore:false,nextCursor:null},meta:{partial:false}});
+  const card=sim.homeNodes["home-recordings-list"].children[0];
+  const image=card.children[0];
+  assert.equal(image.hidden,true,"cards work without artwork");
+  const listIndex=h.calls.findIndex(x=>/\/api\/v1\/recordings\/rec_[0-9a-f]+\/artwork\?/.test(x.url));
+  assert(listIndex>=0,"artwork list is a same-origin v1 call");
+  assert.match(h.calls[listIndex].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(listIndex,200,{backendId:"home",recordingId:rid,
+    items:[{artworkId:"0123456789abcdef0123456789abcdef",kind:"poster"}]});
+  const binaryIndex=h.calls.findIndex(x=>/\/artwork\/0123456789abcdef0123456789abcdef\?/.test(x.url));
+  assert(binaryIndex>=0);
+  assert.match(h.calls[binaryIndex].headers.Authorization,/^VDR-Suite-Device /);
+  h.calls[binaryIndex].status=200;h.calls[binaryIndex].responseURL=h.calls[binaryIndex].url;
+  h.calls[binaryIndex].mime="image/png";
+  h.calls[binaryIndex].response=new Uint8Array([137,80,78,71]).buffer;
+  h.calls[binaryIndex].onload();
+  assert.equal(image.hidden,false);
+  assert.equal(image.src,"blob:home-authorized-1");
+  assert.equal(created.length,1);
+  sim.nodes["nav-settings"].click();
+  assert.deepEqual(revoked,["blob:home-authorized-1"]);
+  assert.equal(h.calls.filter(x=>x.method==="POST").length,0);
+});
