@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"aa65714f8d15","label":"Samsung v0.1.0 · S6.4 · baa65714f8d15"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"f723674a5faa","label":"Samsung v0.1.0 · S6.4 · bf723674a5faa"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1430,6 +1430,137 @@
   }
   // END app/src/api/recording-playback.js
 
+  // BEGIN app/src/api/live-playback.js
+  // S6.18: Device-owned, explicitly requested Public-v1 Live-TV session.
+  // No Browser/private media endpoint, query token or untrusted provider URL.
+  function safeId(value,prefix) {
+    return typeof value==="string" &&
+      new RegExp("^"+prefix+"_[0-9a-f]{32}$").test(value);
+  }
+  function validCredential(c) {
+    return c && typeof c.base==="string" &&
+      /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+      /^[A-Za-z0-9._-]{1,128}$/.test(c.credentialId) &&
+      /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+  }
+  function safeBackend(value) {
+    return typeof value==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+  }
+  function safeChannel(value) {
+    return typeof value==="string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value);
+  }
+  function createLivePlaybackClient(environment) {
+    var env=environment || {};
+    function send(credential,path,payload,success,done) {
+      if (!validCredential(credential) || typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"unavailable"});return;
+      }
+      var url=credential.base.replace(/\/$/,"")+path;
+      var xhr=new env.XMLHttpRequest();
+      var finished=false;
+      function finish(result) {
+        if (finished) return;
+        finished=true;
+        done(result);
+      }
+      try {
+        xhr.open("POST",url,true);
+        xhr.timeout=15000;
+        xhr.withCredentials=true; // HttpOnly cookie, not JavaScript-visible
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Content-Type","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          credential.credentialId+"."+credential.credentialSecret);
+        xhr.onload=function() {
+          if (xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if (xhr.status!==success && !(success===200 && xhr.status===204)) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var value=null;
+          try {value=JSON.parse(xhr.responseText);} catch (_) {}
+          if (success===201 && !value) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:value});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(JSON.stringify(payload));
+      } catch (_) {finish({ok:false,kind:"network"});}
+    }
+    function stop(credential,backendId,sessionId,done) {
+      if (!safeBackend(backendId) || !safeId(sessionId,"ms")) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      send(credential,"/api/v1/live-playback-sessions/"+sessionId+"/stop",
+        {operation:"stop",resourceKind:"live-channel",backendId:backendId,
+          sessionId:sessionId},200,done);
+    }
+    function begin(credential,backendId,channelId,capabilities,done) {
+      if (!safeBackend(backendId) || !safeChannel(channelId) ||
+          !capabilities || typeof capabilities!=="object" ||
+          !Array.isArray(capabilities.protocols) ||
+          capabilities.protocols.length!==1 ||
+          capabilities.protocols[0]!=="progressive") {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      // One deliberate Device CREATE. No replacesSessionId, URL bearer or retry.
+      send(credential,"/api/v1/live-playback-sessions",
+        {resourceKind:"live-channel",backendId:backendId,channelId:channelId,
+          capabilities:capabilities},201,function(result){
+        if (!result.ok) {done(result);return;}
+        var session=result.value && result.value.mediaSession;
+        if (!session || !safeId(session.id,"ms") ||
+            session.resourceKind!=="live-channel" ||
+            session.backendId!==backendId || session.channelId!==channelId ||
+            session.state!=="ready" || typeof session.mediaPath!=="string") {
+          // If a valid own-session identity exists, relinquish the server lease.
+          if (session && safeId(session.id,"ms") &&
+              session.backendId===backendId && session.channelId===channelId) {
+            stop(credential,backendId,session.id,function(){
+              done({ok:false,kind:"response"});
+            });
+          } else done({ok:false,kind:"response"});
+          return;
+        }
+        var base=credential.base.replace(/\/$/,"");
+        var origin=base.match(/^https:\/\/[^/]+/);
+        var prefix=origin ? base.slice(origin[0].length) : "";
+        var expected=prefix+"/api/v1/media/sessions/"+session.id+
+          "/live/stream.mp4";
+        if (!origin || session.mediaPath!==expected ||
+            session.presentationProfileId!=="live-progressive-fmp4") {
+          stop(credential,backendId,session.id,function(){
+            done({ok:false,kind:"response"});
+          });
+          return;
+        }
+        done({ok:true,sessionId:session.id,mediaUrl:origin[0]+expected,
+          profile:session.presentationProfileId});
+      });
+    }
+    return {begin:begin,stop:stop};
+  }
+  function livePlaybackError(result) {
+    if (!result) return "Unbekannter Live-TV-Fehler.";
+    if (result.kind==="http") {
+      if (result.status===401) return "Geräteanmeldung abgewiesen.";
+      if (result.status===403) return "Live-TV nicht freigegeben: media.live.play für Gerät und Backend erforderlich.";
+      if (result.status===400) return "Public-v1-Live-Vertrag/Client-Fähigkeiten vom Server abgewiesen.";
+      if (result.status===409 || result.status===422 || result.status===503)
+        return "Live-Provider/Transcoder/Tuner nicht verfügbar (HTTP "+result.status+").";
+      return "Live-MediaSession HTTP "+result.status+".";
+    }
+    if (result.kind==="response") return "Live-MediaSession/Medienpfad widerspricht dem öffentlichen Vertrag.";
+    if (result.kind==="timeout") return "Live-MediaSession hat nicht rechtzeitig geantwortet; Server-Lease prüfen.";
+    if (result.kind==="network") return "Live-API auf dem TV durch Netzwerk/TLS/CORS blockiert.";
+    return "Live-TV-Anfrage ungültig oder Geräteanmeldung nicht lesbar.";
+  }
+  // END app/src/api/live-playback.js
+
   // BEGIN app/src/api/media-access-probe.js
   // Read-only diagnostics for an already issued public v1 MediaSession.
   // Avoid HEAD: MediaGatewayHttpServer allows GET only.
@@ -1437,7 +1568,7 @@
   function probeMediaHttpHeaders(environment,mediaUrl,done) {
     if (!environment || typeof environment.XMLHttpRequest !== "function" ||
         typeof mediaUrl !== "string" ||
-        !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts))$/.test(mediaUrl)) {
+        !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts)|live\/stream\.mp4)$/.test(mediaUrl)) {
       done({kind:"not_supported"}); return;
     }
     var xhr = new environment.XMLHttpRequest();
@@ -1884,9 +2015,10 @@
       " · kein automatischer AVPlay-Fallback.";
   }
   
-  function createHtml5RecordingPlayer(video, environment) {
+  function createHtml5RecordingPlayer(video, environment, resourceKind) {
     var generation=0,active=false,phase="idle",watchdog=null,notifyFailure=null;
     var env=environment || {};
+    var live=resourceKind==="live-channel";
     var setTimer=typeof env.setTimeout==="function" ?
       function(fn,ms){return env.setTimeout(fn,ms);} : null;
     var clearTimer=typeof env.clearTimeout==="function" ?
@@ -1923,7 +2055,8 @@
     }
     function start(mediaUrl,onState) {
       if (!available() || typeof mediaUrl!=="string" ||
-          !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/recording\/stream\.mp4$/.test(mediaUrl)) {
+          !new RegExp("^https:\\/\\/[^\\s?#]+\\/[^?#]*\\/api\\/v1\\/media\\/sessions\\/ms_[0-9a-f]{32}\\/"+
+            (live ? "live\\/stream" : "recording\\/stream")+"\\.mp4$").test(mediaUrl)) {
         onState("unsupported",{stage:"html5"});return false;
       }
       stop();
@@ -2131,6 +2264,17 @@
     var recordingBusy = false;
     var recordingRun = 0;
     var liveCredential = null;
+    var livePlaybackClient = createLivePlaybackClient(window);
+    var liveHtml5Video = document.getElementById("live-html5-video");
+    var livePlayerSurface = document.getElementById("live-player-surface");
+    var livePlayerHint = document.getElementById("live-player-hint");
+    var liveHtml5Player = createHtml5RecordingPlayer(liveHtml5Video,window,"live-channel");
+    var livePlaybackSession = null;
+    var livePlayBusy = false;
+    var liveTeardownBusy = false;
+    var livePlayRun = 0;
+    if (livePlayerSurface && document.body)
+      document.body.appendChild(livePlayerSurface);
     var liveBackends = [];
     var liveBackendIndex = 0;
     var liveCursor = null;
@@ -2201,7 +2345,7 @@
       if (currentView === "live") {
         var liveFocusRows = [NAV_ROW,
           ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
-         "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
+         "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
         var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
         for (var i=0;i<count;i++) {
           var cells=[];
@@ -2943,6 +3087,115 @@
               "Weitere Sendungen verfügbar" : "Ende des Zeitfensters");
         });
     }
+    // Explicit S6.18 Live-TV API v1 test, never triggered by focusing a channel.
+    // STOP releases the server tuner before a new Live-TV session may begin.
+    function stopLivePlayback(reason) {
+      var session=livePlaybackSession;
+      ++livePlayRun; // Fence a pending CREATE response and player callbacks.
+      livePlayBusy=false;
+      livePlaybackSession=null;
+      liveHtml5Player.stop();
+      if (livePlayerSurface) livePlayerSurface.hidden=true;
+      if (session && !liveTeardownBusy) {
+        liveTeardownBusy=true;
+        livePlaybackClient.stop(session.credential,session.backendId,session.sessionId,
+          function(result) {
+            liveTeardownBusy=false;
+            if (!result.ok && reason==="user" && currentView==="live")
+              liveStatus("error","Live-TV gestoppt · Tunerfreigabe unbestätigt",
+                livePlaybackError(result)+" · Backend-Session-Status prüfen.");
+          });
+      }
+      if (reason==="user" && currentView==="live")
+        liveStatus("ready","Live-TV beendet",
+          session ? "Lokaler Player gestoppt, Public-v1-MediaSession-STOP angefordert." :
+            "Live-Start abgebrochen; unbekannte Serverantwort wird nicht erneut angefordert.");
+    }
+    function startSelectedLive() {
+      if (livePlayBusy || livePlaybackSession || liveTeardownBusy) return;
+      if (!selectedLiveChannel || !liveCredential || !liveBackends.length ||
+          selectedLiveChannel.backendId!==liveBackends[liveBackendIndex].backendId) {
+        liveStatus("error","Kein Sender gewählt",
+          "Erst Sender laden und einen realen Sender mit OK auswählen.");
+        return;
+      }
+      if (!liveHtml5Player.available()) {
+        liveStatus("error","HTML5-Liveplayer fehlt",
+          "Dieser erste Device-v1-Live-MP4-Test nutzt HTML5; kein unautorisierter AVPlay-Fallback.");
+        return;
+      }
+      var capabilities=conservativeSamsungCapabilities({document:document});
+      if (!capabilities) {
+        liveStatus("error","HTML5-MP4-Decoder nicht belegt",
+          "Browser meldet keine H.264/AAC-Unterstützung. Kein Medien-POST.");
+        return;
+      }
+      // The published Live Device contract provides only protected progressive
+      // fMP4 with an HttpOnly browser cookie, not AVPlay's native COOKIE.
+      capabilities.protocols=["progressive"];
+      capabilities.containers=["fmp4","mp4"];
+      var stored=vault.read();
+      if (!stored.ok || !stored.credential ||
+          stored.credential.base!==liveCredential.base ||
+          stored.credential.credentialId!==liveCredential.credentialId) {
+        liveStatus("error","Geräteanmeldung prüfen",
+          "Live-TV benötigt die unveränderte sichere Device-Identität.");
+        return;
+      }
+      var credential=stored.credential;
+      var backendId=selectedLiveChannel.backendId;
+      var channelId=selectedLiveChannel.channelId;
+      var token=++livePlayRun;
+      livePlayBusy=true;
+      liveStatus("loading","Live-MediaSession wird angefordert",
+        "POST /api/v1/live-playback-sessions · media.live.play erforderlich.");
+      livePlaybackClient.begin(credential,backendId,channelId,capabilities,function(result){
+        if (token!==livePlayRun || currentView!=="live") {
+          if (result.ok) livePlaybackClient.stop(credential,backendId,result.sessionId,
+            function(){});
+          return;
+        }
+        livePlayBusy=false;
+        if (!result.ok) {
+          liveStatus("error","Live-TV-API v1 abgewiesen",livePlaybackError(result));
+          return;
+        }
+        livePlaybackSession={credential:credential,backendId:backendId,
+          sessionId:result.sessionId};
+        if (livePlayerSurface) livePlayerSurface.hidden=false;
+        if (livePlayerHint) livePlayerHint.textContent=
+          "Public v1: live-progressive-fmp4 · HTML5-MP4 · PLAY/PAUSE · STOP/ZURÜCK beendet";
+        var active=livePlaybackSession;
+        var started=liveHtml5Player.start(result.mediaUrl,function(state,detail){
+          if (livePlaybackSession!==active || currentView!=="live") return;
+          if (state==="playing") {
+            liveStatus("ready","Live-MP4 spielt",
+              "HTML5 onplaying · echte Bildbewegung und hörbaren Ton am TV prüfen.");
+            if (livePlayerHint) livePlayerHint.textContent=
+              "Live-MP4 onplaying · Bild/Ton am Samsung prüfen · STOP beendet und gibt Tuner frei";
+          } else if (state==="buffering" || state==="preparing") {
+            liveStatus("loading","Live-MP4 "+(state==="buffering"?"puffert":"bereitet vor"),
+              "Session bereit · TV-Videoelement wartet auf geschützte Medienbytes.");
+          } else if (state==="error" || state==="unsupported") {
+            var failure=html5PlaybackDiagnosis(detail);
+            liveStatus("loading","Live-MP4-Medienzugriff prüfen",failure);
+            // Read only response HEADERS from this same scoped active session.
+            probeMediaHttpHeaders(window,result.mediaUrl,function(probe){
+              if (livePlaybackSession!==active) return;
+              stopLivePlayback("failure");
+              liveStatus("error","Live-TV konnte nicht gestartet werden",
+                failure+" · "+describeMediaAccessProbe(probe));
+            });
+          } else if (state==="finished") {
+            stopLivePlayback("finished");
+            liveStatus("ready","Live-Stream beendet",
+              "Live-Sitzung freigegeben; Backend-Logs auf unerwartetes Ende prüfen.");
+          }
+        });
+        if (!started && livePlaybackSession===active) stopLivePlayback("failure");
+      });
+    }
+  
     function clearLiveRows() {
       if (currentView === "live" && liveFocusIds.indexOf(focusedId) >= 0)
         setFocus("detail-live-preview");
@@ -2962,8 +3215,8 @@
         var lastAction = rowMemory.live[1];
         rowMemory.live = {};
         if (["detail-live-home","detail-live-preview","detail-live-more",
-             "detail-live-backend","detail-live-epg-now","detail-live-epg-window",
-             "detail-live-epg-more"].indexOf(lastAction) !== -1)
+             "detail-live-backend","detail-live-play","detail-live-epg-now",
+             "detail-live-epg-window","detail-live-epg-more"].indexOf(lastAction) !== -1)
           rowMemory.live[1] = lastAction;
       }
       if (liveList) {
@@ -3040,14 +3293,14 @@
           liveRows ? String(liveRows) + " echte Sender geladen" : "Keine Sender gefunden",
           "Nur freigegebene Senderdaten · " +
           (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
-          " · Live-Wiedergabe benötigt einen separat bestätigten MediaSession-Pfad.");
+          " · Sender mit OK wählen; „Live-TV testen“ startet explizit eine Device-MediaSession.");
         if (jumpToNewPage && liveFocusIds[firstNewRow])
           setFocus(liveFocusIds[firstNewRow]);
       });
     }
   
     function loadLiveChannels(action) {
-      if (liveBusy) return;
+      if (liveBusy || livePlayBusy || livePlaybackSession || liveTeardownBusy) return;
       if (action === "more") {
         if (!liveCursor) {
           liveStatus(liveRows ? "ready" : "empty", "Keine weitere Seite",
@@ -3749,6 +4002,7 @@
     function showView(view) {
       if (ROUTES.indexOf(view) < 0) return false;
       if (currentView === "live" && view !== "live") {
+        if (livePlaybackSession || livePlayBusy) stopLivePlayback("navigate");
         clearLiveEpg();
         // In-flight responses cannot update a hidden view after navigation.
         liveRun += 1;
@@ -3859,6 +4113,10 @@
     }
   
     function goBack() {
+      if (currentView === "live" && (livePlaybackSession || livePlayBusy)) {
+        stopLivePlayback("user");
+        return;
+      }
       if (currentView === "recordings" && (recordingPlaybackSession || recordingPlayBusy)) {
         stopRecordingPlayback("user");
         return;
@@ -3923,6 +4181,9 @@
         if (epgItem) selectEpgEvent(epgItem,true);
         return;
       }
+      if (item.getAttribute("data-live-play")==="start" && currentView==="live") {
+        startSelectedLive();return;
+      }
       var liveAction = item.getAttribute("data-live-action");
       if (liveAction) {
         loadLiveChannels(liveAction);
@@ -3942,7 +4203,7 @@
             "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";
           liveStatus("ready", String(selected.channelNumber) + " · " + selected.name,
             "Sender ausgewählt · Live-Stream wird nicht automatisch gestartet. " +
-            "Dafür sind media.live.play und ein bestätigter Device-Medienpfad erforderlich.");
+            "„Live-TV testen“ startet ausdrücklich eine geschützte MediaSession. media.live.play erforderlich.");
         }
         return;
       }
@@ -4055,6 +4316,7 @@
       var key = normalizeRemoteKey(event);
       var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
         currentView === "recordings";
+      var liveKeysActive=(livePlaybackSession || livePlayBusy) && currentView==="live";
       if (!key) {
         if (playbackKeysActive && recordingRemoteHint) {
           // Display only a bounded numeric TV key code. Never display raw event
@@ -4071,6 +4333,20 @@
       if (intro.active()) {
         if (key === "OK" || key === "BACK" || key === "STOP" ||
             key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE") intro.skip();
+        return;
+      }
+      if (liveKeysActive) {
+        var liveAction=playbackRemoteAction(key);
+        if (event.repeat && liveAction) return;
+        if (liveAction==="stop") { stopLivePlayback("user");return; }
+        if (liveAction==="play" || liveAction==="pause" || liveAction==="toggle") {
+          var liveState=liveHtml5Player.pauseOrResume(liveAction);
+          if (livePlayerHint) livePlayerHint.textContent=
+            "Live-MP4 · "+key+" · "+liveState+" · STOP beendet";
+          return;
+        }
+        if (livePlayerHint) livePlayerHint.textContent=
+          "Live-TV aktiv · "+key+" · STOP/ZURÜCK beendet; kein automatischer Senderwechsel";
         return;
       }
       if (playbackKeysActive) {
