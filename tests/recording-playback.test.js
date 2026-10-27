@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {createRecordingPlaybackClient, recordingPlaybackError} from "../app/src/api/recording-playback.js";
-import {createSamsungRecordingPlayer,conservativeSamsungCapabilities,samsungPlaybackDiagnosis} from "../app/src/platform/recording-player.js";
+import {createSamsungRecordingPlayer,conservativeSamsungCapabilities,samsungAacHlsTsCapabilities,samsungPlaybackDiagnosis} from "../app/src/platform/recording-player.js";
 
 const cred={base:"https://example.invalid/vdr-suite",
   credentialId:"cred-one",credentialSecret:"abcdef0123456789wxyz"};
@@ -171,4 +171,53 @@ test("S6.2: cleanup remains secondary to media-access failure, no private endpoi
   assert.match(code,/html5PlaybackDiagnosis\(detail\)/);
   assert.match(code,/mode === "html5" \? "HTML5" : "AVPlay"/);
   assert.doesNotMatch(code,/XMLHttpRequest\(.*\/api\/media\//);
+});
+
+
+test("S6.17 explicit HLS-TS/AAC request is narrow and refuses unsupported decoders",()=>{
+  assert.equal(samsungAacHlsTsCapabilities({}),null);
+  assert.equal(samsungAacHlsTsCapabilities({document:{
+    createElement(){return {canPlayType(){return "";}};}
+  }}),null);
+  const capabilities=samsungAacHlsTsCapabilities({document:{
+    createElement(){return {canPlayType(){return "maybe";}};}
+  }});
+  assert.deepEqual(capabilities,{
+    protocols:["hls"],containers:["mpeg-ts"],
+    videoCodecs:["h264"],audioCodecs:["aac"],
+    supportsByteRanges:true,maxVideoWidth:1920,maxVideoHeight:1080,maxAudioChannels:2
+  });
+  const defaultCaps=conservativeSamsungCapabilities({document:{
+    createElement(){return {canPlayType(){return "maybe";}};}
+  }});
+  assert.deepEqual(defaultCaps.protocols,["hls","progressive"],
+    "comparison never changes existing regular AVPlay playback");
+  assert.deepEqual(defaultCaps.containers,["mpeg-ts","mp4","fmp4"]);
+});
+
+test("S6.17 explicit AAC HLS mode uses one authenticated MediaSession and native cookie",()=>{
+  const h=mockHttp(),client=createRecordingPlaybackClient(h.env);
+  const caps=samsungAacHlsTsCapabilities({document:{
+    createElement(){return {canPlayType(){return "probably";}};}
+  }});
+  let result;
+  client.begin(cred,"default",recordingId,caps,r=>result=r,true);
+  assert.equal(h.calls.length,1);
+  const body=JSON.parse(h.calls[0].body);
+  assert.deepEqual(body.capabilities,caps);
+  assert.equal(body.nativeMediaAccess,true);
+  const cookie="vdr_suite_media=mg_0123456789abcdef0123456789abcdef.abcdefghijklmnop";
+  h.reply(0,201,{mediaSession:{id:sessionId,backendId:"default",
+    recordingId,mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/hls/master.m3u8",
+    presentationProfileId:"hls-ts"},
+    nativeMediaAccess:{transport:"http-cookie",cookie}});
+  assert.equal(result.ok,true);
+  assert.equal(result.profile,"hls-ts");
+  assert.equal(result.nativeCookie,cookie);
+  assert.match(result.mediaUrl,/\/hls\/master\.m3u8$/);
+  client.stop(cred,"default",sessionId,()=>{});
+  assert.equal(h.calls[1].method,"POST");
+  assert.deepEqual(JSON.parse(h.calls[1].body),{
+    operation:"stop",backendId:"default",sessionId
+  });
 });
