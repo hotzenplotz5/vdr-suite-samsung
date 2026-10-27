@@ -28,7 +28,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action", "data-home-action", "data-epg-timer-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action", "data-home-action", "data-epg-timer-action", "data-streamdev-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -175,6 +175,7 @@ function simulate(options = {}) {
   const playerSurface = {hidden:true};
   const livePlayerSurface = {hidden:true};
   const livePlayerHint = {textContent:""};
+  const streamdevStatus={textContent:""};
   const liveHtml5Video = {
     paused:true,src:"",error:null,onplaying:null,oncanplay:null,onerror:null,
     play(){this.paused=false;return Promise.resolve();},
@@ -233,6 +234,7 @@ function simulate(options = {}) {
       if (id === "recording-list") return recordingList;
       if (id === "live-player-surface") return livePlayerSurface;
       if (id === "live-player-hint") return livePlayerHint;
+      if (id === "live-streamdev-status") return streamdevStatus;
       if (id === "live-html5-video") return liveHtml5Video;
       if (id === "recording-player-surface") return playerSurface;
       if (id === "recording-remote-hint") return remoteHint;
@@ -287,7 +289,7 @@ function simulate(options = {}) {
   }
   if(options.crypto)window.crypto=options.crypto;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, homeNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, homeNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, streamdevStatus, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -1904,6 +1906,57 @@ test("S8.2 TV EPG search requires double confirmation, then explicit Operation G
   h.reply(h.calls.length-1,200,{operationId:"op_0123456789abcdef",
     backendId:"home",state:"succeeded"});
   assert.match(sim.globalSearchNodes["search-epg-timer-status"].textContent,/im VDR bestätigt/);
+});
+
+
+test("S8.3 Samsung Live-TV direct Streamdev opens native MPEG-TS; STOP closes AVPlay once",()=>{
+  const h=liveTransport(),opened=[],calls=[];
+  const avplay={
+    open(url){opened.push(url);},prepareAsync(ok){this.ready=ok;},
+    setListener(obj){this.listener=obj;},
+    setDisplayRect(){},setDisplayMethod(){},
+    play(){calls.push("play");},stop(){calls.push("stop");},close(){calls.push("close");}
+  };
+  const local={
+    value:"",getItem(key){return key==="vdr-suite.samsung.streamdevBase"?this.value:null;},
+    setItem(key,value){if(key==="vdr-suite.samsung.streamdevBase")this.value=value;}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    localStorage:local,avplay});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["live-streamdev-base"].value="http://192.168.178.20:3000";
+  sim.nodes["live-streamdev-save"].click();
+  assert.equal(local.value,"http://192.168.178.20:3000");
+  assert.equal(h.calls.length,3,"saving a local server is not a media mutation");
+  sim.nodes["detail-live-streamdev"].click();
+  assert.deepEqual(opened,["http://192.168.178.20:3000/TS/S19.2E-1-1019-10301"]);
+  assert.equal(sim.livePlayerSurface.hidden,false);
+  assert.equal(h.calls.length,3,"direct AVPlay does not request Public-v1 MediaSession");
+  avplay.ready();
+  assert.match(sim.livePlayerHint.textContent,/PLAYING/);
+  sim.listeners.keydown({keyCode:413,preventDefault(){}});
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  assert.deepEqual(calls,["play","stop","close"]);
+  avplay.listener.onstreamcompleted();
+  assert.deepEqual(calls,["play","stop","close"],"late EOF cannot close a new player");
+  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/TCP-Stream geschlossen/);
+});
+test("S8.3 direct Live-TV requires explicitly configured LAN source, not HTML5 fallback",()=>{
+  const h=liveTransport(),opened=[],avplay={
+    open(url){opened.push(url);},prepareAsync(){},play(){},stop(){},close(){}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,avplay});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-streamdev"].click();
+  assert.equal(opened.length,0);
+  assert.equal(h.calls.length,3);
+  assert.match(sim.stateNodes["detail-state-title-live"].textContent,/Streamdev-Adresse fehlt/);
 });
 
 test("S8.1 foreground Home composes real backend-scoped Continue, timers and EPG independently",()=>{
