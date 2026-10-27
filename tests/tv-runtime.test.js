@@ -130,6 +130,7 @@ function simulate(options = {}) {
   const listeners = {};
   const document = {
     readyState: "complete",
+    documentElement: {classList: {add(){},remove(){}}},
     getElementById(id) {
       if (id === "startup-cover") return overlay;
       if (id === "startup-video") return video;
