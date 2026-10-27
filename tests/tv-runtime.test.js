@@ -28,12 +28,12 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action", "data-home-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action", "data-home-action", "data-epg-timer-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
     const node = {
-      isFocused: false, tabIndex: -1,
+      isFocused: false, tabIndex: -1, hidden: /\bhidden\b/.test(match[0]),
       classList: { toggle(name, enabled) {
         if (name === "is-focused") node.isFocused = enabled;
       }},
