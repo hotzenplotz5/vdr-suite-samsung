@@ -277,3 +277,22 @@ Backend- und Samsung-Hardware-Abnahme offen.
 **Grenzen gegenüber dem heutigen Webfrontend:** Web kann zusätzlich Personen-Treffergründe, Bilder und umfangreiche Karten zeigen; die bestehende Public-v1-Device-Projektion liefert diese Informationen nicht. Deshalb sind weder Personen-Suchgruppen noch ungeprüfte Provider-Bild-URLs oder Match-Reasons erfunden. Gemeinsame Suchbegriffe/Titel-/Untertitelmatch und gruppierte Treffer sind der Paritätsumfang dieses Slice. Es gibt keinen lokalen Eingriff in `vdr-suite` oder Browser-API-Umgehung.
 
 **Hardware-Gate OPEN:** Auf dem gepaarten Samsung ist der neue Suchbildschirm erst nach dokumentiertem Build + `tv:dev:prepare` **und echtem WITs-Datei-Push/TV-Reload** nachgewiesen. Mit `Hobbit` und `hobbit` Aufnahmen und EPG getrennt testen; kontrolliere Trefferzahlen, Sendezeiten, OK-Details, unabhängige Paginierung, Backendwechsel, Rücksprung, 403 bei jeweils fehlendem Grant, 503 bei nicht bereitem Index und TV-IME. Keinerlei neue Device-Paarung, keine schreibenden API-Aufrufe, PROD unangetastet. PR #33 DRAFT.
+
+
+## Phase S8 – Samsung Media Home (27.10.2026)
+
+### S8.1 – Reale Home-Inhalte und Metadaten
+
+Status: Source-Integration in PR #33 (DRAFT), CI und echte Samsung-Hardware separat. Das Web-Media-Home aus VDR-Suite / ADR-0058 dient als Referenz, nicht als Codebasis.
+
+- Hauptnavigation bleibt Home, Live-TV, Aufnahmen, Suche, Timer und Einstellungen. Kleine Verbindungsanzeige beim Logo, keine doppelte Home-Navigation und keine große Verbindungskachel.
+- Hero, Weitersehen, Aus deiner Mediathek, Jetzt im TV (bis zu drei erste TV-Sender) sowie kompakter Aufnahmeplaner konsumieren bestehende öffentliche Device-API-v1-Lesedomänen. Beim sichtbaren Home-Eintritt und Rückkehr wird automatisch neu geladen; beim Verlassen, Verstecken und Reload werden alte Requests abgebrochen.
+- Weitersehen benutzt allein serverseitige Positionen und Dauer; bei unbekannter Dauer keinen Prozentbalken erfinden. Aufnahmetitel, Overview, Genre, Staffel/Episode und Laufzeit werden nur aus echten Detailantworten übernommen. Binäre Poster/Fanart und bevorzugtes EPG-Artwork nutzen die autorisierten öffentlichen GETs, niemals fremde Bild-URLs. Ohne Bild bleibt das dunkelblaue Fallback.
+- Die erste Aufnahmeseite wird nach Recording-ID sortiert. Deshalb heißt die Reihe bewusst Aus deiner Mediathek, nicht Zuletzt aufgenommen. TV-Events müssen gegenwärtig laufen, native Timer müssen real existieren.
+- Alle Bereichsdaten gehören zu einem geprüften Device und einem Backend pro Home-Ladezyklus. Berechtigungsfehler bleiben unabhängig. Ein D-Pad-Owner; OK wählt Inhalte bzw. öffnet vorhandene Fachansichten, kein Hintergrund-Autoplay oder Home-MediaSession.
+- Relevante Quellen: app/src/main.js, app/src/api/home-continue.js, app/styles.css, app/index.html, scripts/build-tv-runtime.mjs, app/tv-runtime.js. Tests in tests/tv-runtime.test.js.
+- Grenzen/Risiken: begrenzte erste Sender- und Aufnahme-Seite, mehrere authentifizierte Artwork-Leseaufrufe, Bilder- und Fokusabnahme auf Chromium M69; kein neuer Server-API-Vertrag, kein eigenes Metadaten-Repository.
+
+Hardware OPEN: Angekoppeltes DEV-Gerät GU43TU6979UXZG muss tatsächlichen WITs-Datei-Push, neue S8.1-Buildkennung, reale Inhalte/Bilder, 403-Isolation, D-Pad/OK/BACK sowie KeyManager-Persistenz bestätigen. Grün in CI oder Staging allein ist kein Hardware-PASS. PR #33 bleibt Draft, main unangetastet.
+
+S8.2 (breiteres Browse/Backendwahl) und S8.3 (explizite Home-Medienaktionen) bleiben zukünftige, noch nicht begonnene Slices.
