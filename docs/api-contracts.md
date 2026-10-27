@@ -166,3 +166,17 @@ Alle Home-Reads verwenden dieselbe gespeicherte, verifizierte Device-Anmeldung u
 Continue Watching verwendet ausschließlich positive serverseitige Positionen und optional verifizierte Dauer, kein lokales Ersatz-Resume. Die Existenz eines serverseitigen Checkpoints beweist keine erfolgreiche Samsung-Seek-/Resume-Wiedergabe. Aufnahmen werden nur nach Recording-ID sortiert; die EPG-Reihe zeigt aktuell laufende echte Events der ersten bis zu drei TV-Sender. Bilder werden MIME-/Größen-validiert, nur über Blob-URLs eingebunden und bei Abbruch widerrufen. Kein privater Browser-Endpunkt, kein Autoplay, kein zusätzlicher Metadaten-Owner, keine Mutation.
 
 Referenzen: VDR-Suite api/device-recording-playback.md (P1), ADR-0058 sowie die bestehenden Samsung-Clients recording-catalog.js, home-continue.js, media-metadata.js und native-timers.js. REAL-TV OPEN.
+
+
+## S8.2 EPG-Timer aus Live-EPG und Suche – bestätigte Public-v1-Schreiboperation
+
+Quellvertrag VDR-Suite: api/epg-timer-intents.md, api/operation-status.md. Es werden keine privaten VDR-Routen oder nativen Timer-Spezifikationen benutzt.
+
+1. Ausgewählte zukünftige Sendung mit belegter Channel/Event-ID: Device-authentifizierter GET /api/v1/epg/event?backendId=...&channelId=...&eventId=...; starker ETag aus dem HTTP-Header und Titel/Start/Ende mit Treffer vergleichen. Ohne ETag oder bei abweichenden Daten keine Freigabe.
+2. Erste OK-Aktion zeigt die konkret gewählte Sendung und ihren Zeitraum und verlangt ausdrücklich eine zweite Bestätigung. Erst danach POST /api/v1/epg/timer-intents mit JSON {backendId,channelId,eventId} ohne Querystring, If-Match mit originalem ETag und einem kryptografisch generierten einmaligen Idempotency-Key.
+3. Backend und Device prüfen unabhängig epg.view und timers.create sowie die Backend-Schreibpolicy. Ein 202 bedeutet nur durable Operation admission; danach nur per expliziter Taste GET /api/v1/operations/{operationId}. succeeded ist von accepted/queued/outcome_unknown zu trennen. Kein automatischer Retry bei Netzwerkfehler/Timeout und keine erneute POST-Auslösung derselben Event-ID innerhalb der laufenden App.
+4. Source-/CI-Gate ist keine Bestätigung, dass die derzeit installierte Backend-/Agent-/SuiteBridge-Kombination CREATE unterstützt. Echte Timeränderung nur auf ausdrückliche Auswahl einer zukünftigen Sendung.
+
+## Live-TV – nicht auf AVPlay umstellbar ohne Backend-Public-v1-Native-Freigabe
+
+Der vorhandene Device-v1-Live-POST liefert den HTTPS-Pfad /api/v1/media/sessions/{sessionId}/live/stream.mp4 mit Secure/HttpOnly/SameSite-Cookie für browsergebundenes live-progressive-fmp4. Der echte Samsung-Tizen-5.5-HTML5-Pfad meldete HTTP 401. Die Device-API projiziert anders als die Aufnahme-MediaSession keinen für AVPlay ausdrücklich freigegebenen nativen Media-Cookie. Backendvertrag, Berechtigung und Session-Teardown müssen in eigenem Slice erweitert und verifiziert werden. Ein reiner Tausch von HTML5 nach AVPlay, geheime Cookies in Querystrings oder ein privater /api/...-Fallback sind nicht geeignet. Live-TV-Hardware FAIL/OPEN bleibt offen.
