@@ -2556,7 +2556,7 @@ function boot() {
         liveRows ? String(liveRows) + " echte Sender geladen" : "Keine Sender gefunden",
         "Nur freigegebene Senderdaten · " +
         (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
-        " · Sender mit OK wählen; „Live-TV testen“ startet explizit eine Device-MediaSession.");
+        " · Sender mit OK wählen; „Live-TV direkt starten“ öffnet Streamdev mit AVPlay.");
       if (jumpToNewPage && liveFocusIds[firstNewRow])
         setFocus(liveFocusIds[firstNewRow]);
     });
@@ -3268,6 +3268,8 @@ function boot() {
     if (currentView === "live" && view !== "live") {
       epgTimerReset("live");
       if (livePlaybackSession || livePlayBusy) stopLivePlayback("navigate");
+      if (streamdevActive || streamdevPlayer.isBusy()) stopStreamdevLive("navigate");
+      streamdevEditing=false;
       clearLiveEpg();
       // In-flight responses cannot update a hidden view after navigation.
       liveRun += 1;
@@ -3444,6 +3446,9 @@ function boot() {
   }
 
   function goBack() {
+    if (currentView === "live" && (streamdevActive || streamdevPlayer.isBusy())) {
+      stopStreamdevLive("user");return;
+    }
     if (currentView === "live" && (livePlaybackSession || livePlayBusy)) {
       stopLivePlayback("user");
       return;
@@ -3535,6 +3540,17 @@ function boot() {
       if (epgItem) selectEpgEvent(epgItem,true);
       return;
     }
+    var streamdevAction=item.getAttribute("data-streamdev-action");
+    if(streamdevAction && currentView==="live"){
+      if(streamdevAction==="save")saveStreamdevBase();
+      else if(streamdevAction==="start")startStreamdevLive();
+      return;
+    }
+    if(item.getAttribute("data-focus-id")==="live-streamdev-base" && currentView==="live"){
+      streamdevEditing=true;
+      if(streamdevBaseInput && typeof streamdevBaseInput.focus==="function")streamdevBaseInput.focus();
+      return;
+    }
     if (item.getAttribute("data-live-play")==="start" && currentView==="live") {
       startSelectedLive();return;
     }
@@ -3550,14 +3566,15 @@ function boot() {
         liveMetadata.cancel();
         liveEpgRun+=1;
         liveWindow=null;
-        selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId};
+        selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId,
+          channelNumber:selected.channelNumber,name:selected.name};
         clearEpgFocusRows();
         if (liveEpgList) {liveEpgList.textContent="";liveEpgList.hidden=true;}
         if (liveEpgStatus) liveEpgStatus.textContent =
           "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";
         liveStatus("ready", String(selected.channelNumber) + " · " + selected.name,
           "Sender ausgewählt · Live-Stream wird nicht automatisch gestartet. " +
-          "„Live-TV testen“ startet ausdrücklich eine geschützte MediaSession. media.live.play erforderlich.");
+          "„Live-TV direkt starten“ spielt Streamdev über AVPlay ab (Heimnetz).");
       }
       return;
     }
@@ -3682,6 +3699,12 @@ function boot() {
   }
 
 
+  if(streamdevBaseInput){
+    streamdevBaseInput.addEventListener("focus",function(){
+      if(currentView==="live")streamdevEditing=true;
+    });
+    streamdevBaseInput.addEventListener("blur",function(){streamdevEditing=false;});
+  }
   if(globalSearchInput){
     globalSearchInput.addEventListener("focus",function(){
       if(currentView==="search")globalSearchEditing=true;
@@ -3715,6 +3738,16 @@ function boot() {
       }
       return;
     }
+    // Native Samsung IME owns the local Streamdev host editor as well.
+    if(currentView==="live" && streamdevEditing){
+      var code=event.keyCode || event.which;
+      if(code===65376 || code===65385 || code===10009){
+        if(streamdevBaseInput && typeof streamdevBaseInput.blur==="function")streamdevBaseInput.blur();
+        streamdevEditing=false;
+        setFocus("live-streamdev-save");
+      }
+      return;
+    }
     // Samsung IME owns all text-editor keys, like the proven S6.16 address
     // editor. Never intercept Backspace, arrows, digits or OK while editing.
     if(currentView==="search" && globalSearchEditing){
@@ -3731,6 +3764,7 @@ function boot() {
     var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
       currentView === "recordings";
     var liveKeysActive=(livePlaybackSession || livePlayBusy) && currentView==="live";
+    var streamdevKeysActive=(streamdevActive || streamdevPlayer.isBusy()) && currentView==="live";
     if (!key) {
       if (playbackKeysActive && recordingRemoteHint) {
         // Display only a bounded numeric TV key code. Never display raw event
@@ -3747,6 +3781,13 @@ function boot() {
     if (intro.active()) {
       if (key === "OK" || key === "BACK" || key === "STOP" ||
           key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE") intro.skip();
+      return;
+    }
+    if(streamdevKeysActive){
+      if(event.repeat)return;
+      if(key==="STOP" || key==="BACK")stopStreamdevLive("user");
+      else if(livePlayerHint)livePlayerHint.textContent=
+        "Streamdev Live-TV · "+key+" · STOP/ZURÜCK beendet";
       return;
     }
     if (liveKeysActive) {
