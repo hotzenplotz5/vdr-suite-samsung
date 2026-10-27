@@ -588,7 +588,7 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .searchtimer-preview-list { max-height:160px; }
 }
 
-/* S6.22: unified search parity with Web – TV-sized controls and 2 results. */
+/* S6.23: unified search parity with Web – TV-sized controls and 2 results. */
 .general-search-bar { padding:16px 18px; margin:16px 0; background:#091d30;
   border:1px solid #284866; border-radius:14px; }
 .general-search-bar > label { display:block; color:#eaf6ff; font-weight:750;
