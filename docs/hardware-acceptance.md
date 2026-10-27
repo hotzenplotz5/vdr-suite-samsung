@@ -684,3 +684,14 @@ Prüfmatrix:
 - Fehlertests: getrennte Grants media.recording.play, recordings.view, channels.view, epg.view, timers.view; 401/403/503 ohne erfundene Inhalte oder Credential-Reset.
 
 Status: ALLE S8.1 REAL-TV-PUNKTE OFFEN bis zur konkreten Nutzerbestätigung. PR #33 bleibt Draft. Rückweg: nur DEV-Watch kontrolliert beenden; weder PROD-App noch gekoppelte Identität überschreiben oder deinstallieren.
+
+
+## S8.1 Feldfoto / S8.2 Real-TV-Test (27.10.2026)
+
+**S8.1 TV-Sicht PASS:** Nutzerfoto Samsung GU43TU6979UXZG belegt die neue Home-Ansicht, echte Titel, Fanart/Artwork, EPG-Einträge und S8.1-Buildkennung. Die WITs-Übertragung gelang ohne Produktionsinstallation. Das Foto beweist keine Fernbedienungsnavigation oder Timer-/Player-Funktion.
+
+**Gemeldete Defizite:** Home-Karten zu klein und gegenüber Mockup mager; Aufnahme-Suchseite meldet Funde, zeigt aber auf dem TV keine nutzbare Trefferliste; EPG ohne Timer-Anlegen-Aktion. Ein früherer echter HTML5-Live-HTTP-401 bleibt ein FAIL für Wiedergabe.
+
+**S8.2 nach erneuter WITs-Übertragung prüfen:** große Home-Artwork-Karten; Suchergebnisliste der Aufnahmen sichtbar und via D-Pad/OK fokussierbar; bei widersprüchlicher Public-v1-Antwort Trefferzahl ohne Items eine eindeutige Fehlermeldung; aus Live-EPG sowie EPG-Suche zukünftige Sendung wählen, erste Aktion liest ETag und zeigt Bestätigung, zweite Aktion erzeugt erst nach bewusstem OK einen echten einmaligen TimerIntent. Kein Test-POST ohne beabsichtigte Aufnahme. 202 nur Admission; anschließend manueller GET auf actor-owned Operation, succeeded/queued/outcome_unknown sauber unterscheiden. Grants epg.view und timers.create müssen explizit vorliegen. Verlorene/verzögerte Antwort nie durch neuen Timer-POST umgehen.
+
+**Live-TV OPEN/BLOCKIERT:** Public-v1-Live-Media bietet noch keine nachgewiesene AVPlay-Native-Cookie-Projektion. Keine Hardware-Abnahme ohne sichere serverseitige Erweiterung und realen AVPlay-Bild-/Ton-/STOP-Test. DEV-Pairing bewahren; PROD-App unverändert.
