@@ -418,7 +418,7 @@ function boot() {
   }
   function homeMetadataText(row,fallback) {
     var m=row && row.metadata || {},parts=[];
-    if(m.genreText)parts.push(m.genreText.replace(/[\\[\\]]/g,"").replace(/\\|/g," · "));
+    if(m.genreText)parts.push(m.genreText.split("[").join("").split("]").join("").split("|").join(" · "));
     if(Number.isInteger(m.seasonNumber) && Number.isInteger(m.episodeNumber))
       parts.push("S"+m.seasonNumber+" E"+m.episodeNumber);
     else if(m.episodeTitle)parts.push(m.episodeTitle);
@@ -482,10 +482,30 @@ function boot() {
     if(homeFeatureMeta)homeFeatureMeta.textContent=subtitle || "";
     homeClearArtwork();
     homeFeatureArtwork.cancel();
-    // Images are fetched exclusively by the Device-Authorized binary API.
-    if(kind!=="recordings" || !homeCredential || !homeBackendId ||
-       !/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
+    // Images are fetched only through the authenticated public binary API.
+    if(!homeCredential || !homeBackendId)return;
     var ticket=++homeFeatureRun,token=homeRun;
+    if(kind==="epg"){
+      if(!row.eventId || !row.channelId)return;
+      homeFeatureArtwork.epgPreferredArtwork(homeCredential,homeBackendId,
+        row.channelId,row.eventId,function(bytes){
+          if(!homeAlive(token) || ticket!==homeFeatureRun || !bytes.ok ||
+             !window.URL || typeof window.URL.createObjectURL!=="function" ||
+             typeof window.Blob!=="function")return;
+          var url;
+          try{url=window.URL.createObjectURL(new window.Blob(
+            [bytes.value.bytes],{type:bytes.value.contentType}));}catch(_){return;}
+          homeClearArtwork();homeArtworkUrl=url;
+          if(homeFeaturePoster){
+            homeFeaturePoster.onerror=function(){
+              if(homeArtworkUrl===url)homeClearArtwork();
+            };
+            homeFeaturePoster.src=url;homeFeaturePoster.hidden=false;
+          }
+        });
+      return;
+    }
+    if(kind!=="recordings" || !/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
     homeFeatureArtwork.artworkList(homeCredential,homeBackendId,
       row.recordingId,function(result){
         if(!homeAlive(token) || ticket!==homeFeatureRun ||
@@ -3198,16 +3218,12 @@ function boot() {
     if(currentView==="home" && homeKind && homeIndex!==null) {
       var selected=homeCardItems[homeKind][Number(homeIndex)];
       if(homeKind==="epg" && selected && selected.event){
-        ++homeFeatureRun;
-        homeFeaturePriority=4;
-        homeFeatureKind="epg";
-        homeClearArtwork();
-        if(homeFeatureKicker)homeFeatureKicker.textContent="JETZT IM TV";
-        if(homeFeatureTitle)homeFeatureTitle.textContent=selected.event.title;
-        if(homeFeatureDescription)homeFeatureDescription.textContent=
-          selected.event.subtitle || selected.channel.name;
-        if(homeFeatureMeta)homeFeatureMeta.textContent=
-          globalSearchDate(selected.event.startTime)+" · "+selected.channel.name;
+        homeFeaturePriority=0;
+        homeFeatureShow(Object.assign({},selected.event,{
+          channelId:selected.channel.channelId,
+          description:selected.event.subtitle || selected.channel.name
+        }),"epg",4,
+          globalSearchDate(selected.event.startTime)+" · "+selected.channel.name);
       } else if(selected)homeSelectRecording(selected,homeKind,true);
       return;
     }
