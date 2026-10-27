@@ -567,33 +567,43 @@ function boot() {
       if(!result.ok){
         homeMessage("home-continue-status",homeContinueError(result));return;
       }
-      if(!result.value.items.length) {
-        homeMessage("home-continue-status","Noch keine fortsetzbaren Aufnahmen.");
-        return;
-      }
       var first=result.value.items.slice(0,3);
-      homeMessage("home-continue-status",first.length+
-        " von "+result.value.items.length+" gespeicherten Positionen");
+      homeMessage("home-continue-status",first.length ?
+        first.length+" von "+result.value.items.length+" gespeicherten Positionen" :
+        "Noch keine fortsetzbaren Aufnahmen.");
       first.forEach(function(progress,index){
-        var pct=progress.durationSeconds===null?null:
+        // A Continue Watching card has an actual server checkpoint, not a
+        // position guessed from a recording entry.
+        var pct=progress.durationSeconds===null ? null :
           progress.positionSeconds*100/progress.durationSeconds;
         var item={backendId:backendId,recordingId:progress.recordingId,
           positionSeconds:progress.positionSeconds,
-          durationSeconds:progress.durationSeconds,title:"Lade Aufnahme …"};
-        var card=homeCard("continue",item,"Lade Aufnahme …",
-          "Position "+Math.floor(progress.positionSeconds/60)+" Min."+
+          durationSeconds:progress.durationSeconds,
+          durationKnown:progress.durationSeconds!==null,
+          title:"Aufnahmedetails werden geladen"};
+        var position="Position "+Math.floor(progress.positionSeconds/60)+" Min."+
           (progress.durationSeconds===null?"":" von "+
-            Math.ceil(progress.durationSeconds/60)+" Min."),pct);
+            Math.ceil(progress.durationSeconds/60)+" Min.");
+        var card=homeCard("continue",item,item.title,position,pct);
         homeContinueMetadata[index].recordingDetail(credential,backendId,
           progress.recordingId,function(detail){
-            if(!homeAlive(token) || !detail.ok)return;
-            item.title=detail.value.title;
-            item.description=detail.value.description;
-            item.recordedAt=detail.value.recordedAt;
-            item.metadata=detail.value.metadata;
-            if(card)card.title.textContent=item.title;
-            if(index===0 && homeFeaturePriority<3)
-              homeSelectRecording(item,"continue");
+            if(!homeAlive(token))return;
+            if(!detail.ok){
+              if(card)card.title.textContent="Aufnahme (Details nicht verfügbar)";
+              return;
+            }
+            Object.assign(item,detail.value);
+            // Checkpoint duration has its own truth and may not equal the
+            // catalog duration. Never rewrite its position or percentage.
+            item.positionSeconds=progress.positionSeconds;
+            item.resumeDurationSeconds=progress.durationSeconds;
+            if(card){
+              card.title.textContent=item.title;
+              card.info.textContent=position+
+                (homeMetadataText(item,"") ? " · "+homeMetadataText(item,"") : "");
+              homeAttachCardArt(credential,backendId,"continue",item,card,token);
+            }
+            if(index===0 && homeFeaturePriority<3)homeSelectRecording(item,"continue");
           });
       });
     });
@@ -608,9 +618,22 @@ function boot() {
       homeMessage("home-recordings-status",list.length ?
         "Aus dem freigegebenen VDR-Katalog · "+list.length+" angezeigt" :
         "Noch keine Aufnahmen vorhanden");
-      list.forEach(function(row,index){
-        homeCard("recordings",row,row.title,row.recordedAt ?
-          "Aufgenommen: "+row.recordedAt : "Aufnahme",null);
+      list.forEach(function(row){
+        var card=homeCard("recordings",row,row.title,
+          homeMetadataText(row,row.recordedAt ?
+            "Aufgenommen: "+row.recordedAt : "Aufnahme"),null);
+        homeAttachCardArt(credential,backendId,"recordings",row,card,token);
+        var client=createPublicMediaMetadata(window);
+        homeCardDetailClients.push(client);
+        client.recordingDetail(credential,backendId,row.recordingId,function(detail){
+          if(!homeAlive(token) || !detail.ok)return;
+          Object.assign(row,detail.value);
+          if(card){
+            card.title.textContent=row.title;
+            card.info.textContent=homeMetadataText(row,
+              row.recordedAt ? "Aufgenommen: "+row.recordedAt : "Aufnahme");
+          }
+        });
       });
       if(list.length && homeFeaturePriority<2)
         homeSelectRecording(list[0],"recordings");
