@@ -4,7 +4,7 @@
 export function probeMediaHttpHeaders(environment,mediaUrl,done) {
   if (!environment || typeof environment.XMLHttpRequest !== "function" ||
       typeof mediaUrl !== "string" ||
-      !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts))$/.test(mediaUrl)) {
+      !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts)|live\/stream\.mp4)$/.test(mediaUrl)) {
     done({kind:"not_supported"}); return;
   }
   var xhr = new environment.XMLHttpRequest();
