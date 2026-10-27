@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"4a7a387444d3","label":"Samsung v0.1.0 · S6.4 · b4a7a387444d3"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"dbc25452674e","label":"Samsung v0.1.0 · S6.4 · bdbc25452674e"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -3674,7 +3674,7 @@
   
   
   
-    // S6.22 – common Web search index, separately authorized Public-v1 reads.
+    // S6.23 – common Web search index, separately authorized Public-v1 reads.
     // EPG and recordings are independent panes (including errors and pagination).
     function globalSearchMessage(message) {
       if(globalSearchStatusLabel)globalSearchStatusLabel.textContent=message;
