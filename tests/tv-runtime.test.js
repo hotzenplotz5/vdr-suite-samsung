@@ -357,12 +357,12 @@ test("S2.2 Back traverses detail history without losing the original Home tile",
   key(40); // Hero
   key(13); // Recordings
   assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
-  key(39); // nav-recordings
-  key(13); // recordings from live
-  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  key(39); // nav-search
+  key(13); // open Search from Recordings
+  assert.equal(sim.panels.find(p => p.route === "search").hidden, false);
   key(10009);
-  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
-  assert.equal(sim.nodes["nav-recordings"].isFocused, true);
+  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  assert.equal(sim.nodes["nav-search"].isFocused, true);
   key(10009);
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
   assert.equal(sim.nodes["home-feature"].isFocused, true);
