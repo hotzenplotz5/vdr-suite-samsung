@@ -199,6 +199,7 @@ function simulate(options = {}) {
   };
   const listeners = {};
   const document = {
+    visibilityState: options.visibleHome ? "visible" : "hidden",
     readyState: "complete",
     documentElement: {classList: {add(){},remove(){}}},
     getElementById(id) {
@@ -251,6 +252,7 @@ function simulate(options = {}) {
         classList:{toggle(name,enabled){if(name==="is-focused")node.isFocused=enabled;}},
         appendChild(child){this.children.push(child);},
         setAttribute(name,value){attrs[name]=value;},
+        removeAttribute(name){delete attrs[name];},
         getAttribute(name){return attrs[name] === undefined ? null : attrs[name];},
         focus(){},scrollIntoView(){},
         addEventListener(name,fn){if(name==="click")this.click=fn;}
