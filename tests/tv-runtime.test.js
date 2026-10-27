@@ -345,9 +345,16 @@ test("S2.3 all media detail routes cycle purely local preview states", () => {
     sim.nodes["nav-" + route].click();
     assert.equal(sim.panels.find(p => p.route === route).hidden, false);
     assert.equal(sim.stateNodes["detail-state-" + route].dataState, "offline");
-    assert.equal(sim.stateNodes["detail-state-title-" + route].textContent, "Noch keine Serververbindung");
-    key(40); // down to detail Home button
-    key(39); // right to local state preview
+    assert.equal(sim.stateNodes["detail-state-title-" + route].textContent,
+      route === "timers" ? "Bereit für echte VDR-Timer" : "Noch keine Serververbindung");
+    if (route === "timers") {
+      // S6.19 adds real Timer buttons before the retained purely local preview.
+      // Explicitly focus the preview rather than accidentally loading timers.
+      sim.nodes["detail-timers-preview"].click();
+    } else {
+      key(40); // down to detail Home button
+      key(39); // right to local state preview
+    }
     assert.equal(sim.nodes["detail-" + route + "-preview"].isFocused, true);
     for (const [mode, skeleton] of [["loading",false],["empty",true],["error",true],["offline",true]]) {
       key(13);
