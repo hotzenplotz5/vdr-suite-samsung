@@ -1,8 +1,38 @@
 # S7.1 — WITs only in a separate Samsung development package
 
-**Status (2026-10-25): source/CI candidate, real Tizen 5.5 hardware NOT VERIFIED.**
+**Stand 27.10.2026:** Eine eigenständige DEV-App ist auf realem Tizen 5.5 gekoppelt; der Nutzer hat einen laufenden WITs-`--watch`-Prozess bestätigt. **Die erfolgreiche Übertragung eines konkreten neuen Builds (z. B. S6.17) muss weiterhin am TV nachgewiesen werden.**
 This procedure explicitly does **not** modify the installed production `VDR-Suite` package or its KeyManager data.
 No device installation, uninstall, new pairing, grant or credential export is automated.
+
+## Wichtigster Praxisablauf: bereits installierte und gekoppelte DEV-App aktualisieren
+
+**Der Befehl für die Live-Übertragung heißt `npm.cmd run tv:watch` (im Repository-Hauptverzeichnis).** Er startet den isolierten **WITs-Watch** mit Arbeitsverzeichnis `.tizen-wits-dev/`. Er ist **keine** Erstinstallation und darf nicht mehrfach parallel laufen. Kein `wits --start` verwenden.
+
+1. **Bereits erledigte Schritte anerkennen:** Nach einem sicheren, branchrichtigen Git-Pull nur bei geändertem Code `npm.cmd run build:tv`, `npm.cmd run check` und `npm.cmd run tv:dev:prepare` ausführen. Wurden diese Schritte bereits erfolgreich ausgeführt, sind sie **nicht nochmals** nötig.
+2. **Vor jedem `tv:watch` prüfen, ob der Watch schon läuft.** Dazu das vorhandene WITs-Terminal verwenden; bei Unklarheit Port 4050 und Kommandozeile nur lesend prüfen:
+
+   ```powershell
+   Get-NetTCPConnection -LocalPort 4050 -State Listen -ErrorAction SilentlyContinue |
+     Select-Object LocalAddress,LocalPort,OwningProcess
+   Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+     Where-Object { $_.CommandLine -match 'wits[\\/]+lib[\\/]+cli\.js' } |
+     Select-Object ProcessId,CommandLine
+   ```
+
+   **Am 27.10.2026 real beobachtet:** Port `4050` gehörte bereits einem `node …/@tizentv/wits/lib/cli.js --watch`-Prozess. Ein zweites `npm.cmd run tv:watch` endete daher mit `EADDRINUSE`, obwohl der Samsung erreichbar war. **EADDRINUSE bedeutet Port belegt, nicht `DEV host fehlt` und nicht `neu installieren`.** Ein laufender Watch-Prozess ist allerdings noch **kein Beweis**, dass die neuen Dateien synchronisiert wurden.
+3. **Wenn der korrekte DEV-Watch bereits läuft:** **Kein zweites `npm.cmd run tv:watch` starten.** Den bestehenden Watch und seine Ausgabe verwenden. In einem zweiten Terminal, im Repository-Hauptverzeichnis, nach erfolgtem Build/Check bei Bedarf `npm.cmd run tv:dev:prepare` ausführen, damit die neuen Dateien im überwachten DEV-Staging liegen. Watch-Ausgabe auf Übertragung/Reload prüfen. **`tv:dev:prepare` selbst hat keinen TV-Kontakt.**
+4. **Wenn kein Watch läuft:** Nach vorbereiteten DEV-Dateien **genau einmal** im VS-Code-PowerShell-Terminal, Repository-Hauptverzeichnis:
+
+   ```powershell
+   npm.cmd run tv:watch
+   ```
+
+   **Dieses Terminal offen lassen.** Der Wrapper führt `wits --watch` **innerhalb der isolierten `.tizen-wits-dev/`-Kopie** aus; weder `--start` noch `Run Project` sind für dieses Update nötig.
+5. **Nur wenn der Watch bewusst neu gestartet werden muss:** Ausschließlich den **identifizierten, eigenen DEV-Watch** über **Strg+C in dessen zugehörigem Terminal** beenden, prüfen, dass Port 4050 frei ist, und erst dann **einmal** `npm.cmd run tv:watch` aus dem Repository-Hauptverzeichnis starten. Niemals blind Node-Prozesse/PIDs abschießen oder an einem unbekannten Listener `Stop-Process` ausführen. Wenn unklar ist, wem der Listener gehört oder aus welchem Projekt er stammt, **zuerst Ausgabe/Prozess untersuchen, nicht neu installieren**.
+6. **Wirkliche Übertragung belegen:** Auf dem Samsung **VDR-Suite DEV** öffnen und an der **neuen sichtbaren Funktion/Buildkennung** prüfen, ob der aktuelle Stand geladen ist (z. B. S6.17: Button **`HLS-TS + AAC-Ton testen`** in Aufnahmen). Das bloße Vorhandensein des Watch-Prozesses, die `Success to connect`-Meldung, `195/195` Quelltests, die vorbereitete Staging-Datei oder ein Git-Pull reichen **nicht** aus. Anschließend unter Einstellungen die bestehende Geräteanmeldung prüfen, **ohne neu zu koppeln**.
+7. **Falls die Änderung am TV fehlt:** Watch-Terminal-Ausgabe und WITs-Arbeitsverzeichnis/DEV-Konfiguration prüfen; nicht wiederholt den Watch starten. Der unten beschriebene `--smoke`-Marker ist **nur ein optionaler Diagnosetest**, keine vorgeschriebene Update-/Installationsstufe. Er überträgt selbst keine Daten und muss anschließend aus dem Staging entfernt werden.
+
+**Harte Grenze:** PROD `VDRSuiteTV.VDRSuite` (Paket `VDRSuiteTV`) unangetastet lassen. DEV `VDRSuitDev.VDRSuite`, WITs-Host `VDRSuitDev.VDRSuiteWITs` (Paket `VDRSuitDev`) schützen. Keine Neuinstallation, kein `wits --start`, kein `Run Project`, keine Änderung an KeyManager, Zertifikaten oder Pairing. Die lokalen Versionen `0.1.1` in `package.json` und `app/config.xml` nicht zurücksetzen.
 
 ## Proven cause (Samsung WITs 2.6.0 source)
 
@@ -63,16 +93,25 @@ The WITs `--start` path is **always an explicit manual installation gate**, neve
 
 The user first confirms the **dev app** has been installed under the expected dev package and app identity, and has an independent authorized device login if backend tests need it.
 
-For later edits:
+For later edits **use the step-by-step procedure at the top of this document**, rather than blindly starting a second Watch. The normal commands after a changed checkout are:
 
 ```powershell
 npm.cmd run build:tv
 npm.cmd run check
 npm.cmd run tv:dev:prepare
+```
+
+**Only if no Watch is already running:**
+
+```powershell
 npm.cmd run tv:watch
 ```
 
-`tv:watch` runs `wits --watch` **only** with working directory `.tizen-wits-dev`. It refuses a mismatched `baseAppPath`, changed manifests, stale runtime, unapproved extra files and absent local init. No installation/uninstallation is implemented. Keep Watch running for UI changes; repeat `tv:dev:prepare` whenever app source/runtime/assets change, so the watcher sees only changes in the isolated development directory. Do not run `wits --start` or VS Code `Run Project` as a routine update.
+`tv:watch` runs `wits --watch` **only** with working directory `.tizen-wits-dev`. It refuses a mismatched `baseAppPath`, changed manifests, stale runtime, unapproved extra files and absent local init. No installation/uninstallation is implemented. **An already running DEV-Watch must not be launched a second time.** Keep its terminal open; for further changed sources repeat `tv:dev:prepare` so that the existing watcher can detect staged changes. Do not run `wits --start` or VS Code `Run Project` as a routine update.
+
+## Optionaler Diagnosetest bei unklarer Watch-Synchronisation (kein Routineupdate)
+
+**Nur nach Prüfung des Watchs, nicht automatisch nach jedem Update.** Der `--smoke`-Befehl ersetzt weder `npm.cmd run tv:watch` noch die Sichtprüfung des eigentlichen neuen Features.
 
 ## Harmless one-shot visual reload (only AFTER DEV setup)
 
