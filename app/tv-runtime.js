@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.3","build":"6ca2fbf9401d","label":"Samsung v0.1.0 · S8.3 · b6ca2fbf9401d"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.3","build":"000000000000","label":"Samsung v0.1.0 · S8.3 · b000000000000"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -3189,8 +3189,8 @@
       if (currentView === "live") {
         var liveFocusRows = [NAV_ROW,
           ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
-         "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"],
-          ["live-streamdev-base","live-streamdev-save"]];
+         "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more",
+           "live-streamdev-base","live-streamdev-save"]];
         var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
         for (var i=0;i<count;i++) {
           var cells=[];
@@ -4502,7 +4502,7 @@
       }
       var base=parseStreamdevBase(streamdevBaseInput && streamdevBaseInput.value);
       if(!base){
-        streamdevMessage("Bitte eine lokale Adresse wie http://192.168.178.20:3000 eingeben.");
+        streamdevMessage("Bitte die lokale Streamdev-Adresse im Format HTTP + LAN-IP + Port eingeben.");
         return;
       }
       streamdevBase=base;
