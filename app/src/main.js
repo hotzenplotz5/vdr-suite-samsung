@@ -11,6 +11,7 @@ import { createDeviceVault } from "./platform/device-vault.js";
 import { restoreVerifiedSessionCredential } from "./platform/device-recovery.js";
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
+import { createNativeTimerCatalog, nativeTimerCatalogError } from "./api/native-timers.js";
 import { createPublicMediaMetadata, mediaMetadataError } from "./api/media-metadata.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { createLivePlaybackClient, livePlaybackError } from "./api/live-playback.js";
@@ -51,6 +52,17 @@ function boot() {
   var vault = createDeviceVault(window);
   var channelCatalog = createChannelCatalog(window);
   var recordingCatalog = createRecordingCatalog(window);
+  var nativeTimerCatalog = createNativeTimerCatalog(window);
+  var nativeTimerCredential = null;
+  var nativeTimerBackends = [];
+  var nativeTimerBackendIndex = 0;
+  var nativeTimerRun = 0;
+  var nativeTimerBusy = false;
+  var nativeTimerNextOffset = null;
+  var nativeTimerRows = [];
+  var nativeTimerItems = [];
+  var nativeTimerList = document.getElementById("native-timer-list");
+  var nativeTimerBackendName = document.getElementById("native-timer-backend-name");
   var liveMetadata = createPublicMediaMetadata(window);
   var liveDetailMetadata = createPublicMediaMetadata(window);
   var liveArtworkMetadata = createPublicMediaMetadata(window);
@@ -198,6 +210,12 @@ function boot() {
       recordingFocusIds.forEach(function (id) { rows.push([id]); });
       rows.push(["detail-recordings-next"]);
       return rows;
+    }
+    if (currentView === "timers") {
+      var timerRows=[NAV_ROW,["detail-timers-home","detail-timers-load",
+        "detail-timers-more","detail-timers-backend","detail-timers-preview"]];
+      nativeTimerRows.forEach(function(id){timerRows.push([id]);});
+      return timerRows;
     }
     if (currentView === "settings") return [
       NAV_ROW,
@@ -1027,6 +1045,172 @@ function boot() {
     });
   }
 
+
+  // S6.19: one real native VDR timer inventory (not TimerAssignments).
+  // No POST, no client-side timer construction and no cross-backend fanout.
+  function nativeTimerStatus(state,title,description) {
+    var node=document.getElementById("detail-state-timers");
+    var badge=document.getElementById("detail-state-badge-timers");
+    var headline=document.getElementById("detail-state-title-timers");
+    var info=document.getElementById("detail-state-description-timers");
+    var skeleton=document.getElementById("detail-state-skeleton-timers");
+    if(node) node.setAttribute("data-state",state);
+    if(badge) badge.textContent=state==="ready"?"TIMER" :
+      state==="loading"?"LÄDT" : state==="error"?"FEHLER" :
+      state==="empty"?"LEER":"OFFLINE";
+    if(headline) headline.textContent=title;
+    if(info) info.textContent=description;
+    if(skeleton) skeleton.hidden=state!=="loading";
+  }
+  function clearNativeTimerRows() {
+    nativeTimerRows.forEach(function(id) {
+      var element=controls[id];
+      delete controls[id];
+      var index=items.indexOf(element);
+      if(index!==-1) items.splice(index,1);
+    });
+    nativeTimerRows=[];
+    nativeTimerItems=[];
+    nativeTimerNextOffset=null;
+    if(nativeTimerList) {
+      nativeTimerList.textContent="";
+      nativeTimerList.hidden=true;
+    }
+  }
+  function nativeTimerClock(value) {
+    return /^([01][0-9]|2[0-3])[0-5][0-9]$/.test(value) ?
+      value.slice(0,2)+":"+value.slice(2) : value;
+  }
+  function nativeTimerSchedule(item) {
+    var day=/^[0-9]{8}$/.test(item.day) ?
+      item.day.slice(6,8)+"."+item.day.slice(4,6)+"."+item.day.slice(0,4) :
+      (item.weekdays || "Wiederholung");
+    return day+" · "+nativeTimerClock(item.startTime)+
+      "–"+nativeTimerClock(item.endTime);
+  }
+  function appendNativeTimerRows(rows) {
+    if(!nativeTimerList) return;
+    rows.forEach(function(timer) {
+      var index=nativeTimerItems.length,id="native-timer-row-"+index;
+      var row=document.createElement("li");
+      row.className="native-timer-row tv-focusable";
+      row.tabIndex=-1;
+      row.setAttribute("role","button");
+      row.setAttribute("data-focus-id",id);
+      row.setAttribute("data-native-timer-index",String(index));
+      row.setAttribute("aria-label",timer.title);
+      var name=document.createElement("strong");
+      name.textContent=timer.title || "Timer ohne Titel";
+      var info=document.createElement("span");
+      var status=timer.recording?"AUFNAHME LÄUFT":
+        timer.pending?"ANSTEHEND":timer.enabled?"AKTIV":"DEAKTIVIERT";
+      info.textContent=nativeTimerSchedule(timer)+" · "+
+        (timer.channelName || timer.channelId)+" · "+status;
+      row.appendChild(name);row.appendChild(info);
+      controls[id]=row;items.push(row);nativeTimerRows.push(id);
+      nativeTimerItems.push(timer);
+      nativeTimerList.appendChild(row);
+      row.addEventListener("click",function(){if(setFocus(id))activate(row);});
+    });
+    nativeTimerList.hidden=nativeTimerItems.length===0;
+  }
+  function fetchNativeTimerPage(run,offset) {
+    if(run!==nativeTimerRun || !nativeTimerCredential ||
+        !nativeTimerBackends.length) return;
+    var backend=nativeTimerBackends[nativeTimerBackendIndex];
+    nativeTimerBusy=true;
+    nativeTimerStatus("loading","Lese VDR-Timer",
+      backend.name+" · "+offset+" bis "+(offset+29)+" · nur lesend");
+    nativeTimerCatalog.list(nativeTimerCredential,backend.backendId,offset,function(result){
+      if(run!==nativeTimerRun || currentView!=="timers") return;
+      nativeTimerBusy=false;
+      if(!result.ok) {
+        clearNativeTimerRows();
+        nativeTimerStatus("error","VDR-Timer nicht verfügbar",
+          nativeTimerCatalogError(result));
+        return;
+      }
+      if(offset===0) clearNativeTimerRows();
+      var first=nativeTimerRows.length;
+      appendNativeTimerRows(result.value.items);
+      nativeTimerNextOffset=result.value.page.hasMore ?
+        result.value.page.nextOffset:null;
+      if(nativeTimerBackendName) nativeTimerBackendName.textContent=
+        "Backend: "+backend.name+" · "+backend.backendId;
+      nativeTimerStatus(nativeTimerItems.length?"ready":"empty",
+        nativeTimerItems.length ?
+          nativeTimerItems.length+" echte VDR-Timer" : "Keine VDR-Timer vorhanden",
+        "Nur native Timer · "+(nativeTimerNextOffset===null ?
+          "Ende der Liste" : "Weitere Timer verfügbar")+
+        " · OK zeigt Timerdetails; keine Mutation.");
+      if(offset!==0 && nativeTimerRows[first])setFocus(nativeTimerRows[first]);
+    });
+  }
+  function loadNativeTimers(action) {
+    if(nativeTimerBusy || currentView!=="timers")return;
+    if(action==="more") {
+      if(nativeTimerNextOffset===null || nativeTimerItems.length>=300) {
+        nativeTimerStatus(nativeTimerItems.length?"ready":"empty",
+          "Keine weitere Timerseite","Bis zu 300 Timer pro Ansicht; neu laden für weitere Abfragen.");
+        return;
+      }
+      fetchNativeTimerPage(nativeTimerRun,nativeTimerNextOffset);return;
+    }
+    if(action==="backend") {
+      if(!nativeTimerCredential || nativeTimerBackends.length<2) {
+        nativeTimerStatus("empty","Kein zweites Backend",
+          "Nur ein lesbares Backend bekannt.");return;
+      }
+      nativeTimerBackendIndex=(nativeTimerBackendIndex+1)%nativeTimerBackends.length;
+      nativeTimerCatalog.cancel();
+      clearNativeTimerRows();
+      fetchNativeTimerPage(++nativeTimerRun,0);return;
+    }
+    var saved=vault.read();
+    if(!saved.ok || !saved.credential) {
+      nativeTimerStatus("error","Geräteanmeldung fehlt",
+        "Gekoppelte DEV-App unter Einstellungen prüfen; nicht neu koppeln.");
+      return;
+    }
+    var base=serverInput && normalizeSuiteBase(serverInput.value);
+    if(base && base!==saved.credential.base) {
+      nativeTimerStatus("error","Anderer Server",
+        "Die vorhandene Geräteanmeldung gehört zu einem anderen Server.");
+      return;
+    }
+    nativeTimerCredential=saved.credential;
+    nativeTimerBackends=[];
+    nativeTimerBackendIndex=0;
+    clearNativeTimerRows();
+    nativeTimerCatalog.cancel();
+    var run=++nativeTimerRun;
+    nativeTimerBusy=true;
+    nativeTimerStatus("loading","Prüfe Geräteanmeldung",
+      "Lesender Public-v1-Zugriff; timers.view erforderlich.");
+    pairingClient.verify(nativeTimerCredential,function(result){
+      if(run!==nativeTimerRun || currentView!=="timers")return;
+      if(!result.ok) {
+        nativeTimerBusy=false;
+        nativeTimerStatus("error","Geräteanmeldung abgewiesen",
+          deviceVerificationError(result));
+        return;
+      }
+      markDeviceAuthenticated(nativeTimerCredential);
+      nativeTimerStatus("loading","Suche Backend","Public-v1-Backendliste wird gelesen.");
+      channelCatalog.listBackends(nativeTimerCredential,function(found){
+        if(run!==nativeTimerRun || currentView!=="timers")return;
+        if(!found.ok || !found.value.items.length) {
+          nativeTimerBusy=false;
+          nativeTimerStatus("error","Backendliste nicht verfügbar",
+            found.ok ? "Keine berechtigten Backends gefunden." : channelCatalogError(found));
+          return;
+        }
+        nativeTimerBackends=found.value.items;
+        fetchNativeTimerPage(run,0);
+      });
+    });
+  }
+
   function clearLiveRows() {
     if (currentView === "live" && liveFocusIds.indexOf(focusedId) >= 0)
       setFocus("detail-live-preview");
@@ -1840,6 +2024,13 @@ function boot() {
       liveBusy = false;
       channelCatalog.cancel();
     }
+    if (currentView === "timers" && view !== "timers") {
+      nativeTimerRun++;
+      nativeTimerBusy=false;
+      nativeTimerCatalog.cancel();
+      channelCatalog.cancel();
+      clearNativeTimerRows();
+    }
     if (currentView === "recordings" && view !== "recordings") {
       recordingMetadata.cancel();
       recordingDetailRun+=1;
@@ -1883,6 +2074,20 @@ function boot() {
         recordingBackendName.textContent = "Noch kein Backend geladen";
       recordingStatus("offline", "Bereit für echte Aufnahmen",
         "„Aufnahmen laden“ nutzt die gespeicherte Geräteanmeldung. recordings.view erforderlich.");
+    } else if (view === "timers") {
+      nativeTimerRun++;
+      nativeTimerBusy=false;
+      nativeTimerCatalog.cancel();
+      clearNativeTimerRows();
+      nativeTimerBackends=[];
+      nativeTimerCredential=null;
+      nativeTimerBackendIndex=0;
+      if(nativeTimerBackendName)
+        nativeTimerBackendName.textContent="Noch kein Backend geladen";
+      nativeTimerStatus("offline","Bereit für echte VDR-Timer",
+        "„Timer laden“ liest native Timer über Public API v1 mit timers.view.");
+      if (!rowMemory.timers) rowMemory.timers = {};
+      rowMemory.timers[1]="detail-timers-load";
     } else if (PREVIEW_ROUTES.indexOf(view) >= 0) {
       renderPreview(view, "offline");
       // Preserve S2.2's DOWN-to-first-detail-button behavior.
@@ -2061,6 +2266,21 @@ function boot() {
     if (recordingAction) {
       loadRecordings(recordingAction);
       return;
+    }
+    var timerIndex=item.getAttribute("data-native-timer-index");
+    if(timerIndex!==null && currentView==="timers") {
+      var timer=nativeTimerItems[Number(timerIndex)];
+      if(timer)nativeTimerStatus("ready",timer.title || "VDR-Timer",
+        nativeTimerSchedule(timer)+" · "+
+        (timer.channelName || timer.channelId)+" · "+
+        (timer.recording?"AUFNAHME LÄUFT":
+          timer.pending?"ANSTEHEND":timer.enabled?"AKTIV":"DEAKTIVIERT")+
+        " · nur lesend");
+      return;
+    }
+    var timerAction=item.getAttribute("data-native-timers-action");
+    if(timerAction && currentView==="timers") {
+      loadNativeTimers(timerAction);return;
     }
     var previewRoute = item.getAttribute("data-preview-route");
     if (previewRoute && previewRoute === currentView) {
