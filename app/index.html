@@ -256,6 +256,27 @@
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-timers-backend" data-native-timers-action="backend">Backend wechseln</button>
           <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-timers-preview" data-preview-route="timers">Zustände ansehen</button>
         </div>
+        <section class="searchtimer-area" aria-label="Gespeicherte Suchtimer">
+          <div class="searchtimer-heading">
+            <h2>Suchtimer (epgsearch)</h2>
+            <p>Gespeicherte Suchregeln und EPG-Treffer – eigenständig von normalen VDR-Timern.</p>
+          </div>
+          <p id="searchtimer-backend" class="native-timer-backend">Noch kein Backend geladen</p>
+          <div class="searchtimer-actions">
+            <button type="button" class="action-button primary tv-focusable" data-focus-id="searchtimer-load" data-searchtimer-action="load">Suchtimer laden</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="searchtimer-more" data-searchtimer-action="more">Weitere Suchtimer</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="searchtimer-backend-change" data-searchtimer-action="backend">Backend wechseln</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="searchtimer-preview" data-searchtimer-action="preview">EPG-Treffer anzeigen</button>
+          </div>
+          <p id="searchtimer-status" class="searchtimer-status" aria-live="polite">Suchtimer laden benötigt searchtimers.view.</p>
+          <ul id="searchtimer-list" class="native-timer-list" aria-label="Gespeicherte Suchtimer" hidden></ul>
+          <section class="searchtimer-results" aria-label="Suchtimer-Details und Vorschau">
+            <strong id="searchtimer-detail-title">Noch keine Regel gewählt</strong>
+            <p id="searchtimer-detail-info">OK auf eine Regel zeigt ihre aktuellen Details.</p>
+            <p id="searchtimer-preview-status" class="searchtimer-status">Für EPG-Treffer zusätzlich epg.view erforderlich.</p>
+            <ul id="searchtimer-preview-list" class="searchtimer-preview-list" hidden></ul>
+          </section>
+        </section>
       </section>
       <section class="page detail-page" data-panel="settings" hidden>
         <span class="detail-eyebrow">EINSTELLUNGEN</span><h1>Dein Samsung-TV.</h1>
