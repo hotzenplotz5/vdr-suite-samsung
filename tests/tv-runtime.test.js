@@ -1747,7 +1747,7 @@ test("S6.20 exit discards pending epgsearch, no reappear or mutation",()=>{
 });
 
 
-test("S6.22 general search is idle on navigation, queries two separate v1 scopes",()=>{
+test("S6.23 general search is idle on navigation, queries two separate v1 scopes",()=>{
   const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
   sim.video.finish();sim.nodes["nav-search"].click();
   assert.equal(h.calls.length,0);
@@ -1775,7 +1775,7 @@ test("S6.22 general search is idle on navigation, queries two separate v1 scopes
   assert.equal(sim.globalSearchNodes["global-search-epg-count"].textContent,"1 Treffer");
   assert.equal(h.calls.length,4,"no hidden player or write API called");
 });
-test("S6.22 EPG 403 is separate from successful recordings and old results clear",()=>{
+test("S6.23 EPG 403 is separate from successful recordings and old results clear",()=>{
   const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
   sim.video.finish();sim.nodes["nav-search"].click();
   sim.nodes["global-search-input"].value="Hobbit";
@@ -1792,7 +1792,7 @@ test("S6.22 EPG 403 is separate from successful recordings and old results clear
   assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,0);
   assert.equal(sim.globalSearchNodes["global-search-epg"].children.length,0);
 });
-test("S6.22 searching via Samsung IME yields keys to native keyboard",()=>{
+test("S6.23 searching via Samsung IME yields keys to native keyboard",()=>{
   const sim=simulate();sim.video.finish();sim.nodes["nav-search"].click();
   const press=keyCode=>{
     let blocked=false;sim.listeners.keydown({keyCode,preventDefault(){blocked=true;}});
