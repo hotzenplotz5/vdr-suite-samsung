@@ -27,10 +27,11 @@ export function createPublicGlobalSearch(environment) {
     if(text.length<2 || /[\x00-\x1f\x7f]/.test(text))return null;
     // Backend checks encoded request length and decoded UTF-8 byte limits.
     try {
-      if(typeof TextEncoder==="function") {
-        if(new TextEncoder().encode(text).length>240)return null;
-      } else if(unescape(encodeURIComponent(text)).length>240)return null;
-      if(encodeURIComponent(text).length>360)return null;
+      // Percent escapes represent individual UTF-8 bytes; no TextEncoder or
+      // deprecated unescape() is needed on Tizen Chromium M69 or Node VM.
+      var encoded=encodeURIComponent(text);
+      if(encoded.replace(/%[0-9A-Fa-f]{2}/g,"x").length>240 ||
+          encoded.length>360)return null;
     } catch(_){return null;}
     return text;
   }
