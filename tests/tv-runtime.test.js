@@ -390,9 +390,14 @@ test("S2.3 all media detail routes cycle purely local preview states", () => {
     // presentation preview remains an explicitly selected, LOCAL-only test.
     sim.nodes["detail-" + route + "-preview"].click();
     assert.equal(sim.nodes["detail-" + route + "-preview"].isFocused, true);
-    // Clicking an already-focused preview invokes its first LOCAL state.
-    assert.equal(sim.stateNodes["detail-state-" + route].dataState,"loading");
-    for (const [mode, skeleton] of [["empty",true],["error",true],["offline",true],["loading",false]]) {
+    // The search preview initializes its local sequence; the Timer route's
+    // live status is independent of the original local preview sequence.
+    assert.equal(sim.stateNodes["detail-state-" + route].dataState,
+      route==="search" ? "loading" : "offline");
+    const sequence=route==="search" ?
+      [["empty",true],["error",true],["offline",true],["loading",false]] :
+      [["loading",false],["empty",true],["error",true],["offline",true]];
+    for (const [mode,skeleton] of sequence) {
       key(13);
       assert.equal(sim.stateNodes["detail-state-" + route].dataState, mode);
       assert.equal(sim.stateNodes["detail-state-skeleton-" + route].hidden, skeleton);
