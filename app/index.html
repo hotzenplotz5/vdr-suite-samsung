@@ -200,31 +200,62 @@
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-next" data-recordings-action="next">Weitere Aufnahmen</button>
         </div>
       </section>
-      <section class="page detail-page" data-panel="search" hidden>
-        <span class="detail-eyebrow">SUCHE · DESIGNVORSCHAU</span>
+      <section class="page detail-page general-search-page" data-panel="search" hidden>
+        <span class="detail-eyebrow">SUCHE · WEB-SUCHINDEX · PUBLIC API V1</span>
         <h1>Alles finden.</h1>
-        <p>Durchsuche später Sender, Filme und Aufnahmen.</p>
-        <div class="detail-grid">
-          <div class="detail-art detail-art-search" aria-hidden="true">
-            <span class="detail-art-kicker">MEHR ENTDECKEN</span>
-            <span class="detail-art-motif">⌕</span>
-            <strong>Suche & Filter</strong>
-            <span>VDR-Suite Samsung</span>
+        <p>Wie im Webfrontend: Eine Suche für Sendungen im EPG und deine Aufnahmen. Beide Bereiche verwenden den gemeinsamen VDR-Suite-Suchindex.</p>
+        <div class="general-search-bar">
+          <label for="global-search-input">Film, Sendung oder Titel</label>
+          <div class="general-search-entry">
+            <input id="global-search-input" type="search" class="tv-focusable"
+                   data-focus-id="global-search-input" maxlength="240"
+                   autocomplete="off" autocapitalize="none"
+                   placeholder="Suchbegriff mit TV-Tastatur eingeben" />
+            <button type="button" class="action-button primary tv-focusable"
+                    data-focus-id="global-search-go" data-global-search-action="go">Suchen</button>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-clear" data-global-search-action="clear">Leeren</button>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-backend" data-global-search-action="backend">Backend wechseln</button>
           </div>
-          <section class="detail-status-card" id="detail-state-search" data-state="offline" aria-label="Bereichsstatus">
-            <span class="detail-status-label" id="detail-state-badge-search">OFFLINE</span>
-            <strong id="detail-state-title-search">Noch keine Serververbindung</strong>
-            <p id="detail-state-description-search">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
-            <div class="detail-skeleton" id="detail-state-skeleton-search" hidden aria-hidden="true">
-              <i></i><i></i><i></i>
-            </div>
-            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+          <p id="global-search-backend-name">Backend noch nicht geladen</p>
+          <p id="global-search-status" role="status" aria-live="polite">Suchbegriff eingeben und „Suchen“ drücken.</p>
+        </div>
+        <div class="general-search-grid">
+          <section class="general-search-group" aria-label="Suchergebnisse Aufnahmen">
+            <header><h2>Aufnahmen</h2><span id="global-search-recording-count">–</span></header>
+            <p id="global-search-recording-status">Noch keine Suche gestartet · recordings.view</p>
+            <ul id="global-search-recordings" class="global-search-results" hidden></ul>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-recording-more"
+                    data-global-search-action="recordings-more">Mehr Aufnahmen</button>
+          </section>
+          <section class="general-search-group" aria-label="Suchergebnisse EPG">
+            <header><h2>EPG</h2><span id="global-search-epg-count">–</span></header>
+            <p id="global-search-epg-status">Noch keine Suche gestartet · epg.view</p>
+            <ul id="global-search-epg" class="global-search-results" hidden></ul>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-epg-more"
+                    data-global-search-action="epg-more">Mehr EPG-Treffer</button>
           </section>
         </div>
+        <section class="general-search-detail" aria-label="Ausgewählter Suchtreffer">
+          <strong id="global-search-detail-title">Noch kein Treffer ausgewählt</strong>
+          <p id="global-search-detail-description">OK auf einem Treffer zeigt die Details aus API v1.</p>
+        </section>
         <div class="detail-actions">
-          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
-          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-search-preview" data-preview-route="search">Zustände ansehen</button>
+          <button type="button" class="action-button primary tv-focusable"
+                  data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button detail-preview-button tv-focusable"
+                  data-focus-id="detail-search-preview" data-preview-route="search">Statusvorschau</button>
         </div>
+        <section class="detail-status-card" id="detail-state-search" data-state="offline"
+                 aria-label="Suchstatus" hidden>
+          <span class="detail-status-label" id="detail-state-badge-search">OFFLINE</span>
+          <strong id="detail-state-title-search">Noch keine Serververbindung</strong>
+          <p id="detail-state-description-search">Die Suche beginnt erst nach einer bestätigten Aktion.</p>
+          <div class="detail-skeleton" id="detail-state-skeleton-search" hidden aria-hidden="true"><i></i><i></i><i></i></div>
+        </section>
       </section>
       <section class="page detail-page" data-panel="timers" hidden>
         <span class="detail-eyebrow">TIMER · ECHTE VDR-TIMER · PUBLIC API V1</span>
