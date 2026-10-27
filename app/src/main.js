@@ -12,6 +12,7 @@ import { restoreVerifiedSessionCredential } from "./platform/device-recovery.js"
 import { createChannelCatalog, channelCatalogError } from "./api/channel-catalog.js";
 import { createRecordingCatalog, recordingCatalogError } from "./api/recording-catalog.js";
 import { createNativeTimerCatalog, nativeTimerCatalogError } from "./api/native-timers.js";
+import { createSearchTimerCatalog, searchTimerCatalogError } from "./api/search-timers.js";
 import { createPublicMediaMetadata, mediaMetadataError } from "./api/media-metadata.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { createLivePlaybackClient, livePlaybackError } from "./api/live-playback.js";
@@ -53,6 +54,26 @@ function boot() {
   var channelCatalog = createChannelCatalog(window);
   var recordingCatalog = createRecordingCatalog(window);
   var nativeTimerCatalog = createNativeTimerCatalog(window);
+  var searchTimerCatalog = createSearchTimerCatalog(window);
+  var searchTimerBackendCatalog = createChannelCatalog(window);
+  var searchTimerPairing = createPairingClient(window);
+  var searchTimerCredential = null;
+  var searchTimerBackends = [];
+  var searchTimerBackendIndex = 0;
+  var searchTimerCursor = null;
+  var searchTimerBusy = false;
+  var searchTimerRun = 0;
+  var searchTimerSelectionRun = 0;
+  var searchTimerRows = [];
+  var searchTimerItems = [];
+  var selectedSearchTimer = null;
+  var searchTimerList = document.getElementById("searchtimer-list");
+  var searchTimerBackendLabel = document.getElementById("searchtimer-backend");
+  var searchTimerStatusLabel = document.getElementById("searchtimer-status");
+  var searchTimerDetailTitle = document.getElementById("searchtimer-detail-title");
+  var searchTimerDetailInfo = document.getElementById("searchtimer-detail-info");
+  var searchTimerPreviewStatus = document.getElementById("searchtimer-preview-status");
+  var searchTimerPreviewList = document.getElementById("searchtimer-preview-list");
   var nativeTimerCredential = null;
   var nativeTimerBackends = [];
   var nativeTimerBackendIndex = 0;
@@ -215,6 +236,9 @@ function boot() {
       var timerRows=[NAV_ROW,["detail-timers-home","detail-timers-load",
         "detail-timers-more","detail-timers-backend","detail-timers-preview"]];
       nativeTimerRows.forEach(function(id){timerRows.push([id]);});
+      timerRows.push(["searchtimer-load","searchtimer-more",
+        "searchtimer-backend-change","searchtimer-preview"]);
+      searchTimerRows.forEach(function(id){timerRows.push([id]);});
       return timerRows;
     }
     if (currentView === "settings") return [
@@ -1045,6 +1069,257 @@ function boot() {
     });
   }
 
+
+
+  // S6.20: independent saved epgsearch rule browser. A rule is neither an
+  // existing native VDR timer nor a Suite TimerAssignment.
+  function searchTimerMessage(message) {
+    if(searchTimerStatusLabel)searchTimerStatusLabel.textContent=message;
+  }
+  function clearSearchTimerPreview() {
+    if(searchTimerPreviewList) {
+      searchTimerPreviewList.textContent="";
+      searchTimerPreviewList.hidden=true;
+    }
+    if(searchTimerPreviewStatus)
+      searchTimerPreviewStatus.textContent=
+        "EPG-Treffer benötigen zusätzlich epg.view; keine Aufnahmeprognose.";
+  }
+  function clearSearchTimerRows() {
+    searchTimerRows.forEach(function(id) {
+      var control=controls[id];
+      delete controls[id];
+      var found=items.indexOf(control);
+      if(found!==-1)items.splice(found,1);
+    });
+    searchTimerRows=[];
+    searchTimerItems=[];
+    searchTimerCursor=null;
+    selectedSearchTimer=null;
+    if(searchTimerList) {
+      searchTimerList.textContent="";
+      searchTimerList.hidden=true;
+    }
+    if(searchTimerDetailTitle)searchTimerDetailTitle.textContent="Noch keine Regel gewählt";
+    if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+      "OK auf eine Regel zeigt ihre aktuellen Details.";
+    clearSearchTimerPreview();
+  }
+  function searchTimerState(rule) {
+    return rule.state==="active"?"AKTIV":
+      rule.state==="inactive"?"INAKTIV":"STATUS UNBEKANNT";
+  }
+  function appendSearchTimerRows(rules) {
+    if(!searchTimerList)return;
+    rules.forEach(function(rule) {
+      var index=searchTimerItems.length,id="searchtimer-row-"+index;
+      var node=document.createElement("li");
+      node.className="native-timer-row tv-focusable";
+      node.tabIndex=-1;
+      node.setAttribute("role","button");
+      node.setAttribute("data-focus-id",id);
+      node.setAttribute("data-searchtimer-index",String(index));
+      node.setAttribute("aria-label",rule.name);
+      var name=document.createElement("strong");
+      name.textContent=rule.name;
+      var info=document.createElement("span");
+      info.textContent="Suchbegriff: "+rule.query+" · "+searchTimerState(rule);
+      node.appendChild(name);
+      node.appendChild(info);
+      controls[id]=node;
+      items.push(node);
+      searchTimerRows.push(id);
+      searchTimerItems.push(rule);
+      searchTimerList.appendChild(node);
+      node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+    });
+    searchTimerList.hidden=searchTimerItems.length===0;
+  }
+  function fetchSearchTimerPage(run,cursor) {
+    if(run!==searchTimerRun || !searchTimerCredential ||
+        !searchTimerBackends.length)return;
+    var backend=searchTimerBackends[searchTimerBackendIndex];
+    searchTimerBusy=true;
+    searchTimerMessage("Lese gespeicherte epgsearch-Suchtimer · "+backend.name+" …");
+    searchTimerCatalog.list(searchTimerCredential,backend.backendId,cursor,
+      function(result) {
+        if(run!==searchTimerRun || currentView!=="timers")return;
+        searchTimerBusy=false;
+        if(!result.ok) {
+          clearSearchTimerRows();
+          searchTimerMessage(searchTimerCatalogError(result,false));
+          return;
+        }
+        if(!cursor)clearSearchTimerRows();
+        var ruleList=result.value.items;
+        if(cursor && searchTimerItems.length && ruleList.length &&
+            ruleList[0].searchTimerId<=
+              searchTimerItems[searchTimerItems.length-1].searchTimerId) {
+          clearSearchTimerRows();
+          searchTimerMessage("Suchtimerreihenfolge geändert – bitte neu laden.");
+          return;
+        }
+        var first=searchTimerRows.length;
+        appendSearchTimerRows(ruleList);
+        searchTimerCursor=result.value.page.hasMore ?
+          result.value.page.nextCursor:null;
+        if(searchTimerBackendLabel)
+          searchTimerBackendLabel.textContent="Backend: "+backend.name+
+            " · "+backend.backendId;
+        searchTimerMessage(searchTimerItems.length ?
+          searchTimerItems.length+" echte Suchtimer geladen · "+
+            (searchTimerCursor?"Weitere Seite verfügbar":"Ende der Liste") :
+          "Keine gespeicherten Suchtimer für dieses Backend.");
+        if(cursor && searchTimerRows[first])setFocus(searchTimerRows[first]);
+      });
+  }
+  function selectSearchTimer(index) {
+    if(searchTimerBusy || !searchTimerCredential ||
+        !searchTimerBackends.length)return;
+    var rule=searchTimerItems[index];
+    if(!rule)return;
+    selectedSearchTimer=rule;
+    ++searchTimerSelectionRun;
+    var ticket=searchTimerSelectionRun;
+    var backend=searchTimerBackends[searchTimerBackendIndex];
+    if(rule.backendId!==backend.backendId)return;
+    clearSearchTimerPreview();
+    if(searchTimerDetailTitle)searchTimerDetailTitle.textContent=rule.name;
+    if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+      "Suchbegriff: "+rule.query+" · "+searchTimerState(rule)+
+      " · Lade aktuellen Regelstand …";
+    searchTimerBusy=true;
+    searchTimerCatalog.detail(searchTimerCredential,backend.backendId,
+      rule.searchTimerId,function(result){
+        if(ticket!==searchTimerSelectionRun || currentView!=="timers" ||
+            selectedSearchTimer!==rule)return;
+        searchTimerBusy=false;
+        if(!result.ok) {
+          if(searchTimerDetailInfo)
+            searchTimerDetailInfo.textContent=searchTimerCatalogError(result,false);
+          if(result.kind==="http" && (result.status===403 || result.status===404))
+            selectedSearchTimer=null;
+          return;
+        }
+        selectedSearchTimer=result.value;
+        if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+          "Suche: "+result.value.query+" · "+searchTimerState(result.value)+
+          " · EPG-Treffer über eigene Schaltfläche ansehen.";
+      });
+  }
+  function searchTimerEventTime(value) {
+    if(/^\d{9,11}$/.test(value)) {
+      var date=new Date(Number(value)*1000);
+      if(!isNaN(date.getTime()))return date.toLocaleString("de-DE");
+    }
+    return value;
+  }
+  function loadSearchTimerPreview() {
+    if(searchTimerBusy || !selectedSearchTimer || !searchTimerCredential ||
+        !searchTimerBackends.length) {
+      if(!selectedSearchTimer)
+        searchTimerMessage("Zuerst einen gespeicherten Suchtimer mit OK auswählen.");
+      return;
+    }
+    var rule=selectedSearchTimer;
+    var backend=searchTimerBackends[searchTimerBackendIndex];
+    if(rule.backendId!==backend.backendId)return;
+    ++searchTimerSelectionRun;
+    var ticket=searchTimerSelectionRun;
+    clearSearchTimerPreview();
+    searchTimerBusy=true;
+    if(searchTimerPreviewStatus)searchTimerPreviewStatus.textContent=
+      "Lese EPG-Treffervorschau … searchtimers.view + epg.view";
+    searchTimerCatalog.preview(searchTimerCredential,backend.backendId,
+      rule.searchTimerId,function(result){
+        if(ticket!==searchTimerSelectionRun || currentView!=="timers" ||
+            selectedSearchTimer!==rule)return;
+        searchTimerBusy=false;
+        if(!result.ok) {
+          if(searchTimerPreviewStatus)
+            searchTimerPreviewStatus.textContent=
+              searchTimerCatalogError(result,true);
+          return;
+        }
+        var value=result.value;
+        if(searchTimerPreviewStatus)
+          searchTimerPreviewStatus.textContent=value.totalCount+
+            " EPG-Texttreffer · "+value.items.length+
+            " angezeigt · keine garantierten Aufnahmen";
+        if(!searchTimerPreviewList)return;
+        value.items.forEach(function(event){
+          var node=document.createElement("li");
+          var title=document.createElement("strong");
+          title.textContent=event.title;
+          var details=document.createElement("span");
+          details.textContent=searchTimerEventTime(event.startTime)+"–"+
+            searchTimerEventTime(event.endTime)+" · "+event.channelId+
+            (event.subtitle?" · "+event.subtitle:"");
+          node.appendChild(title);node.appendChild(details);
+          searchTimerPreviewList.appendChild(node);
+        });
+        searchTimerPreviewList.hidden=value.items.length===0;
+      });
+  }
+  function loadSearchTimers(action) {
+    if(searchTimerBusy || currentView!=="timers")return;
+    if(action==="preview"){loadSearchTimerPreview();return;}
+    if(action==="more") {
+      if(!searchTimerCursor || searchTimerItems.length>=300) {
+        searchTimerMessage("Keine weitere Seite in dieser Ansicht.");return;
+      }
+      fetchSearchTimerPage(searchTimerRun,searchTimerCursor);return;
+    }
+    if(action==="backend") {
+      if(!searchTimerCredential || searchTimerBackends.length<2) {
+        searchTimerMessage("Kein zweites Backend geladen.");return;
+      }
+      ++searchTimerRun;
+      ++searchTimerSelectionRun;
+      searchTimerCatalog.cancel();
+      clearSearchTimerRows();
+      searchTimerBackendIndex=(searchTimerBackendIndex+1)%
+        searchTimerBackends.length;
+      fetchSearchTimerPage(searchTimerRun,null);return;
+    }
+    var read=vault.read();
+    if(!read.ok || !read.credential) {
+      searchTimerMessage("Geräteanmeldung nicht verfügbar – unter Einstellungen prüfen.");
+      return;
+    }
+    var base=serverInput && normalizeSuiteBase(serverInput.value);
+    if(base && base!==read.credential.base) {
+      searchTimerMessage("Gespeicherte Anmeldung gehört zu einem anderen Server.");
+      return;
+    }
+    searchTimerCredential=read.credential;
+    searchTimerBackends=[];
+    searchTimerBackendIndex=0;
+    ++searchTimerSelectionRun;
+    clearSearchTimerRows();
+    var run=++searchTimerRun;
+    searchTimerBusy=true;
+    searchTimerMessage("Prüfe vorhandene Geräteanmeldung …");
+    searchTimerPairing.verify(searchTimerCredential,function(result){
+      if(run!==searchTimerRun || currentView!=="timers")return;
+      if(!result.ok){
+        searchTimerBusy=false;
+        searchTimerMessage(deviceVerificationError(result));return;
+      }
+      markDeviceAuthenticated(searchTimerCredential);
+      searchTimerMessage("Lese Public-v1-Backends …");
+      searchTimerBackendCatalog.listBackends(searchTimerCredential,function(found){
+        if(run!==searchTimerRun || currentView!=="timers")return;
+        if(!found.ok || !found.value.items.length) {
+          searchTimerBusy=false;
+          searchTimerMessage(found.ok?"Keine lesbaren Backends.":
+            channelCatalogError(found));return;
+        }
+        searchTimerBackends=found.value.items;
+        fetchSearchTimerPage(run,null);
+      });
+    });
+  }
 
   // S6.19: one real native VDR timer inventory (not TimerAssignments).
   // No POST, no client-side timer construction and no cross-backend fanout.
@@ -2025,6 +2300,13 @@ function boot() {
       channelCatalog.cancel();
     }
     if (currentView === "timers" && view !== "timers") {
+      ++searchTimerRun;
+      ++searchTimerSelectionRun;
+      searchTimerBusy=false;
+      searchTimerCatalog.cancel();
+      searchTimerBackendCatalog.cancel();
+      searchTimerPairing.cancel();
+      clearSearchTimerRows();
       nativeTimerRun++;
       nativeTimerBusy=false;
       nativeTimerCatalog.cancel();
@@ -2075,6 +2357,19 @@ function boot() {
       recordingStatus("offline", "Bereit für echte Aufnahmen",
         "„Aufnahmen laden“ nutzt die gespeicherte Geräteanmeldung. recordings.view erforderlich.");
     } else if (view === "timers") {
+      ++searchTimerRun;
+      ++searchTimerSelectionRun;
+      searchTimerBusy=false;
+      searchTimerCatalog.cancel();
+      searchTimerBackendCatalog.cancel();
+      searchTimerPairing.cancel();
+      clearSearchTimerRows();
+      searchTimerCredential=null;
+      searchTimerBackends=[];
+      searchTimerBackendIndex=0;
+      if(searchTimerBackendLabel)
+        searchTimerBackendLabel.textContent="Noch kein Backend geladen";
+      searchTimerMessage("Suchtimer laden benötigt searchtimers.view.");
       nativeTimerRun++;
       nativeTimerBusy=false;
       nativeTimerCatalog.cancel();
@@ -2266,6 +2561,14 @@ function boot() {
     if (recordingAction) {
       loadRecordings(recordingAction);
       return;
+    }
+    var searchTimerIndex=item.getAttribute("data-searchtimer-index");
+    if(searchTimerIndex!==null && currentView==="timers") {
+      selectSearchTimer(Number(searchTimerIndex));return;
+    }
+    var searchTimerAction=item.getAttribute("data-searchtimer-action");
+    if(searchTimerAction && currentView==="timers") {
+      loadSearchTimers(searchTimerAction);return;
     }
     var timerIndex=item.getAttribute("data-native-timer-index");
     if(timerIndex!==null && currentView==="timers") {
