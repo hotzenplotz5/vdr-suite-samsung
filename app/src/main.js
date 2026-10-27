@@ -399,9 +399,11 @@ function boot() {
     node.setAttribute("data-home-kind",kind);
     node.setAttribute("data-home-index",String(idx));
     node.setAttribute("aria-label",label);
+    var art=document.createElement("img");art.className="home-card-art";
+    art.alt="";art.hidden=true;
     var title=document.createElement("strong");title.textContent=label;
     var info=document.createElement("small");info.textContent=meta;
-    node.appendChild(title);node.appendChild(info);
+    node.appendChild(art);node.appendChild(title);node.appendChild(info);
     if(typeof progress==="number" && progress>0 && progress<100) {
       var bar=document.createElement("span");bar.className="home-card-progress";
       var value=document.createElement("span");
@@ -412,7 +414,60 @@ function boot() {
     homeCardIds[kind].push(id);homeCardItems[kind].push(item);
     items.push(node);controls[id]=node;
     node.addEventListener("click",function(){if(setFocus(id))activate(node);});
-    return {title:title,info:info};
+    return {node:node,title:title,info:info,art:art};
+  }
+  function homeMetadataText(row,fallback) {
+    var m=row && row.metadata || {},parts=[];
+    if(m.genreText)parts.push(m.genreText.replace(/[\\[\\]]/g,"").replace(/\\|/g," · "));
+    if(Number.isInteger(m.seasonNumber) && Number.isInteger(m.episodeNumber))
+      parts.push("S"+m.seasonNumber+" E"+m.episodeNumber);
+    else if(m.episodeTitle)parts.push(m.episodeTitle);
+    if(row && row.durationKnown && Number.isInteger(row.durationSeconds) &&
+       row.durationSeconds>0)parts.push(Math.ceil(row.durationSeconds/60)+" Min.");
+    if(!parts.length && fallback)parts.push(fallback);
+    return parts.join(" · ");
+  }
+  function homeAttachCardArt(credential,backendId,kind,row,card,token) {
+    if(!card || !card.art)return;
+    var client=createPublicMediaMetadata(window);
+    homeCardArtworkClients.push(client);
+    function alive(){
+      return homeAlive(token) && homeBackendId===backendId &&
+        card.node===controls[card.node.getAttribute("data-focus-id")];
+    }
+    function loaded(result) {
+      if(!alive() || !result.ok || !window.URL ||
+         typeof window.URL.createObjectURL!=="function" ||
+         typeof window.Blob!=="function")return;
+      var url;
+      try{url=window.URL.createObjectURL(new window.Blob(
+        [result.value.bytes],{type:result.value.contentType}));}catch(_){return;}
+      if(!alive()){
+        if(typeof window.URL.revokeObjectURL==="function")window.URL.revokeObjectURL(url);
+        return;
+      }
+      homeCardUrls.push(url);
+      card.art.onerror=function(){
+        card.art.hidden=true;card.art.removeAttribute("src");
+        if(typeof window.URL.revokeObjectURL==="function")window.URL.revokeObjectURL(url);
+        var at=homeCardUrls.indexOf(url);if(at!==-1)homeCardUrls.splice(at,1);
+      };
+      card.art.src=url;card.art.hidden=false;
+    }
+    if(kind==="epg"){
+      if(row.event && row.event.eventId)
+        client.epgPreferredArtwork(credential,backendId,row.channel.channelId,
+          row.event.eventId,loaded);
+      return;
+    }
+    if(!/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
+    client.artworkList(credential,backendId,row.recordingId,function(list){
+      if(!alive() || !list.ok)return;
+      var art=list.value.items.filter(function(x){return x.kind==="poster";})[0] ||
+        list.value.items.filter(function(x){return x.kind==="fanart";})[0];
+      if(art)client.artworkBytes(credential,backendId,
+        row.recordingId,art.artworkId,loaded);
+    });
   }
   function homeFeatureShow(row,kind,priority,subtitle) {
     if(!row || priority<homeFeaturePriority)return;
