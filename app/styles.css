@@ -715,3 +715,59 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   .home-plan-card { padding:17px; }
   .home-media-card { flex-basis:198px; height:86px; }
 }
+
+/* S8.2 real-TV feedback: visible search results and full-size Media Home rails.
+   Tizen 5.5 / Chromium 69: only flex, grid, :empty and legacy-safe CSS. */
+.home-heading {min-height:70px;margin-bottom:12px;}
+.home-feature-layout {min-height:285px;grid-template-columns:minmax(0,3.5fr) minmax(220px,1fr);}
+.home-feature {min-height:285px;}
+.home-content-rails {padding-top:5px;}
+.home-section {margin-top:18px;}
+.home-cards:empty {min-height:0;}
+.home-cards:not(:empty) {min-height:178px;padding-bottom:5px;}
+.home-media-card {
+  flex:0 0 285px;height:171px;padding:17px 17px 15px;
+  justify-content:flex-end;
+  background:linear-gradient(140deg,#122d4d,#071329);
+}
+.home-media-card .home-card-art:not([hidden]) {
+  width:100%;height:100%;opacity:.60;
+  -webkit-mask-image:linear-gradient(to bottom,#000 25%,transparent 100%);
+}
+.home-media-card:after {
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to top,rgba(3,10,23,.96),rgba(3,10,23,.12) 88%);
+}
+.home-media-card strong,.home-media-card small,.home-media-card .home-card-progress {
+  z-index:2;flex-shrink:0;
+}
+.home-media-card strong {font-size:20px;max-height:54px;}
+.home-media-card small {font-size:13px;}
+.general-search-page {padding:18px 35px 20px;overflow-y:auto;}
+.general-search-page > h1 {font-size:38px;margin:4px 0 5px;}
+.general-search-page > p {font-size:15px;line-height:1.25;margin:0 0 7px;max-width:none;}
+.general-search-bar {margin:8px 0;padding:11px 15px;}
+.general-search-entry .action-button {padding:11px 14px;margin-top:0;}
+#global-search-input {min-height:43px;font-size:18px;}
+.general-search-grid {grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;}
+.general-search-group {padding:12px;}
+.general-search-group header {margin-bottom:6px;}
+.general-search-group h2 {font-size:21px;}
+.general-search-group > p {margin:5px 0;color:#cce2f5;min-height:20px;}
+.global-search-results {max-height:34vh;min-height:120px;overflow-y:auto;margin:5px 0;}
+.global-search-results[hidden] {display:none!important;}
+.global-search-row {min-height:66px;padding:9px 12px;}
+.global-search-row strong {font-size:17px;}
+.general-search-detail {padding:10px;margin:9px 0;max-height:140px;overflow-y:auto;}
+.epg-timer-actions {display:flex;align-items:center;flex-wrap:wrap;margin-top:9px;}
+.epg-timer-actions .action-button {margin:4px 9px 4px 0;padding:10px 13px;min-width:185px;font-size:16px;}
+.epg-timer-status {font-size:14px!important;color:#add7f7!important;line-height:1.3!important;margin:5px 0!important;max-width:100%!important;}
+@media(max-width:1380px){
+  .home-feature-layout {min-height:240px;}
+  .home-feature {min-height:240px;}
+  .home-media-card {flex-basis:230px;height:140px;}
+  .home-cards:not(:empty) {min-height:145px;}
+  .home-media-card strong {font-size:17px;}
+  .general-search-page {padding:12px 22px;}
+  .global-search-results {max-height:30vh;}
+}
