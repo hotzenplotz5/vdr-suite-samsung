@@ -668,3 +668,19 @@ Nutzer meldet beim neuen Live-TV-Test **`HTTP 401 · Cookie/SameSite/Proxy-Pfad 
 **TV-Ablauf:** Nach wirklich sichtbarem isoliertem WITs-Datei-Push (neu angezeigte Suchfelder/-listen) auf Samsung-Tizen-5.5 `Suche` öffnen, mit der Samsung-Tastatur z. B. `Hobbit` eingeben, Done, `Suchen`. Ergebnisse/Anzahl im Webfrontend desselben Backends unter gleichen Suchkriterien vergleichen, danach `hobbit` und `HOBBIT`. OK auf EPG-Sendung/Aufnahme: vorhandene Public-v1-Detail-GETs und korrekte Textdarstellung prüfen. Mit `Mehr Aufnahmen` und `Mehr EPG-Treffer` getrennt blättern. Berechtigung für nur eine Kategorie gezielt prüfen: 403 der anderen darf bereits geladene Treffer nicht fälschlich auf 0 setzen. Bei 503 Nichtverfügbarkeit des Index melden, keine erdachte leere Treffermenge; bei 404 prüfen, ob das installierte Backend die Public-v1-Suchendpunkte bereits enthält. Tastatur-Backspace/Pfeile/Done und Navigation/alte Antworten beobachten.
 
 **Noch nicht als Parität behaupten:** Personen-/Bild-Suche und Webinterne Match-Reasons/Poster sind nicht Bestandteil der öffentlichen Device-Projektion. Kein Full-EPG-Crawl, kein automatischer Aufnahme-/Timer-POST, keine ungeschützte Medien-URL, kein Pairing-Reset. CI-Erfolg allein ist kein installierter Samsung-Hardware-PASS.
+
+
+## S8.1 – Media Home: echte Samsung-Abnahme OFFEN (27.10.2026)
+
+Gerät GU43TU6979UXZG, Tizen 5.5. Quelle/Runtime/CI sind keine Hardware-Abnahme. Der frühere S6.17-Audio-PASS bleibt gültig, beweist aber S8.1 nicht. Bestehende DEV-Kopplung erhalten, Produktiv-App VDRSuiteTV.VDRSuite nie anfassen.
+
+Prüfmatrix:
+- WITs: Vor Update app/AGENTS.md, docs/wits-isolated-development.md und docs/windows-update-workflow.md befolgen; Port 4050 und laufenden Watch prüfen, keinen zweiten starten. Erst echter Datei-Push, DEV-Reload und sichtbar neue S8.1-Buildkennung belegen Übertragung. Build/Check/Staging allein sind nicht ausreichend.
+- Optik: dezenter Status beim Logo, Hero mit realem Titel, kompakte Timerkarte und drei reale Inhaltsschienen ohne doppelte Navigation oder abgeschnittene Fokusrahmen.
+- Continue: serverseitige Position/Dauer überprüfen; unbekannte Dauer ohne erfundenen Prozentwert. Kein automatischer Session-Start.
+- Mediathek: tatsächliche Titel/Genres/Staffel/Episode/Laufzeit/Poster vergleichen. Aufnahme-Katalog nicht als chronologisch darstellen. Artwork-Mangel/Fehler fällt auf hochwertigen textbasierten Hintergrund zurück.
+- EPG: reale gerade laufende Senderereignisse mit Sender und Zeit; autorisierte bevorzugte EPG-Bilder nur bei echter Event-ID; native Timer korrekt. Bei 403 für eine Domäne bleiben andere Bereiche benutzbar.
+- Bedienung: D-Pad, OK, BACK, dynamischer Rail-Fokus, Verlassen/Wiederbetreten und Vordergrund/Hintergrund. Keine verspäteten Antworten oder alten Poster. Nach echter Übertragung gleiche KeyManager-Device-ID prüfen, kein Neu-Pairing.
+- Fehlertests: getrennte Grants media.recording.play, recordings.view, channels.view, epg.view, timers.view; 401/403/503 ohne erfundene Inhalte oder Credential-Reset.
+
+Status: ALLE S8.1 REAL-TV-PUNKTE OFFEN bis zur konkreten Nutzerbestätigung. PR #33 bleibt Draft. Rückweg: nur DEV-Watch kontrolliert beenden; weder PROD-App noch gekoppelte Identität überschreiben oder deinstallieren.
