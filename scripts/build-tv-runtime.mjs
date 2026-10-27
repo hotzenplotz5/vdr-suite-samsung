@@ -22,6 +22,7 @@ const inputs = [
   "app/src/api/recording-catalog.js",
   "app/src/api/native-timers.js",
   "app/src/api/search-timers.js",
+  "app/src/api/global-search.js",
   "app/src/api/media-metadata.js",
   "app/src/api/recording-playback.js",
   "app/src/api/live-playback.js",
