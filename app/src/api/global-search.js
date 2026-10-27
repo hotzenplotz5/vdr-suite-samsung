@@ -36,10 +36,11 @@ export function createPublicGlobalSearch(environment) {
     return text;
   }
   function validRow(item,scope,kind) {
-    if(!item || item.kind!==kind || item.backendId!==scope ||
+    if(!item || item.kind!==(kind==="recordings"?"recording":"epg") ||
+        item.backendId!==scope ||
         typeof item.title!=="string" || !item.title ||
         item.title.length>4096)return false;
-    if(kind==="recording")return /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+    if(kind==="recordings")return /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
       typeof item.edited==="boolean";
     return typeof item.channelId==="string" && item.channelId.length>0 &&
       item.channelId.length<=256 &&
