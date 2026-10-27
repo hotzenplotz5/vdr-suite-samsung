@@ -132,6 +132,13 @@
                     <p id="live-epg-detail-subtitle" class="live-epg-detail-subtitle" hidden></p>
                     <p id="live-epg-detail-description" class="live-epg-detail-description"></p>
                     <p id="live-epg-artwork-status" class="live-epg-artwork-status" aria-live="polite"></p>
+                    <div class="epg-timer-actions">
+                      <button type="button" class="action-button tv-focusable"
+                              data-focus-id="live-epg-record" data-epg-timer-action="prepare">Sendung aufnehmen</button>
+                      <button type="button" class="action-button tv-focusable"
+                              data-focus-id="live-epg-operation" data-epg-timer-action="status" hidden>Timerstatus prüfen</button>
+                    </div>
+                    <p id="live-epg-timer-status" class="epg-timer-status" aria-live="polite">Sendung auswählen und Timer ausdrücklich bestätigen.</p>
                   </div>
                 </div>
               </section>
@@ -240,6 +247,13 @@
         <section class="general-search-detail" aria-label="Ausgewählter Suchtreffer">
           <strong id="global-search-detail-title">Noch kein Treffer ausgewählt</strong>
           <p id="global-search-detail-description">OK auf einem Treffer zeigt die Details aus API v1.</p>
+          <div class="epg-timer-actions">
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="search-epg-record" data-epg-timer-action="prepare" hidden>EPG-Sendung aufnehmen</button>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="search-epg-operation" data-epg-timer-action="status" hidden>Timerstatus prüfen</button>
+          </div>
+          <p id="search-epg-timer-status" class="epg-timer-status" aria-live="polite"></p>
         </section>
         <div class="detail-actions">
           <button type="button" class="action-button primary tv-focusable"
