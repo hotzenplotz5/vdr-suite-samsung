@@ -25,7 +25,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-epg-action", "data-epg-scroll", "data-recordings-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
