@@ -1109,7 +1109,7 @@ function boot() {
 
 
 
-  // S6.22 – common Web search index, separately authorized Public-v1 reads.
+  // S6.23 – common Web search index, separately authorized Public-v1 reads.
   // EPG and recordings are independent panes (including errors and pagination).
   function globalSearchMessage(message) {
     if(globalSearchStatusLabel)globalSearchStatusLabel.textContent=message;
