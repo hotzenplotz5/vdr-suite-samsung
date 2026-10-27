@@ -19,6 +19,7 @@ import { createEpgTimerIntents, epgTimerIntentError } from "./api/epg-timer-inte
 import { createPublicMediaMetadata, mediaMetadataError } from "./api/media-metadata.js";
 import { createRecordingPlaybackClient, recordingPlaybackError } from "./api/recording-playback.js";
 import { createLivePlaybackClient, livePlaybackError } from "./api/live-playback.js";
+import { createStreamdevLivePlayer, parseStreamdevBase } from "./platform/streamdev-live.js";
 import { probeMediaHttpHeaders, describeMediaAccessProbe } from "./api/media-access-probe.js";
 import { createSamsungRecordingPlayer, conservativeSamsungCapabilities, samsungAacHlsTsCapabilities, samsungPlaybackDiagnosis, describeSamsungAudio, samsungTvSoundStatus } from "./platform/recording-player.js";
 import { createHtml5RecordingPlayer, html5PlaybackDiagnosis } from "./platform/html5-recording-player.js";
@@ -186,6 +187,19 @@ function boot() {
   var livePlayerSurface = document.getElementById("live-player-surface");
   var livePlayerHint = document.getElementById("live-player-hint");
   var liveHtml5Player = createHtml5RecordingPlayer(liveHtml5Video,window,"live-channel");
+  var streamdevPlayer=createStreamdevLivePlayer(window);
+  var streamdevBaseInput=document.getElementById("live-streamdev-base");
+  var streamdevStatus=document.getElementById("live-streamdev-status");
+  var streamdevBase=null,streamdevEditing=false,streamdevActive=false;
+  var streamdevRun=0;
+  try {
+    var storedStreamdev=window.localStorage &&
+      window.localStorage.getItem("vdr-suite.samsung.streamdevBase");
+    streamdevBase=parseStreamdevBase(storedStreamdev);
+  } catch(_) {}
+  if(streamdevBaseInput && streamdevBase)streamdevBaseInput.value=streamdevBase;
+  if(streamdevStatus && streamdevBase)
+    streamdevStatus.textContent="Streamdev im Heimnetz konfiguriert · bereit für direkte AVPlay-Wiedergabe.";
   var livePlaybackSession = null;
   var livePlayBusy = false;
   var liveTeardownBusy = false;
@@ -274,7 +288,8 @@ function boot() {
     if (currentView === "live") {
       var liveFocusRows = [NAV_ROW,
         ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
-       "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
+       "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"],
+        ["live-streamdev-base","live-streamdev-save"]];
       var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
       for (var i=0;i<count;i++) {
         var cells=[];
@@ -1578,6 +1593,84 @@ function boot() {
           "24-Stunden-Programm · "+(scope.cursor ?
             "Weitere Sendungen verfügbar" : "Ende des Zeitfensters");
       });
+  }
+  function streamdevMessage(msg){if(streamdevStatus)streamdevStatus.textContent=msg;}
+  function saveStreamdevBase(){
+    if(streamdevActive||streamdevPlayer.isBusy()){
+      streamdevMessage("Vor Änderungen zuerst Live-TV mit STOP beenden.");return;
+    }
+    var base=parseStreamdevBase(streamdevBaseInput && streamdevBaseInput.value);
+    if(!base){
+      streamdevMessage("Bitte eine lokale Adresse wie http://192.168.178.20:3000 eingeben.");
+      return;
+    }
+    streamdevBase=base;
+    if(streamdevBaseInput)streamdevBaseInput.value=base;
+    try {if(window.localStorage)window.localStorage.setItem(
+      "vdr-suite.samsung.streamdevBase",base);
+    } catch(_) { /* Live test remains possible for this app session. */ }
+    streamdevMessage("Streamdev-Adresse gespeichert · Sender wählen und direkt starten.");
+    setFocus("live-streamdev-save");
+  }
+  function stopStreamdevLive(reason) {
+    ++streamdevRun;
+    streamdevPlayer.stop();
+    streamdevActive=false;
+    if(livePlayerSurface)livePlayerSurface.hidden=true;
+    if(document.documentElement)document.documentElement.classList.remove("streamdev-live-active");
+    if(liveHtml5Video)liveHtml5Video.hidden=false;
+    if(reason==="user" && currentView==="live")
+      liveStatus("ready","Streamdev Live-TV beendet",
+        "AVPlay gestoppt, TCP-Stream geschlossen. Nächsten Sender wählen.");
+  }
+  function startStreamdevLive(){
+    if(livePlaybackSession||livePlayBusy||liveTeardownBusy||
+       streamdevActive||streamdevPlayer.isBusy())return;
+    if(!selectedLiveChannel||!liveBackends.length||
+       selectedLiveChannel.backendId!==liveBackends[liveBackendIndex].backendId){
+      liveStatus("error","Kein Sender gewählt","Zuerst Sender laden und mit OK auswählen.");return;
+    }
+    if(!streamdevBase){
+      liveStatus("error","Streamdev-Adresse fehlt",
+        "Bitte die lokale Streamdev-Adresse eingeben und speichern.");return;
+    }
+    if(!streamdevPlayer.available()){
+      liveStatus("error","Samsung AVPlay fehlt",
+        "Tizen stellt die native AVPlay-API nicht bereit.");return;
+    }
+    var token=++streamdevRun;
+    streamdevActive=true;
+    if(liveHtml5Video)liveHtml5Video.hidden=true;
+    if(livePlayerSurface)livePlayerSurface.hidden=false;
+    if(document.documentElement)document.documentElement.classList.add("streamdev-live-active");
+    if(livePlayerHint)livePlayerHint.textContent=
+      "Streamdev · MPEG-TS · AVPlay verbindet … · STOP/ZURÜCK beendet";
+    liveStatus("loading","Streamdev wird geöffnet",
+      "Direkter MPEG-TS vom eigenen VDR · ohne HTML5 und ohne MediaSession.");
+    var started=streamdevPlayer.start(streamdevBase,selectedLiveChannel.channelId,
+      function(state,detail){
+        if(token!==streamdevRun||currentView!=="live")return;
+        if(state==="playing"){
+          liveStatus("ready","AVPlay Live-TV gestartet",
+            "AVPlay PLAYING gemeldet · Bild und Ton am Fernseher überprüfen.");
+          if(livePlayerHint)livePlayerHint.textContent=
+            "AVPlay PLAYING · Bild/Ton prüfen · STOP/ZURÜCK beendet";
+        } else if(state==="buffering"||state==="preparing"){
+          if(livePlayerHint)livePlayerHint.textContent=
+            "Streamdev · "+(state==="buffering"?"puffert":"bereitet vor")+
+            " · STOP/ZURÜCK beendet";
+        } else if(state==="error"||state==="ended"||state==="unsupported"){
+          stopStreamdevLive("failure");
+          liveStatus("error",state==="ended"?
+            "Streamdev-Verbindung beendet":"Streamdev/AVPlay fehlgeschlagen",
+            state==="ended"?
+              "Der direkte VDR-Stream ist abgebrochen. Streamdev-Tuner/Netzwerk prüfen.":
+              "AVPlay konnte den MPEG-TS nicht starten oder dekodieren ("+
+              (detail&&detail.stage||"Stream")+
+              "). TV-Decoder, Streamdev-Port und VDR-Sender prüfen.");
+        }
+      });
+    if(!started && streamdevActive)stopStreamdevLive("failure");
   }
   // Explicit S6.18 Live-TV API v1 test, never triggered by focusing a channel.
   // STOP releases the server tuner before a new Live-TV session may begin.
