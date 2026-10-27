@@ -178,3 +178,10 @@ Die Mediathek ist **nicht auf 20 oder 100 Aufnahmen insgesamt begrenzt**. Es wer
 **Status:** Code/Tests zunächst source-only; die TV-Installation und der reale Grant-/Mehrseiten-Test müssen separat bestätigt werden. Nach einer VS-Code-`Run Project`-Neuinstallation kann das lokale Device-Credential verlorengehen; dadurch entsteht auf dem Server **kein** automatisch wiederverwendbares Device. Bestehende Geräte nicht blind löschen oder erneut koppeln. Die VDR-`channels.conf`-Senderreihenfolge bleibt unabhängig davon eine offene API-v1-Serverfrage.
 
 **Lokaler Samsung-Workflow:** Für DEV-Watch nach explizitem separatem Bootstrap **nur** `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:dev:prepare`, `npm.cmd run tv:watch` verwenden. `Build Project → Run Project` kann die Device-Anmeldung löschen; [sicheren Watch-Pfad oben](#entwicklungs-updates-ohne-erneutes-geräte-pairing--samsung-wits-watch-2026-10-25) beachten.
+
+
+## S8.1 – Samsung Media Home (27.10.2026)
+
+Das neue Premium-Home nutzt vorhandene Navigationspunkte, eine dezente Verbindungsmeldung am Logo und zeigt echte Inhalte statt doppelter Funktionskacheln. Hero, Weitersehen mit serverseitigem Continue-Watching, Aus deiner Mediathek, Jetzt im TV und der kompakte native Aufnahmeplaner lesen vorhandene öffentliche API v1. Aufnahme- und EPG-Bilder werden nur als Device-autorisierte Binärdaten geladen; bei fehlendem Artwork bleibt das dunkelblaue Fallback. Metadaten und Fortschritte werden nicht erfunden.
+
+Bei sichtbarem Home-Eintritt werden Device, Backend und getrennte Lesedomänen automatisch abgefragt. Fehlende einzelne Grants blockieren nicht die ganze Seite. Die Katalogliste ist nach Recording-ID sortiert, nicht nach Aufnahmedatum. Home startet keine Wiedergabe. Source-/CI- und TV-Abnahme bleiben getrennt: der neue Stand ist auf dem Samsung erst nach tatsächlichem WITs-Push sichtbar. Siehe ROADMAP.md, docs/api-contracts.md, docs/hardware-acceptance.md und docs/wits-isolated-development.md. PR #33 bleibt Draft; Produktiv-App unverändert.
