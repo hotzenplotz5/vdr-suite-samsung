@@ -227,9 +227,9 @@
         </div>
       </section>
       <section class="page detail-page" data-panel="timers" hidden>
-        <span class="detail-eyebrow">TIMER · DESIGNVORSCHAU</span>
+        <span class="detail-eyebrow">TIMER · ECHTE VDR-TIMER · PUBLIC API V1</span>
         <h1>Alles im Plan.</h1>
-        <p>Behalte geplante Sendungen und Aufnahmetimer im Blick.</p>
+        <p>Deine echten VDR-Aufnahmetimer – nur ansehen, ohne Änderungen.</p>
         <div class="detail-grid">
           <div class="detail-art detail-art-timers" aria-hidden="true">
             <span class="detail-art-kicker">NICHTS VERPASSEN</span>
@@ -244,11 +244,16 @@
             <div class="detail-skeleton" id="detail-state-skeleton-timers" hidden aria-hidden="true">
               <i></i><i></i><i></i>
             </div>
-            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+            <span class="detail-status-hint">Public API v1 · timers.view erforderlich · nur lesend</span>
           </section>
         </div>
+        <p id="native-timer-backend-name" class="native-timer-backend">Noch kein Backend geladen</p>
+        <ul id="native-timer-list" class="native-timer-list" aria-label="Echte VDR-Timer" hidden></ul>
         <div class="detail-actions">
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-load" data-native-timers-action="load">Timer laden</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-timers-more" data-native-timers-action="more">Weitere Timer</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-timers-backend" data-native-timers-action="backend">Backend wechseln</button>
           <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-timers-preview" data-preview-route="timers">Zustände ansehen</button>
         </div>
       </section>
