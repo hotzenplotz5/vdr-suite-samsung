@@ -54,7 +54,7 @@ test("S6.19 reject stale, malformed or foreign Timer pages",()=>{
  }
  assert.deepEqual(results.map(x=>x.kind),Array(5).fill("bad_response"));
  assert.match(nativeTimerCatalogError({kind:"http",status:403}),/timers\.view/);
- assert.match(nativeTimerCatalogError({kind:"http",status:503}),/nicht als leere Timerliste/);
+ assert.match(nativeTimerCatalogError({kind:"http",status:503}),/nicht als leere Timerliste/i);
 });
 test("S6.19 forbid invalid target, abort abandoned timer reads and don't retry",()=>{
  const t=mock(),api=createNativeTimerCatalog(t),results=[];
