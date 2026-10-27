@@ -106,6 +106,7 @@
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-preview" data-live-action="load">Sender laden</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-more" data-live-action="more">Mehr Sender</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-backend" data-live-action="backend">Backend wechseln</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-play" data-live-play="start">Live-TV testen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-now" data-live-epg-action="now">Jetzt / Nächste</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-window" data-live-epg-action="window">Programm 24h</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-more" data-live-epg-action="more">Weitere Sendungen</button>
@@ -145,6 +146,11 @@
               </div>
             </section>
           </section>
+        </div>
+        <div id="live-player-surface" class="live-player-surface" hidden
+             aria-label="Public API v1 geschützter Live-MP4-Test">
+          <video id="live-html5-video" playsinline preload="none" tabindex="-1"></video>
+          <p id="live-player-hint" aria-live="polite">Live-MP4 · HTML5-Test · STOP/ZURÜCK beendet · PLAY/PAUSE schaltet um</p>
         </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>
