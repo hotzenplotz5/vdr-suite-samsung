@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"dbc25452674e","label":"Samsung v0.1.0 · S6.4 · bdbc25452674e"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.1","build":"e11ea4617168","label":"Samsung v0.1.0 · S8.1 · be11ea4617168"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1035,6 +1035,90 @@
     return "Aufnahmen konnten nicht geladen werden.";
   }
   // END app/src/api/recording-catalog.js
+
+  // BEGIN app/src/api/home-continue.js
+  // S8.1 Home content: true actor-scoped Continue Watching, never inferred from
+  // a recording list or from localStorage. Read-only Device Public API v1.
+  function createHomeContinueWatching(environment) {
+    var env=environment||{},pending=null,serial=0;
+    function cancel(){
+      serial++;
+      if(pending && typeof pending.abort==="function")
+        try{pending.abort();}catch(_){}
+      pending=null;
+    }
+    function validCredential(c){
+      return c && typeof c.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+        /^[A-Za-z0-9._-]{1,128}$/.test(c.credentialId) &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+    }
+    function load(credential,backendId,done){
+      if(!validCredential(credential) ||
+         typeof backendId!=="string" ||
+         !/^[A-Za-z0-9._-]{1,128}$/.test(backendId) ||
+         typeof env.XMLHttpRequest!=="function"){
+        done({ok:false,kind:"request"});return;
+      }
+      cancel();
+      var ticket=serial,finished=false,xhr=new env.XMLHttpRequest();
+      pending=xhr;
+      var url=credential.base.replace(/\/$/,"")+
+        "/api/v1/recording-playback-sessions/continue-watching?backendId="+
+        encodeURIComponent(backendId);
+      function finish(result){
+        if(finished || ticket!==serial)return;
+        finished=true;pending=null;done(result);
+      }
+      try{
+        xhr.open("GET",url,true);xhr.timeout=10000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          credential.credentialId+"."+credential.credentialSecret);
+        xhr.onload=function(){
+          if(xhr.responseURL && xhr.responseURL!==url){
+            finish({ok:false,kind:"response"});return;
+          }
+          if(xhr.status!==200){
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var data=null;try{data=JSON.parse(xhr.responseText);}catch(_){}
+          if(!data || data.backendId!==backendId || data.limit!==50 ||
+             !Array.isArray(data.items) || data.items.length>50 ||
+             !data.items.every(function(item){
+               return item && /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+                 Number.isInteger(item.positionSeconds) &&
+                 item.positionSeconds>0 &&
+                 (item.durationSeconds===null ||
+                   (Number.isInteger(item.durationSeconds) &&
+                    item.durationSeconds>item.positionSeconds)) &&
+                 typeof item.resumeSupport==="string" &&
+                 item.resumeSupport.length>0 && item.resumeSupport.length<=64;
+             })){
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:data});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      }catch(_){finish({ok:false,kind:"network"});}
+    }
+    return {load:load,cancel:cancel};
+  }
+  function homeContinueError(result){
+    if(result && result.kind==="http"){
+      if(result.status===401)return "Geräteanmeldung abgewiesen.";
+      if(result.status===403)return "Weitersehen benötigt media.recording.play.";
+      if(result.status===404)return "Weitersehen auf diesem API-v1-Server noch nicht verfügbar.";
+      if(result.status===503)return "Wiedergabeverlauf derzeit nicht verfügbar.";
+      return "Weitersehen HTTP "+result.status+".";
+    }
+    return "Weitersehen derzeit nicht abrufbar.";
+  }
+  // END app/src/api/home-continue.js
 
   // BEGIN app/src/api/native-timers.js
   // S6.19: read-only Public v1 snapshot of real native VDR timers.
@@ -2591,11 +2675,6 @@
   const NAV_ROW = [
     "nav-home", "nav-live", "nav-recordings", "nav-search", "nav-timers", "nav-settings"
   ];
-  const HOME_ROWS = [
-    ["stage-favorites", "stage-hero", "stage-recordings"],
-    ["action-live", "action-recordings", "action-settings"],
-    ["rail-recordings", "rail-live", "rail-search", "rail-timers"]
-  ];
   const ROUTES = ["home", "live", "recordings", "search", "timers", "settings"];
   const PREVIEW_ROUTES = ["live", "recordings", "search", "timers"];
   
@@ -2619,6 +2698,34 @@
     var vault = createDeviceVault(window);
     var channelCatalog = createChannelCatalog(window);
     var recordingCatalog = createRecordingCatalog(window);
+    var homePairing = createPairingClient(window);
+    var homeBackendCatalog = createChannelCatalog(window);
+    var homeRecordingCatalog = createRecordingCatalog(window);
+    var homeResume = createHomeContinueWatching(window);
+    var homeTimerCatalog = createNativeTimerCatalog(window);
+    var homeChannelCatalog = createChannelCatalog(window);
+    var homeEpgMetadata = createPublicMediaMetadata(window);
+    var homeFeatureMetadata = createPublicMediaMetadata(window);
+    var homeFeatureArtwork = createPublicMediaMetadata(window);
+    var homeContinueMetadata = [
+      createPublicMediaMetadata(window),
+      createPublicMediaMetadata(window),
+      createPublicMediaMetadata(window)
+    ];
+    var homeRun = 0;
+    var homeFeatureRun = 0;
+    var homeCredential = null;
+    var homeBackendId = null;
+    var homeFeatureKind = "recordings";
+    var homeFeaturePriority = 0;
+    var homeArtworkUrl = null;
+    var homeCardArtworkClients = [];
+    var homeCardDetailClients = [];
+    var homeCardUrls = [];
+    var homeEpgReaders = [];
+    var homeCardIds = {continue:[],recordings:[],epg:[]};
+    var homeCardItems = {continue:[],recordings:[],epg:[]};
+    var homeFeaturePoster = document.getElementById("home-feature-poster");
     var globalSearchClient = createPublicGlobalSearch(window);
     var globalSearchMetadata = createPublicMediaMetadata(window);
     var globalSearchCatalog = createChannelCatalog(window);
@@ -2775,6 +2882,12 @@
     var connectionResult = document.getElementById("suite-connection-result");
     var homeServerState = document.getElementById("home-server-state");
     var topbarServerState = document.getElementById("topbar-server-status");
+    var homeContentStatus = document.getElementById("home-content-status");
+    var homeFeatureKicker = document.getElementById("home-feature-kicker");
+    var homeFeatureTitle = document.getElementById("home-feature-title");
+    var homeFeatureDescription = document.getElementById("home-feature-description");
+    var homeFeatureMeta = document.getElementById("home-feature-meta");
+    var homeTimerSummary = document.getElementById("home-timer-summary");
     var message = document.getElementById("message");
     var keyStatus = document.getElementById("key-status");
     // The visible label comes from the packaged runtime, never from Git, a
@@ -2791,7 +2904,13 @@
     });
   
     function focusRows() {
-      if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
+      if (currentView === "home") {
+        var homeRows=[NAV_ROW,["home-refresh"],["home-feature","home-timer-open"]];
+        ["continue","recordings","epg"].forEach(function(kind){
+          if(homeCardIds[kind].length)homeRows.push(homeCardIds[kind].slice());
+        });
+        return homeRows;
+      }
       if (currentView === "live") {
         var liveFocusRows = [NAV_ROW,
           ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
@@ -2852,6 +2971,432 @@
       return [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
         ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
         : ["detail-" + currentView + "-home"]];
+    }
+  
+  
+    // S8.1: Home composes existing backend-owned domains. No synthetic
+    // "recently recorded" ordering and no invented resume positions.
+    function homeMessage(id,message) {
+      var node=document.getElementById(id);
+      if(node)node.textContent=message;
+    }
+    function homeAlive(token){
+      return token===homeRun && currentView==="home";
+    }
+    function homeClearArtwork(){
+      if(homeFeaturePoster){
+        homeFeaturePoster.hidden=true;
+        homeFeaturePoster.onerror=null;
+        homeFeaturePoster.onload=null;
+        homeFeaturePoster.removeAttribute("src");
+      }
+      if(homeArtworkUrl && window.URL &&
+          typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(homeArtworkUrl);
+      homeArtworkUrl=null;
+    }
+    function homeCancelReads(){
+      ++homeRun;++homeFeatureRun;
+      homePairing.cancel();homeBackendCatalog.cancel();
+      homeRecordingCatalog.cancel();homeResume.cancel();
+      homeTimerCatalog.cancel();homeChannelCatalog.cancel();
+      homeEpgMetadata.cancel();homeFeatureMetadata.cancel();
+      homeFeatureArtwork.cancel();
+      homeContinueMetadata.forEach(function(client){client.cancel();});
+      homeCardArtworkClients.forEach(function(client){client.cancel();});
+      homeCardDetailClients.forEach(function(client){client.cancel();});
+      homeEpgReaders.forEach(function(client){client.cancel();});
+      homeCardArtworkClients=[];homeCardDetailClients=[];homeEpgReaders=[];
+      homeCardUrls.forEach(function(url){
+        if(window.URL && typeof window.URL.revokeObjectURL==="function")
+          window.URL.revokeObjectURL(url);
+      });
+      homeCardUrls=[];
+      homeClearArtwork();
+    }
+    function homeClearCards(){
+      // Always leave the focused dynamic rail before removing its DOM node.
+      if((homeCardIds.continue.concat(homeCardIds.recordings,homeCardIds.epg))
+          .indexOf(focusedId)>=0) setFocus("home-refresh");
+      ["continue","recordings","epg"].forEach(function(kind){
+        homeCardIds[kind].forEach(function(id){
+          var node=controls[id];delete controls[id];
+          var i=items.indexOf(node);if(i!==-1)items.splice(i,1);
+        });
+        homeCardIds[kind]=[];homeCardItems[kind]=[];
+        var list=document.getElementById("home-"+kind+"-list");
+        if(list)list.textContent="";
+      });
+      homeFeaturePriority=0;homeFeatureKind="recordings";
+      homeClearArtwork();
+      if(homeFeatureKicker)homeFeatureKicker.textContent="DEINE MEDIATHEK";
+      if(homeFeatureTitle)homeFeatureTitle.textContent="Fernsehen neu erleben.";
+      if(homeFeatureDescription)homeFeatureDescription.textContent=
+        "Echte Sendungen, Aufnahmen und dein Wiedergabeverlauf – direkt von VDR-Suite.";
+      if(homeFeatureMeta)homeFeatureMeta.textContent="Inhalte werden geladen …";
+      if(homeTimerSummary)homeTimerSummary.textContent="Timerstatus wird gelesen …";
+    }
+    function homeCard(kind,item,label,meta,progress){
+      var list=document.getElementById("home-"+kind+"-list");
+      if(!list)return null;
+      var idx=homeCardItems[kind].length,id="home-"+kind+"-row-"+idx;
+      var node=document.createElement("button");
+      node.type="button";
+      node.className="home-media-card tv-focusable";
+      node.setAttribute("data-focus-id",id);
+      node.setAttribute("data-home-kind",kind);
+      node.setAttribute("data-home-index",String(idx));
+      node.setAttribute("aria-label",label);
+      var art=document.createElement("img");art.className="home-card-art";
+      art.alt="";art.hidden=true;
+      var title=document.createElement("strong");title.textContent=label;
+      var info=document.createElement("small");info.textContent=meta;
+      node.appendChild(art);node.appendChild(title);node.appendChild(info);
+      if(typeof progress==="number" && progress>0 && progress<100) {
+        var bar=document.createElement("span");bar.className="home-card-progress";
+        var value=document.createElement("span");
+        value.style.width=Math.min(99,Math.max(1,Math.round(progress)))+"%";
+        bar.appendChild(value);node.appendChild(bar);
+      }
+      list.appendChild(node);
+      homeCardIds[kind].push(id);homeCardItems[kind].push(item);
+      items.push(node);controls[id]=node;
+      node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+      return {node:node,title:title,info:info,art:art};
+    }
+    function homeMetadataText(row,fallback) {
+      var m=row && row.metadata || {},parts=[];
+      if(m.genreText)parts.push(m.genreText.split("[").join("").split("]").join("").split("|").join(" · "));
+      if(Number.isInteger(m.seasonNumber) && Number.isInteger(m.episodeNumber))
+        parts.push("S"+m.seasonNumber+" E"+m.episodeNumber);
+      else if(m.episodeTitle)parts.push(m.episodeTitle);
+      if(row && row.durationKnown && Number.isInteger(row.durationSeconds) &&
+         row.durationSeconds>0)parts.push(Math.ceil(row.durationSeconds/60)+" Min.");
+      if(!parts.length && fallback)parts.push(fallback);
+      return parts.join(" · ");
+    }
+    function homeAttachCardArt(credential,backendId,kind,row,card,token) {
+      if(!card || !card.art)return;
+      var client=createPublicMediaMetadata(window);
+      homeCardArtworkClients.push(client);
+      function alive(){
+        return homeAlive(token) && homeBackendId===backendId &&
+          card.node===controls[card.node.getAttribute("data-focus-id")];
+      }
+      function loaded(result) {
+        if(!alive() || !result.ok || !window.URL ||
+           typeof window.URL.createObjectURL!=="function" ||
+           typeof window.Blob!=="function")return;
+        var url;
+        try{url=window.URL.createObjectURL(new window.Blob(
+          [result.value.bytes],{type:result.value.contentType}));}catch(_){return;}
+        if(!alive()){
+          if(typeof window.URL.revokeObjectURL==="function")window.URL.revokeObjectURL(url);
+          return;
+        }
+        homeCardUrls.push(url);
+        card.art.onerror=function(){
+          card.art.hidden=true;card.art.removeAttribute("src");
+          if(typeof window.URL.revokeObjectURL==="function")window.URL.revokeObjectURL(url);
+          var at=homeCardUrls.indexOf(url);if(at!==-1)homeCardUrls.splice(at,1);
+        };
+        card.art.src=url;card.art.hidden=false;
+      }
+      if(kind==="epg"){
+        if(row.event && row.event.eventId)
+          client.epgPreferredArtwork(credential,backendId,row.channel.channelId,
+            row.event.eventId,loaded);
+        return;
+      }
+      if(!/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
+      client.artworkList(credential,backendId,row.recordingId,function(list){
+        if(!alive() || !list.ok)return;
+        var art=list.value.items.filter(function(x){return x.kind==="poster";})[0] ||
+          list.value.items.filter(function(x){return x.kind==="fanart";})[0];
+        if(art)client.artworkBytes(credential,backendId,
+          row.recordingId,art.artworkId,loaded);
+      });
+    }
+    function homeFeatureShow(row,kind,priority,subtitle) {
+      if(!row || priority<homeFeaturePriority)return;
+      homeFeaturePriority=priority;homeFeatureKind=kind;
+      if(homeFeatureKicker)homeFeatureKicker.textContent=kind==="epg" ?
+        "JETZT IM TV" : priority>=3 ? "WEITERSEHEN" : "AUS DEINER MEDIATHEK";
+      if(homeFeatureTitle)homeFeatureTitle.textContent=row.title || "Unbenannt";
+      if(homeFeatureDescription)homeFeatureDescription.textContent=
+        (row.metadata && (row.metadata.overview || row.metadata.tagline)) ||
+        row.description || row.subtitle || subtitle ||
+        "Keine ausführliche Beschreibung verfügbar.";
+      if(homeFeatureMeta)homeFeatureMeta.textContent=subtitle || "";
+      homeClearArtwork();
+      homeFeatureArtwork.cancel();
+      // Images are fetched only through the authenticated public binary API.
+      if(!homeCredential || !homeBackendId)return;
+      var ticket=++homeFeatureRun,token=homeRun;
+      if(kind==="epg"){
+        if(!row.eventId || !row.channelId)return;
+        homeFeatureArtwork.epgPreferredArtwork(homeCredential,homeBackendId,
+          row.channelId,row.eventId,function(bytes){
+            if(!homeAlive(token) || ticket!==homeFeatureRun || !bytes.ok ||
+               !window.URL || typeof window.URL.createObjectURL!=="function" ||
+               typeof window.Blob!=="function")return;
+            var url;
+            try{url=window.URL.createObjectURL(new window.Blob(
+              [bytes.value.bytes],{type:bytes.value.contentType}));}catch(_){return;}
+            homeClearArtwork();homeArtworkUrl=url;
+            if(homeFeaturePoster){
+              homeFeaturePoster.onerror=function(){
+                if(homeArtworkUrl===url)homeClearArtwork();
+              };
+              homeFeaturePoster.src=url;homeFeaturePoster.hidden=false;
+            }
+          });
+        return;
+      }
+      if(kind!=="recordings" || !/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
+      homeFeatureArtwork.artworkList(homeCredential,homeBackendId,
+        row.recordingId,function(result){
+          if(!homeAlive(token) || ticket!==homeFeatureRun ||
+             !result.ok || !result.value.items.length)return;
+          var artwork=result.value.items.filter(function(x){
+            return x.kind==="poster";
+          })[0] || result.value.items.filter(function(x){
+            return x.kind==="fanart";
+          })[0];
+          if(!artwork)return;
+          homeFeatureArtwork.artworkBytes(homeCredential,homeBackendId,
+            row.recordingId,artwork.artworkId,function(bytes){
+              if(!homeAlive(token) || ticket!==homeFeatureRun || !bytes.ok ||
+                 !window.URL || typeof window.URL.createObjectURL!=="function" ||
+                 typeof window.Blob!=="function")return;
+              var url=null;
+              try {url=window.URL.createObjectURL(new window.Blob(
+                [bytes.value.bytes],{type:bytes.value.contentType}));}
+              catch(_) {return;}
+              homeClearArtwork();homeArtworkUrl=url;
+              if(homeFeaturePoster){
+                homeFeaturePoster.onerror=function(){
+                  if(homeArtworkUrl===url)homeClearArtwork();
+                };
+                homeFeaturePoster.src=url;
+                homeFeaturePoster.hidden=false;
+              }
+            });
+        });
+    }
+    function homeSelectRecording(row,kind,force){
+      if(!row || !homeCredential || !homeBackendId)return;
+      var token=homeRun;
+      ++homeFeatureRun;homeFeatureMetadata.cancel();
+      if(force)homeFeaturePriority=0;
+      var priority=force?4:kind==="continue"?3:2;
+      homeFeatureShow(row,"recordings",priority,
+        kind==="continue" ?
+          "Gespeicherte Position: "+Math.floor(row.positionSeconds/60)+" Min." :
+          (row.recordedAt ? "Aufgenommen: "+row.recordedAt : "Aufnahme"));
+      var selected=homeFeatureRun;
+      homeFeatureMetadata.recordingDetail(homeCredential,homeBackendId,
+        row.recordingId,function(result){
+          if(!homeAlive(token) || selected!==homeFeatureRun)return;
+          if(result.ok){
+            var desc=kind==="continue" ?
+              "Gespeicherte Position: "+Math.floor(row.positionSeconds/60)+" Min." :
+              "Metadaten aus VDR-Suite";
+            // Upgraded title, overview and genre are authoritative, never made up.
+            homeFeatureShow(result.value,"recordings",priority,
+              [desc,result.value.metadata.genreText||""].filter(Boolean).join(" · "));
+          } else if(homeFeatureMeta)
+            homeFeatureMeta.textContent="Details: "+mediaMetadataError(result);
+        });
+    }
+    function homeDisplayContinue(credential,backendId,token){
+      homeResume.load(credential,backendId,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          homeMessage("home-continue-status",homeContinueError(result));return;
+        }
+        var first=result.value.items.slice(0,3);
+        homeMessage("home-continue-status",first.length ?
+          first.length+" von "+result.value.items.length+" gespeicherten Positionen" :
+          "Noch keine fortsetzbaren Aufnahmen.");
+        first.forEach(function(progress,index){
+          // A Continue Watching card has an actual server checkpoint, not a
+          // position guessed from a recording entry.
+          var pct=progress.durationSeconds===null ? null :
+            progress.positionSeconds*100/progress.durationSeconds;
+          var item={backendId:backendId,recordingId:progress.recordingId,
+            positionSeconds:progress.positionSeconds,
+            durationSeconds:progress.durationSeconds,
+            durationKnown:progress.durationSeconds!==null,
+            title:"Aufnahmedetails werden geladen"};
+          var position="Position "+Math.floor(progress.positionSeconds/60)+" Min."+
+            (progress.durationSeconds===null?"":" von "+
+              Math.ceil(progress.durationSeconds/60)+" Min.");
+          var card=homeCard("continue",item,item.title,position,pct);
+          homeContinueMetadata[index].recordingDetail(credential,backendId,
+            progress.recordingId,function(detail){
+              if(!homeAlive(token))return;
+              if(!detail.ok){
+                if(card)card.title.textContent="Aufnahme (Details nicht verfügbar)";
+                return;
+              }
+              Object.assign(item,detail.value);
+              // Checkpoint duration has its own truth and may not equal the
+              // catalog duration. Never rewrite its position or percentage.
+              item.positionSeconds=progress.positionSeconds;
+              item.resumeDurationSeconds=progress.durationSeconds;
+              if(card){
+                card.title.textContent=item.title;
+                card.info.textContent=position+
+                  (homeMetadataText(item,"") ? " · "+homeMetadataText(item,"") : "");
+                homeAttachCardArt(credential,backendId,"continue",item,card,token);
+              }
+              if(index===0 && homeFeaturePriority<3)homeSelectRecording(item,"continue");
+            });
+        });
+      });
+    }
+    function homeDisplayRecordings(credential,backendId,token){
+      homeRecordingCatalog.listRecordings(credential,backendId,null,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          homeMessage("home-recordings-status",recordingCatalogError(result));return;
+        }
+        var list=result.value.items.slice(0,4);
+        homeMessage("home-recordings-status",list.length ?
+          "Aus dem freigegebenen VDR-Katalog · "+list.length+" angezeigt" :
+          "Noch keine Aufnahmen vorhanden");
+        list.forEach(function(row){
+          var card=homeCard("recordings",row,row.title,
+            homeMetadataText(row,row.recordedAt ?
+              "Aufgenommen: "+row.recordedAt : "Aufnahme"),null);
+          homeAttachCardArt(credential,backendId,"recordings",row,card,token);
+          var client=createPublicMediaMetadata(window);
+          homeCardDetailClients.push(client);
+          client.recordingDetail(credential,backendId,row.recordingId,function(detail){
+            if(!homeAlive(token) || !detail.ok)return;
+            Object.assign(row,detail.value);
+            if(card){
+              card.title.textContent=row.title;
+              card.info.textContent=homeMetadataText(row,
+                row.recordedAt ? "Aufgenommen: "+row.recordedAt : "Aufnahme");
+            }
+          });
+        });
+        if(list.length && homeFeaturePriority<2)
+          homeSelectRecording(list[0],"recordings");
+      });
+    }
+    function homeDisplayTimers(credential,backendId,token){
+      homeTimerCatalog.list(credential,backendId,0,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          if(homeTimerSummary)homeTimerSummary.textContent=
+            nativeTimerCatalogError(result);return;
+        }
+        var list=result.value.items;
+        var recording=list.filter(function(x){return x.recording;}).length;
+        if(homeTimerSummary){
+          var upcoming=list.filter(function(x){return x.enabled && !x.recording;})
+            .slice(0,2).map(function(x){
+              return x.title+" ("+x.day+" "+x.startTime+")";
+            });
+          homeTimerSummary.textContent=
+            (result.value.page.hasMore?"Mindestens ":"")+list.length+
+            " native VDR-Timer · "+recording+" gerade aktiv"+
+            (upcoming.length?" · Geplant: "+upcoming.join(" · "):"");
+        }
+      });
+    }
+    function homeDisplayEpg(credential,backendId,token){
+      homeChannelCatalog.listChannels(credential,backendId,null,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          homeMessage("home-epg-status",channelCatalogError(result));return;
+        }
+        var channels=result.value.items.filter(function(x){
+          return x.enabled && !x.radio;
+        }).slice(0,3);
+        if(!channels.length){
+          homeMessage("home-epg-status","Keine TV-Sender auf der ersten Seite verfügbar.");
+          return;
+        }
+        homeMessage("home-epg-status","Jetzt im TV · "+channels.length+" Sender");
+        var now=Math.floor(Date.now()/1000),found=0,failures=0;
+        channels.forEach(function(channel){
+          var reader=createPublicMediaMetadata(window);
+          homeEpgReaders.push(reader);
+          reader.nowNext(credential,backendId,channel.channelId,now,function(epg){
+            if(!homeAlive(token))return;
+            if(!epg.ok){
+              failures++;
+              if(!found)homeMessage("home-epg-status",mediaMetadataError(epg));
+              return;
+            }
+            var event=epg.value.items.filter(function(x){
+              return Number(x.startTime)<=now && Number(x.endTime)>now;
+            })[0];
+            if(!event)return;
+            found++;
+            homeMessage("home-epg-status","Jetzt im TV · "+found+" Sendungen");
+            var row={event:event,channel:channel};
+            var card=homeCard("epg",row,event.title,
+              channel.name+" · "+globalSearchDate(event.startTime)+
+              (event.subtitle?" · "+event.subtitle:""),null);
+            homeAttachCardArt(credential,backendId,"epg",row,card,token);
+          });
+        });
+      });
+    }
+    function homeRefresh(){
+      if(currentView!=="home")return;
+      homeCancelReads();homeClearCards();
+      homeCredential=null;homeBackendId=null;
+      var saved=vault.read();
+      if(!saved.ok || !saved.credential){
+        homeMessage("home-content-status",
+          "Keine gekoppelte Geräteanmeldung · Einstellungen prüfen");
+        ["continue","recordings","epg"].forEach(function(k){
+          homeMessage("home-"+(k==="continue"?"continue":k)+"-status",
+            "Ohne Geräteanmeldung nicht verfügbar");
+        });
+        return;
+      }
+      var address=serverInput && normalizeSuiteBase(serverInput.value);
+      if(address && address!==saved.credential.base){
+        homeMessage("home-content-status","Serveradresse stimmt nicht mit Geräteanmeldung überein.");
+        return;
+      }
+      var credential=saved.credential,token=homeRun;
+      homeCredential=credential;
+      homeMessage("home-content-status","Prüfe vorhandene Geräteanmeldung …");
+      homePairing.verify(credential,function(valid){
+        if(!homeAlive(token))return;
+        if(!valid.ok){
+          homeMessage("home-content-status",deviceVerificationError(valid));return;
+        }
+        markDeviceAuthenticated(credential);
+        homeBackendCatalog.listBackends(credential,function(backendResult){
+          if(!homeAlive(token))return;
+          if(!backendResult.ok || !backendResult.value.items.length){
+            homeMessage("home-content-status",backendResult.ok ?
+              "Kein freigegebenes Backend" : channelCatalogError(backendResult));
+            return;
+          }
+          // One explicit selected/first accessible backend, no hidden fanout.
+          var backend=backendResult.value.items[0];
+          homeBackendId=backend.backendId;
+          homeMessage("home-content-status","Backend: "+backend.name+
+            " · echte API-v1-Metadaten");
+          homeMessage("home-continue-status","Lade gespeicherte Positionen …");
+          homeMessage("home-recordings-status","Lade Aufnahmekatalog …");
+          homeMessage("home-epg-status","Lade Jetzt/Nächste …");
+          homeDisplayContinue(credential,homeBackendId,token);
+          homeDisplayRecordings(credential,homeBackendId,token);
+          homeDisplayTimers(credential,homeBackendId,token);
+          homeDisplayEpg(credential,homeBackendId,token);
+        });
+      });
     }
   
     function reportDiscoverySuccess(result) {
@@ -5140,6 +5685,7 @@
   
     function showView(view) {
       if (ROUTES.indexOf(view) < 0) return false;
+      if (currentView === "home" && view !== "home") homeCancelReads();
       if (currentView === "live" && view !== "live") {
         if (livePlaybackSession || livePlayBusy) stopLivePlayback("navigate");
         clearLiveEpg();
@@ -5275,8 +5821,9 @@
         else item.removeAttribute("aria-current");
       });
       message.textContent = view === "home"
-        ? "Offline-Designvorschau · Navigation: Pfeile · OK · Zurück"
+        ? "Media Home · Inhalte über Public API v1 · Pfeile · OK · Zurück"
         : "Bereich: " + view + (discoveredBase ? " · Public API v1 erreichbar" : " · Server noch nicht geprüft") + " · Zurück = vorherige Ansicht";
+      if(view==="home" && document.visibilityState==="visible")homeRefresh();
       return true;
     }
   
@@ -5344,6 +5891,27 @@
   
     function activate(item) {
       if (!item) return;
+      var homeKind=item.getAttribute("data-home-kind");
+      var homeIndex=item.getAttribute("data-home-index");
+      if(currentView==="home" && homeKind && homeIndex!==null) {
+        var selected=homeCardItems[homeKind][Number(homeIndex)];
+        if(homeKind==="epg" && selected && selected.event){
+          homeFeaturePriority=0;
+          homeFeatureShow(Object.assign({},selected.event,{
+            channelId:selected.channel.channelId,
+            description:selected.event.subtitle || selected.channel.name
+          }),"epg",4,
+            globalSearchDate(selected.event.startTime)+" · "+selected.channel.name);
+        } else if(selected)homeSelectRecording(selected,homeKind,true);
+        return;
+      }
+      var homeAction=item.getAttribute("data-home-action");
+      if(currentView==="home" && homeAction) {
+        if(homeAction==="refresh")homeRefresh();
+        else navigateTo(homeFeatureKind==="epg"?"live":"recordings",
+          item.getAttribute("data-focus-id"));
+        return;
+      }
       var pairAction = item.getAttribute("data-pair-action");
       if (pairAction) {
         if (pairAction === "start") pairStart();
@@ -5820,6 +6388,11 @@
       });
     });
   
+    document.addEventListener("visibilitychange",function(){
+      if(document.visibilityState==="visible" && currentView==="home")homeRefresh();
+      else if(document.visibilityState==="hidden" && currentView==="home")
+        homeCancelReads();
+    });
     storedStatus();
     showView("home");
     setFocus("nav-home");
