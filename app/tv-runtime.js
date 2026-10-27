@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.2","build":"095517ee5332","label":"Samsung v0.1.0 · S8.2 · b095517ee5332"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.3","build":"6ca2fbf9401d","label":"Samsung v0.1.0 · S8.3 · b6ca2fbf9401d"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -2626,6 +2626,114 @@
   }
   // END app/src/platform/recording-player.js
 
+  // BEGIN app/src/platform/streamdev-live.js
+  // Samsung DEV-only direct Live-TV via local VDR streamdev-server MPEG-TS.
+  // Explicit user-configured host, one selected Public-v1 VDR channel ID, native AVPlay.
+  // No API-v1 MediaSession, no cookies, no URL tokens and no background autoplay.
+  // Only used after a conscious user action. Does not change the protected API-v1 player.
+  function parseStreamdevBase(input) {
+    if (typeof input!=="string" || input.length>180) return null;
+    var value=input.trim().replace(/\/$/,"");
+    var match=/^http:\/\/([^\/:?#@]+):(\d{1,5})$/.exec(value);
+    if (!match) return null;
+    var host=match[1].toLowerCase(),port=Number(match[2]);
+    if (port<1 || port>65535) return null;
+    // Direct-stream trial is limited to an explicitly configured local endpoint.
+    // Do not accidentally turn the TV into a client for arbitrary external URLs.
+    var ipv4=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    var local=false;
+    if (ipv4) {
+      var n=ipv4.slice(1).map(Number);
+      local=n.every(function(x){return x>=0&&x<=255;}) &&
+        (n[0]===10 || (n[0]===172 && n[1]>=16 && n[1]<=31) ||
+         (n[0]===192 && n[1]===168));
+    } else local=/^[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})*\.local$/.test(host);
+    return local ? "http://"+host+":"+port : null;
+  }
+  function streamdevChannelUrl(base,channelId) {
+    var url=parseStreamdevBase(base);
+    if (!url || typeof channelId!=="string" ||
+        !/^[A-Za-z0-9._-]{1,128}$/.test(channelId))
+      return null;
+    return url+"/TS/"+encodeURIComponent(channelId);
+  }
+  function createStreamdevLivePlayer(environment) {
+    var api=environment&&environment.webapis&&environment.webapis.avplay;
+    var generation=0,active=false,busy=false,opened=false,paused=false;
+    function available() {
+      return !!(api&&typeof api.open==="function"&&
+        typeof api.prepareAsync==="function"&&typeof api.play==="function"&&
+        typeof api.stop==="function"&&typeof api.close==="function");
+    }
+    function stop() {
+      generation++;active=false;busy=false;paused=false;
+      // NEVER close a player that was never opened by this adapter.
+      // The Recording adapter shares the singleton native AVPlay instance.
+      if (!opened) return;
+      opened=false;
+      try{api.stop();}catch(_){}
+      try{api.close();}catch(_){}
+    }
+    function start(base,channelId,onState) {
+      var url=streamdevChannelUrl(base,channelId);
+      if(!available()||!url||typeof onState!=="function"){
+        if(typeof onState==="function")onState("unsupported",{stage:"input"});
+        return false;
+      }
+      if(busy||active)return false;
+      busy=true;
+      var token=++generation;
+      try {
+        api.open(url);
+        opened=true;
+        if(typeof api.setDisplayRect==="function")
+          api.setDisplayRect(0,0,1920,1080);
+        if(typeof api.setDisplayMethod==="function")
+          try{api.setDisplayMethod("PLAYER_DISPLAY_MODE_LETTER_BOX");}catch(_){}
+        if(typeof api.setListener==="function")
+          api.setListener({
+            onbufferingstart:function(){if(token===generation)onState("buffering");},
+            onbufferingcomplete:function(){if(token===generation)onState("ready");},
+            onstreamcompleted:function(){
+              if(token!==generation)return;
+              // A continuous TS stream ending means provider/connection EOF.
+              stop();onState("ended");
+            },
+            onerror:function(){
+              if(token!==generation)return;
+              stop();onState("error",{stage:"stream"});
+            }
+          });
+        api.prepareAsync(function(){
+          if(token!==generation)return;
+          try {
+            api.play();busy=false;active=true;paused=false;
+            onState("playing");
+          } catch(_) {
+            stop();onState("error",{stage:"play"});
+          }
+        },function(){
+          if(token!==generation)return;
+          stop();onState("error",{stage:"prepare"});
+        });
+        onState("preparing");
+        return true;
+      } catch(_) {
+        stop();onState("error",{stage:"open"});
+        return false;
+      }
+    }
+    function pauseOrResume(action) {
+      if(!active)return "unavailable";
+      // Pausing an unbounded real-time broadcast can create an unbounded gap
+      // in the decoder. First reliability slice supports STOP, not time shift.
+      return "live_no_pause";
+    }
+    return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
+      isBusy:function(){return busy;},isActive:function(){return active;}};
+  }
+  // END app/src/platform/streamdev-live.js
+
   // BEGIN app/src/platform/html5-recording-player.js
   // Opt-in HTML5 progressive-MP4 diagnostic. AVPlay remains the default player.
   // Never expose the HttpOnly media cookie, URLs or native exception messages.
@@ -2980,6 +3088,19 @@
     var livePlayerSurface = document.getElementById("live-player-surface");
     var livePlayerHint = document.getElementById("live-player-hint");
     var liveHtml5Player = createHtml5RecordingPlayer(liveHtml5Video,window,"live-channel");
+    var streamdevPlayer=createStreamdevLivePlayer(window);
+    var streamdevBaseInput=document.getElementById("live-streamdev-base");
+    var streamdevStatus=document.getElementById("live-streamdev-status");
+    var streamdevBase=null,streamdevEditing=false,streamdevActive=false;
+    var streamdevRun=0;
+    try {
+      var storedStreamdev=window.localStorage &&
+        window.localStorage.getItem("vdr-suite.samsung.streamdevBase");
+      streamdevBase=parseStreamdevBase(storedStreamdev);
+    } catch(_) {}
+    if(streamdevBaseInput && streamdevBase)streamdevBaseInput.value=streamdevBase;
+    if(streamdevStatus && streamdevBase)
+      streamdevStatus.textContent="Streamdev im Heimnetz konfiguriert · bereit für direkte AVPlay-Wiedergabe.";
     var livePlaybackSession = null;
     var livePlayBusy = false;
     var liveTeardownBusy = false;
@@ -3068,7 +3189,8 @@
       if (currentView === "live") {
         var liveFocusRows = [NAV_ROW,
           ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
-         "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"]];
+         "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more"],
+          ["live-streamdev-base","live-streamdev-save"]];
         var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
         for (var i=0;i<count;i++) {
           var cells=[];
@@ -4373,6 +4495,84 @@
               "Weitere Sendungen verfügbar" : "Ende des Zeitfensters");
         });
     }
+    function streamdevMessage(msg){if(streamdevStatus)streamdevStatus.textContent=msg;}
+    function saveStreamdevBase(){
+      if(streamdevActive||streamdevPlayer.isBusy()){
+        streamdevMessage("Vor Änderungen zuerst Live-TV mit STOP beenden.");return;
+      }
+      var base=parseStreamdevBase(streamdevBaseInput && streamdevBaseInput.value);
+      if(!base){
+        streamdevMessage("Bitte eine lokale Adresse wie http://192.168.178.20:3000 eingeben.");
+        return;
+      }
+      streamdevBase=base;
+      if(streamdevBaseInput)streamdevBaseInput.value=base;
+      try {if(window.localStorage)window.localStorage.setItem(
+        "vdr-suite.samsung.streamdevBase",base);
+      } catch(_) { /* Live test remains possible for this app session. */ }
+      streamdevMessage("Streamdev-Adresse gespeichert · Sender wählen und direkt starten.");
+      setFocus("live-streamdev-save");
+    }
+    function stopStreamdevLive(reason) {
+      ++streamdevRun;
+      streamdevPlayer.stop();
+      streamdevActive=false;
+      if(livePlayerSurface)livePlayerSurface.hidden=true;
+      if(document.documentElement)document.documentElement.classList.remove("streamdev-live-active");
+      if(liveHtml5Video)liveHtml5Video.hidden=false;
+      if(reason==="user" && currentView==="live")
+        liveStatus("ready","Streamdev Live-TV beendet",
+          "AVPlay gestoppt, TCP-Stream geschlossen. Nächsten Sender wählen.");
+    }
+    function startStreamdevLive(){
+      if(livePlaybackSession||livePlayBusy||liveTeardownBusy||
+         streamdevActive||streamdevPlayer.isBusy())return;
+      if(!selectedLiveChannel||!liveBackends.length||
+         selectedLiveChannel.backendId!==liveBackends[liveBackendIndex].backendId){
+        liveStatus("error","Kein Sender gewählt","Zuerst Sender laden und mit OK auswählen.");return;
+      }
+      if(!streamdevBase){
+        liveStatus("error","Streamdev-Adresse fehlt",
+          "Bitte die lokale Streamdev-Adresse eingeben und speichern.");return;
+      }
+      if(!streamdevPlayer.available()){
+        liveStatus("error","Samsung AVPlay fehlt",
+          "Tizen stellt die native AVPlay-API nicht bereit.");return;
+      }
+      var token=++streamdevRun;
+      streamdevActive=true;
+      if(liveHtml5Video)liveHtml5Video.hidden=true;
+      if(livePlayerSurface)livePlayerSurface.hidden=false;
+      if(document.documentElement)document.documentElement.classList.add("streamdev-live-active");
+      if(livePlayerHint)livePlayerHint.textContent=
+        "Streamdev · MPEG-TS · AVPlay verbindet … · STOP/ZURÜCK beendet";
+      liveStatus("loading","Streamdev wird geöffnet",
+        "Direkter MPEG-TS vom eigenen VDR · ohne HTML5 und ohne MediaSession.");
+      var started=streamdevPlayer.start(streamdevBase,selectedLiveChannel.channelId,
+        function(state,detail){
+          if(token!==streamdevRun||currentView!=="live")return;
+          if(state==="playing"){
+            liveStatus("ready","AVPlay Live-TV gestartet",
+              "AVPlay PLAYING gemeldet · Bild und Ton am Fernseher überprüfen.");
+            if(livePlayerHint)livePlayerHint.textContent=
+              "AVPlay PLAYING · Bild/Ton prüfen · STOP/ZURÜCK beendet";
+          } else if(state==="buffering"||state==="preparing"){
+            if(livePlayerHint)livePlayerHint.textContent=
+              "Streamdev · "+(state==="buffering"?"puffert":"bereitet vor")+
+              " · STOP/ZURÜCK beendet";
+          } else if(state==="error"||state==="ended"||state==="unsupported"){
+            stopStreamdevLive("failure");
+            liveStatus("error",state==="ended"?
+              "Streamdev-Verbindung beendet":"Streamdev/AVPlay fehlgeschlagen",
+              state==="ended"?
+                "Der direkte VDR-Stream ist abgebrochen. Streamdev-Tuner/Netzwerk prüfen.":
+                "AVPlay konnte den MPEG-TS nicht starten oder dekodieren ("+
+                (detail&&detail.stage||"Stream")+
+                "). TV-Decoder, Streamdev-Port und VDR-Sender prüfen.");
+          }
+        });
+      if(!started && streamdevActive)stopStreamdevLive("failure");
+    }
     // Explicit S6.18 Live-TV API v1 test, never triggered by focusing a channel.
     // STOP releases the server tuner before a new Live-TV session may begin.
     function stopLivePlayback(reason) {
@@ -5257,7 +5457,7 @@
           liveRows ? String(liveRows) + " echte Sender geladen" : "Keine Sender gefunden",
           "Nur freigegebene Senderdaten · " +
           (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
-          " · Sender mit OK wählen; „Live-TV testen“ startet explizit eine Device-MediaSession.");
+          " · Sender mit OK wählen; „Live-TV direkt starten“ öffnet Streamdev mit AVPlay.");
         if (jumpToNewPage && liveFocusIds[firstNewRow])
           setFocus(liveFocusIds[firstNewRow]);
       });
@@ -5969,6 +6169,8 @@
       if (currentView === "live" && view !== "live") {
         epgTimerReset("live");
         if (livePlaybackSession || livePlayBusy) stopLivePlayback("navigate");
+        if (streamdevActive || streamdevPlayer.isBusy()) stopStreamdevLive("navigate");
+        streamdevEditing=false;
         clearLiveEpg();
         // In-flight responses cannot update a hidden view after navigation.
         liveRun += 1;
@@ -6145,6 +6347,9 @@
     }
   
     function goBack() {
+      if (currentView === "live" && (streamdevActive || streamdevPlayer.isBusy())) {
+        stopStreamdevLive("user");return;
+      }
       if (currentView === "live" && (livePlaybackSession || livePlayBusy)) {
         stopLivePlayback("user");
         return;
@@ -6236,6 +6441,17 @@
         if (epgItem) selectEpgEvent(epgItem,true);
         return;
       }
+      var streamdevAction=item.getAttribute("data-streamdev-action");
+      if(streamdevAction && currentView==="live"){
+        if(streamdevAction==="save")saveStreamdevBase();
+        else if(streamdevAction==="start")startStreamdevLive();
+        return;
+      }
+      if(item.getAttribute("data-focus-id")==="live-streamdev-base" && currentView==="live"){
+        streamdevEditing=true;
+        if(streamdevBaseInput && typeof streamdevBaseInput.focus==="function")streamdevBaseInput.focus();
+        return;
+      }
       if (item.getAttribute("data-live-play")==="start" && currentView==="live") {
         startSelectedLive();return;
       }
@@ -6251,14 +6467,15 @@
           liveMetadata.cancel();
           liveEpgRun+=1;
           liveWindow=null;
-          selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId};
+          selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId,
+            channelNumber:selected.channelNumber,name:selected.name};
           clearEpgFocusRows();
           if (liveEpgList) {liveEpgList.textContent="";liveEpgList.hidden=true;}
           if (liveEpgStatus) liveEpgStatus.textContent =
             "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";
           liveStatus("ready", String(selected.channelNumber) + " · " + selected.name,
             "Sender ausgewählt · Live-Stream wird nicht automatisch gestartet. " +
-            "„Live-TV testen“ startet ausdrücklich eine geschützte MediaSession. media.live.play erforderlich.");
+            "„Live-TV direkt starten“ spielt Streamdev über AVPlay ab (Heimnetz).");
         }
         return;
       }
@@ -6383,6 +6600,12 @@
     }
   
   
+    if(streamdevBaseInput){
+      streamdevBaseInput.addEventListener("focus",function(){
+        if(currentView==="live")streamdevEditing=true;
+      });
+      streamdevBaseInput.addEventListener("blur",function(){streamdevEditing=false;});
+    }
     if(globalSearchInput){
       globalSearchInput.addEventListener("focus",function(){
         if(currentView==="search")globalSearchEditing=true;
@@ -6416,6 +6639,16 @@
         }
         return;
       }
+      // Native Samsung IME owns the local Streamdev host editor as well.
+      if(currentView==="live" && streamdevEditing){
+        var code=event.keyCode || event.which;
+        if(code===65376 || code===65385 || code===10009){
+          if(streamdevBaseInput && typeof streamdevBaseInput.blur==="function")streamdevBaseInput.blur();
+          streamdevEditing=false;
+          setFocus("live-streamdev-save");
+        }
+        return;
+      }
       // Samsung IME owns all text-editor keys, like the proven S6.16 address
       // editor. Never intercept Backspace, arrows, digits or OK while editing.
       if(currentView==="search" && globalSearchEditing){
@@ -6432,6 +6665,7 @@
       var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
         currentView === "recordings";
       var liveKeysActive=(livePlaybackSession || livePlayBusy) && currentView==="live";
+      var streamdevKeysActive=(streamdevActive || streamdevPlayer.isBusy()) && currentView==="live";
       if (!key) {
         if (playbackKeysActive && recordingRemoteHint) {
           // Display only a bounded numeric TV key code. Never display raw event
@@ -6448,6 +6682,13 @@
       if (intro.active()) {
         if (key === "OK" || key === "BACK" || key === "STOP" ||
             key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE") intro.skip();
+        return;
+      }
+      if(streamdevKeysActive){
+        if(event.repeat)return;
+        if(key==="STOP" || key==="BACK")stopStreamdevLive("user");
+        else if(livePlayerHint)livePlayerHint.textContent=
+          "Streamdev Live-TV · "+key+" · STOP/ZURÜCK beendet";
         return;
       }
       if (liveKeysActive) {
