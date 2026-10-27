@@ -1835,3 +1835,84 @@ test("S6.23 searching via Samsung IME yields keys to native keyboard",()=>{
   assert.equal(sim.nodes["global-search-go"].isFocused,true);
   assert.equal(press(10009),true,"Back again navigates after IME Done");
 });
+
+
+test("S8.1 foreground Home composes real backend-scoped Continue, timers and EPG independently",()=>{
+  const h=liveTransport();
+  const sim=simulate({visibleHome:true,keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  assert.equal(h.calls.length,1,"foreground Home verifies saved Device automatically");
+  assert.match(h.calls[0].url,/\/api\/v1$/);
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  assert.match(h.calls[1].url,/\/api\/v1\/backends\?/);
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,6,"four independent Home domains start");
+  const url=i=>h.calls[i].url;
+  assert.match(url(2),/\/api\/v1\/recording-playback-sessions\/continue-watching\?backendId=home$/);
+  assert.match(url(3),/\/api\/v1\/recordings\?backendId=home/);
+  assert.match(url(4),/\/api\/v1\/native-timers\?backendId=home/);
+  assert.match(url(5),/\/api\/v1\/channels\?backendId=home/);
+  for(const i of [2,3,4,5])
+    assert.match(h.calls[i].headers.Authorization,/^VDR-Suite-Device /);
+
+  const rid="rec_0123456789abcdef0123456789abcdef";
+  h.reply(2,200,{backendId:"home",limit:50,
+    items:[{recordingId:rid,positionSeconds:120,durationSeconds:240,
+      resumeSupport:"profile_dependent"}]});
+  const card=sim.homeNodes["home-continue-list"].children[0];
+  assert(card,"server checkpoint creates a Continue card");
+  assert.equal(card.children[3].children[0].style.width,"50%");
+  h.reply(3,403,{code:"forbidden"});
+  assert.match(sim.homeNodes["home-recordings-status"].textContent,/recordings.view/);
+  h.reply(4,200,{backendId:"home",items:[{
+    timerId:"timer1",channelId:"ch",channelName:"Das Erste",title:"Tatort",
+    day:"2026-10-28",weekdays:"",startTime:"20:15",endTime:"21:45",
+    enabled:true,recording:false,pending:false
+  }],page:{limit:30,offset:0,hasMore:false,nextOffset:null},
+    meta:{partial:false}});
+  assert.match(sim.homeNodes["home-timer-summary"].textContent,/Tatort/);
+  h.reply(5,200,channelPage());
+  const epgIndex=h.calls.findIndex(c=>/\/api\/v1\/epg\/now-next/.test(c.url));
+  assert(epgIndex>=0);
+  const now=Number(new URL(url(epgIndex)).searchParams.get("fromTime"));
+  h.reply(epgIndex,200,{backendId:"home",
+    channelId:"S19.2E-1-1019-10301",
+    items:[{channelId:"S19.2E-1-1019-10301",eventId:"real-event",
+      title:"Echte Sendung",subtitle:"",startTime:String(now-120),
+      endTime:String(now+1800),durationSeconds:1920}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.homeNodes["home-epg-list"].children.length,1);
+  assert.equal(sim.homeNodes["home-epg-list"].children[0].children[1].textContent,"Echte Sendung");
+  const recording={backendId:"home",recordingId:rid,title:"Aufnahme A",
+    description:"Beschreibung",recordedAt:"1793100000",
+    durationSeconds:240,durationKnown:true,sizeMb:250,
+    metadata:{state:"available",source:"manual",contentKind:"movie",
+      overview:"Originalbeschreibung",genreText:"[Drama|Krimi]"}};
+  const detailIndex=h.calls.findIndex(c=>c.url.includes("/api/v1/recordings/"+rid+"?"));
+  assert(detailIndex>=0);
+  h.reply(detailIndex,200,recording);
+  assert.equal(card.children[1].textContent,"Aufnahme A");
+  assert.match(card.children[2].textContent,/Position 2 Min./);
+  assert.match(card.children[2].textContent,/Drama · Krimi/);
+  assert.equal(sim.homeNodes["home-feature-title"].textContent,"Aufnahme A");
+  assert.match(sim.homeNodes["home-feature-description"].textContent,/Originalbeschreibung/);
+  // Rendering metadata never starts a playback MediaSession.
+  assert.equal(h.calls.filter(c=>c.method==="POST").length,0);
+});
+
+test("S8.1 navigation invalidates pending Home metadata and preserves one D-Pad owner",()=>{
+  const h=liveTransport();
+  const sim=simulate({visibleHome:true,keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,6);
+  sim.nodes["nav-settings"].click();
+  for(const i of [2,3,4,5])
+    assert.equal(h.calls[i].aborted,true,"Home request was aborted on route exit");
+  h.reply(3,200,{});
+  assert.equal(sim.homeNodes["home-recordings-list"].children.length,0,
+    "late catalog result cannot populate hidden Home");
+  assert.equal(typeof sim.listeners.keydown,"function");
+  sim.nodes["nav-home"].click();
+  assert.match(h.calls[h.calls.length-1].url,/\/api\/v1$/,
+    "returning to Home requests a fresh verified snapshot");
+});
