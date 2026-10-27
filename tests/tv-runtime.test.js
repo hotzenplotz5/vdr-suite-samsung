@@ -25,7 +25,7 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
@@ -54,6 +54,13 @@ function simulate(options = {}) {
     appendChild(child) { this.children.push(child); }
   };
   const liveBackendName = {textContent:""};
+  const nativeTimerList = {
+    hidden:true,children:[],_text:"",
+    set textContent(value){this._text=value;if(value==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(child){this.children.push(child);}
+  };
+  const nativeTimerBackendName={textContent:""};
   const liveEpgStatus = {textContent:""};
   const liveEpgList = {
     hidden:true,children:[],_text:"",
@@ -153,6 +160,8 @@ function simulate(options = {}) {
       if (id === "pairing-user-code") return pairCode;
       if (id === "live-channel-list") return liveList;
       if (id === "live-backend-name") return liveBackendName;
+      if (id === "native-timer-list") return nativeTimerList;
+      if (id === "native-timer-backend-name") return nativeTimerBackendName;
       if (id === "live-epg-status") return liveEpgStatus;
       if (id === "live-epg-list") return liveEpgList;
       if (id === "live-epg-scroll-actions") return epgScrollActions;
@@ -212,7 +221,7 @@ function simulate(options = {}) {
     window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
   }
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -1545,4 +1554,72 @@ test("S6.18 BACK during pending Live CREATE stops late session, never starts vid
   assert.equal(sim.liveHtml5Video.src,"");
   assert.match(h.calls[4].url,/\/stop$/);
   assert.equal(h.calls.length,5);
+});
+
+
+test("S6.19 Timer view is read-only, loads real native VDR Timer from Device Public-v1",()=>{
+ const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+ sim.video.finish();sim.nodes["nav-timers"].click();
+ assert.equal(h.calls.length,0,"opening Timer view does not mutate/read automatically");
+ assert.match(sim.stateNodes["detail-state-description-timers"].textContent,/timers.view/);
+ sim.nodes["detail-timers-load"].click();
+ assert.equal(h.calls.length,1,"verify existing Device first");
+ h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ assert.equal(h.calls.length,2);
+ h.reply(1,200,backendPage);
+ assert.equal(h.calls.length,3);
+ assert.equal(h.calls[2].method,"GET");
+ assert.match(h.calls[2].url,/\/api\/v1\/native-timers\?backendId=home&offset=0&limit=30$/);
+ assert.match(h.calls[2].headers.Authorization,/^VDR-Suite-Device /);
+ const timer={timerId:"42",channelId:"S19.2E-1-100",channelName:"Das Erste",
+   title:"Nachrichten",day:"20261017",weekdays:"-------",startTime:"2000",
+   endTime:"2015",enabled:true,recording:false,pending:false};
+ h.reply(2,200,{backendId:"home",items:[timer],
+   page:{limit:30,offset:0,hasMore:false,nextOffset:null},meta:{partial:false}});
+ assert.equal(sim.nativeTimerList.hidden,false);
+ assert.equal(sim.nativeTimerList.children.length,1);
+ assert.equal(sim.nativeTimerList.children[0].children[0].textContent,"Nachrichten");
+ assert.match(sim.nativeTimerList.children[0].children[1].textContent,/20:00–20:15/);
+ sim.nativeTimerList.children[0].click();
+ assert.match(sim.stateNodes["detail-state-title-timers"].textContent,/Nachrichten/);
+ assert.equal(h.calls.length,3,"timer selection only updates local detail");
+});
+test("S6.19 Timer paging preserves backend and 403 never creates or changes timers",()=>{
+ const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+ sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["detail-timers-load"].click();
+ h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ h.reply(1,200,backendPage);
+ const make=id=>({timerId:id,channelId:"S19.2E-1-100",channelName:"Das Erste",
+   title:"TV "+id,day:"20261017",weekdays:"-------",startTime:"2000",
+   endTime:"2015",enabled:true,recording:false,pending:false});
+ h.reply(2,200,{backendId:"home",items:[make("17")],
+   page:{limit:30,offset:0,hasMore:true,nextOffset:1},meta:{partial:false}});
+ sim.nodes["detail-timers-more"].click();
+ assert.match(h.calls[3].url,/backendId=home&offset=1&limit=30$/);
+ h.reply(3,200,{backendId:"home",items:[make("18")],
+   page:{limit:30,offset:1,hasMore:false,nextOffset:null},meta:{partial:false}});
+ assert.equal(sim.nativeTimerList.children.length,2);
+ sim.nodes["detail-timers-load"].click();
+ h.reply(4,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ h.reply(5,200,backendPage);
+ h.reply(6,403,{error:{code:"forbidden"}});
+ assert.equal(sim.nativeTimerList.children.length,0,"revoked grant clears cached timer rows");
+ assert.match(sim.stateNodes["detail-state-description-timers"].textContent,/timers.view/);
+ assert.ok(h.calls.every(x=>x.method==="GET"),
+   "no timer mutation in read-only slice");
+});
+test("S6.19 leaving Timer view invalidates late server result",()=>{
+ const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+ sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["detail-timers-load"].click();
+ h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ h.reply(1,200,backendPage);
+ sim.nodes["nav-home"].click();
+ assert.equal(h.calls[2].aborted,true);
+ const timer={timerId:"42",channelId:"ch",channelName:"ARD",title:"Verspätet",
+   day:"20261017",weekdays:"-------",startTime:"2000",endTime:"2100",
+   enabled:true,recording:false,pending:false};
+ h.reply(2,200,{backendId:"home",items:[timer],
+   page:{limit:30,offset:0,hasMore:false,nextOffset:null},meta:{partial:false}});
+ assert.equal(sim.nativeTimerList.children.length,0);
+ assert.equal(sim.nativeTimerList.hidden,true);
 });
