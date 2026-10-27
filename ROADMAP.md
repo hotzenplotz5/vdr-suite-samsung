@@ -311,3 +311,16 @@ S8.2 (breiteres Browse/Backendwahl) und S8.3 (explizite Home-Medienaktionen) ble
 - Kein neues Pairing, kein Prod-Deployment, kein Main-Merge, keine native Timer-Direktaktion. Real-TV-Bedienung, Timer-/Agent-Rückmeldung und berechtigte Backend-Installation bleiben jeweils separat abzunehmen.
 
 **Live-TV-Blocker bleibt offen:** Der aktuelle öffentliche Device-Live-Vertrag liefert ausschließlich progressive fMP4 unter browsergebundenem Secure/HttpOnly/SameSite-Media-Cookie. Der reale Samsung-HTML5-Test endet mit HTTP 401. Ein reparierter AVPlay-Pfad erfordert zunächst vom VDR-Suite-Backend ausdrücklich vertraglich freigegebenen Device-Native-Medienzugang; danach Samsung AVPlay-Integration mit eigener Session/STOP. Weder ungeschützte URLs noch Cookie-Auslesetricks sind Ersatz dafür.
+
+
+## S8.3 – erster direkter Live-TV-Pfad mit VDR Streamdev und Samsung AVPlay (27.10.2026)
+
+**Status: DEV-Quellimplementation; Hardware-/Bild-/Ton-Abnahme OFFEN.** Der Besitzer priorisiert funktionierendes Live-TV und hat die direkte Streamdev-Wiedergabe ausdrücklich beauftragt. Der bestehende geschützte API-v1-/HTML5-Test bleibt als isolierter Legacy-Test unberührt; für neue echte Live-TV-Versuche ist der separate Knopf „Live-TV direkt starten“ vorgesehen.
+
+- VDR-Suite Device API v1 liefert weiterhin die echte Backend-/Senderliste mit bereits belegter VDR-Kanal-ID. Der Samsung-Client bietet einmalige, explizite lokale Streamdev-Serveradresse (Beispiel HTTP auf Port 3000) und übergibt ausschliesslich den gewählten VDR-Kanal als /TS/{channelId} an den nativen AVPlay-Adapter; kein Autoplay und keine private API-Sitzung.
+- Streamdev liefert rohen MPEG-Transportstream **ohne eingebranntes VDR-OSD**. Kein Transcoding, keine neuen VDR-Suite-Backend-Änderungen, keine Credentials/Cookies/MediaSession-Signierung für den Videopfad. Netzwerkport im lokalen Heimnetz betreiben, nicht öffentlich weiterleiten. Streamdev-Zugriff und echte Kanal-ID gehören zum tatsächlich angesprochenen VDR.
+- AVPlay bereitet asynchron vor; STOP/BACK/navigieren stoppt und schließt den Stream. Verspätete prepare/stream/error-Callbacks sind generation-gefenced; EOF wird sichtbar als Fehlerzustand gemeldet, keine Endlosschleife/automatische Neuverbindung. Kein Live-Pause/Timeshift im ersten Slice.
+- Die native Videoebene erhält transparenten Browserhintergrund. Ein D-Pad-Owner bleibt bestehen; Samsung-IME darf beim Tippen der LAN-Adresse Eingaben übernehmen. Lokal gespeicherter Serverhost ist keine Device-Credential.
+- Die Live-TV-Aktion ist absichtlich nur **DEV und opt-in** und ändert weder Produktion noch bestehende VDR-Suite-Backend-Route/Autorisierung. Kein Merge in main ohne echten Decoder-/Ton-/STOP-Test auf GU43TU6979UXZG. Das geplante Public-v1-Native-Live-Media-Profil kann später als Alternative geprüft werden.
+
+**Realtest-Gate:** Streamdev-Plugin und Port 3000 auf dem tatsächlichen VDR prüfen, vom TV erreichbar, mindestens einen freien/unverschlüsselten Sender in TV-Liste auswählen, „Live-TV direkt starten“, echtes Bild und Ton, mindestens 2–3 Minuten unterbrechungsfrei, STOP und Start eines zweiten Senders prüfen. Sonst Fehler inkl. AVPlay-Stufe dokumentieren, nicht CI als Hardware-PASS umdeuten. Keine TV-Installation/Pairing-Mutation per Quelländerung.
