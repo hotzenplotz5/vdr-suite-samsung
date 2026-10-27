@@ -887,7 +887,7 @@ test("S6.3 real channel rows enter the single D-pad focus graph; OK shows metada
   assert.equal(sim.liveList.children[1].isFocused,true,"DOWN reaches next sender");
   key(13);
   assert.match(sim.stateNodes["detail-state-title-live"].textContent,/17 · ZDF/);
-  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/media.live.play/);
+  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/Streamdev über AVPlay/);
   assert.equal(h.calls.length,3,"OK on sender performs no hidden playback or HTTP request");
   key(38);
   assert.equal(sim.liveList.children[0].isFocused,true);
