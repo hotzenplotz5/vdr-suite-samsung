@@ -1408,7 +1408,9 @@ test("S6.17 HLS-TS AAC test requests only HLS TS and rejects wrong server profil
   const sessionId="ms_0123456789abcdef0123456789abcdef";
   h.reply(n,201,{mediaSession:{id:sessionId,backendId:"home",
     recordingId:rec.recordingId,presentationProfileId:"progressive-direct",
-    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/recording/stream.ts"}});
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/recording/stream.ts"},
+    nativeMediaAccess:{transport:"http-cookie",
+      cookie:"vdr_suite_media=mg_0123456789abcdef0123456789abcdef.abcdefghijklmnop"}});
   assert.equal(avplay.opened,0,"no player starts on server profile mismatch");
   assert.equal(h.calls[n+1].method,"POST","mismatched session must be stopped");
   assert.match(h.calls[n+1].url,/\/stop$/);
