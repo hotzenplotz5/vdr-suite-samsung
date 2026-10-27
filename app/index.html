@@ -24,7 +24,10 @@
     <header class="topbar">
       <div class="brand">
         <img src="assets/branding/vdr-suite-icon-v4.png" class="brand-icon" alt="">
-        <strong>VDR-Suite</strong>
+        <div class="brand-label"><strong>VDR-Suite</strong>
+          <span class="brand-connection"><span class="status-dot"></span>
+            <span id="topbar-server-status">Offline</span></span>
+        </div>
       </div>
       <nav class="menu" aria-label="Hauptnavigation">
         <button type="button" class="menu-item tv-focusable is-focused" data-focus-id="nav-home" data-route="home">Home</button>
@@ -34,67 +37,62 @@
         <button type="button" class="menu-item tv-focusable" data-focus-id="nav-timers" data-route="timers">Timer</button>
         <button type="button" class="menu-item tv-focusable" data-focus-id="nav-settings" data-route="settings">Einstellungen</button>
       </nav>
-      <div class="topbar-status"><span class="status-dot"></span> <span id="topbar-server-status">Offline</span> <span class="status-separator">|</span> Samsung TV</div>
     </header>
 
     <main class="main">
-      <section class="page home-page" data-panel="home" aria-label="Media Home">
-        <div class="section-lead"><span class="lead-icon">▣</span><strong>Live-TV</strong><span class="lead-divider"></span><span>Dein Media Home</span><span class="preview-tag">DESIGNVORSCHAU · KEINE LIVE-DATEN</span></div>
-        <div class="stage" aria-label="Media-Home-Kacheln">
-          <button type="button" class="stage-card card-left tv-focusable" data-focus-id="stage-favorites" data-target-view="live">
-            <span class="stage-kicker">SENDER</span><span class="stage-ornament ornament-orbit"></span>
-            <strong>Favoriten</strong><small>Deine Sender auf einen Blick</small>
-          </button>
-          <button type="button" class="stage-card hero-card tv-focusable" data-focus-id="stage-hero" data-target-view="live">
-            <span class="hero-art" aria-hidden="true"><span class="hero-planet"></span><span class="hero-horizon"></span></span>
-            <span class="hero-copy">
-              <span class="hero-eyebrow">VDR-SUITE <span class="eyebrow-muted">/ SAMSUNG</span></span>
-              <span class="hero-caption">DEIN FERNSEHEN. DEIN ZUHAUSE.</span>
-              <strong>Fernsehen neu erleben.</strong>
-              <span class="hero-description">Live-TV, Aufnahmen und deine Mediathek. Eine Oberfläche, alles im Blick.</span>
-              <span class="hero-progress"><span></span></span>
-            </span>
-            <span class="hero-corner">S2</span>
-          </button>
-          <button type="button" class="stage-card card-right tv-focusable" data-focus-id="stage-recordings" data-target-view="recordings">
-            <span class="stage-kicker">MEDIATHEK</span><span class="stage-ornament ornament-rings"></span>
-            <strong>Aufnahmen</strong><small>Entdecken &amp; fortsetzen</small>
-          </button>
+      <section class="page home-page" data-panel="home" aria-label="VDR-Suite Media Home">
+        <div class="home-heading">
+          <div><span class="home-kicker">VDR-SUITE · MEDIA HOME</span>
+            <h1>Dein Fernsehen.</h1></div>
+          <div class="home-heading-actions">
+            <span id="home-content-status" role="status" aria-live="polite">Verbinde deine Mediathek über API v1.</span>
+            <button type="button" class="action-button tv-focusable" data-focus-id="home-refresh"
+                    data-home-action="refresh">Inhalte aktualisieren</button>
+          </div>
         </div>
-        <div class="stage-pagination" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i><i></i></div>
-
-        <section class="actionbar" aria-label="Schnellzugriff">
-          <div class="action-summary">
-            <img src="assets/branding/vdr-suite-icon-v4.png" alt="" class="action-icon">
-            <div><strong>VDR-Suite</strong><span>Bereit für deinen Server</span></div>
+        <div class="home-feature-layout">
+          <button type="button" class="home-feature tv-focusable" data-focus-id="home-feature"
+                  data-home-action="recordings" aria-label="Ausgewählte Aufnahme – Aufnahmen öffnen">
+            <span class="home-feature-glow" aria-hidden="true"></span>
+            <img id="home-feature-poster" class="home-feature-poster" alt="" hidden>
+            <span class="home-feature-copy">
+              <span id="home-feature-kicker" class="home-feature-kicker">DEINE MEDIATHEK</span>
+              <strong id="home-feature-title">Fernsehen neu erleben.</strong>
+              <span id="home-feature-description">Echte Sendungen, Aufnahmen und dein persönlicher Wiedergabeverlauf. Direkt von VDR-Suite.</span>
+              <span id="home-feature-meta" class="home-feature-meta">Inhalte laden, um deine Mediathek zu entdecken.</span>
+            </span>
+          </button>
+          <div class="home-plan-card">
+            <span class="home-card-kicker">AUFNAHMEPLANER</span>
+            <strong>Alles im Blick.</strong>
+            <p id="home-timer-summary">Timerstatus nach Freigabe von timers.view anzeigen.</p>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="home-timer-open" data-target-view="timers">Timerplan ansehen</button>
           </div>
-          <div class="action-detail"><span>Verbindungsstatus</span><strong id="home-server-state">Noch nicht verbunden</strong></div>
-          <button type="button" class="action-button primary tv-focusable" data-focus-id="action-live" data-target-view="live">▸ &nbsp; Live-TV</button>
-          <button type="button" class="action-button tv-focusable" data-focus-id="action-recordings" data-target-view="recordings">▣ &nbsp; Aufnahmen</button>
-          <button type="button" class="action-button tv-focusable" data-focus-id="action-settings" data-target-view="settings">⚙ &nbsp; Einstellungen</button>
-        </section>
-
-        <section class="collection" aria-label="Deine Bereiche">
-          <div class="collection-heading"><strong>Deine Mediathek</strong><span>Entdecken, organisieren, weiterschauen</span></div>
-          <div class="rail">
-            <button type="button" class="rail-card rail-continue tv-focusable" data-focus-id="rail-recordings" data-target-view="recordings">
-              <span class="rail-art rail-art-recordings" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Weiterschauen</strong><small>Fortsetzen, wo du warst</small></span>
-            </button>
-            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-live" data-target-view="live">
-              <span class="rail-art rail-art-live" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Live-TV</strong><small>Kanäle &amp; Favoriten</small></span>
-            </button>
-            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-search" data-target-view="search">
-              <span class="rail-art rail-art-search" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Entdecken</strong><small>Filme &amp; Serien finden</small></span>
-            </button>
-            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-timers" data-target-view="timers">
-              <span class="rail-art rail-art-timers" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Aufnahmeplaner</strong><small>Timer im Überblick</small></span>
-            </button>
-          </div>
-        </section>
+        </div>
+        <div class="home-content-rails">
+          <section class="home-section" aria-label="Weitersehen">
+            <div class="home-section-heading">
+              <strong>Weitersehen</strong>
+              <span id="home-continue-status">Noch kein Wiedergabeverlauf geladen</span>
+            </div>
+            <div class="home-cards" id="home-continue-list"></div>
+          </section>
+          <section class="home-section" aria-label="Mediathek">
+            <div class="home-section-heading">
+              <strong>Aus deiner Mediathek</strong>
+              <span id="home-recordings-status">Noch keine Aufnahmen geladen</span>
+            </div>
+            <div class="home-cards" id="home-recordings-list"></div>
+          </section>
+          <section class="home-section" aria-label="Jetzt im TV">
+            <div class="home-section-heading">
+              <strong>Jetzt im TV</strong>
+              <span id="home-epg-status">Noch kein EPG geladen</span>
+            </div>
+            <div class="home-cards" id="home-epg-list"></div>
+          </section>
+        </div>
       </section>
 
       <section class="page detail-page live-tv-page" data-panel="live" hidden>
