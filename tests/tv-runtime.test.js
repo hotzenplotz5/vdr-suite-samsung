@@ -390,7 +390,9 @@ test("S2.3 all media detail routes cycle purely local preview states", () => {
     // presentation preview remains an explicitly selected, LOCAL-only test.
     sim.nodes["detail-" + route + "-preview"].click();
     assert.equal(sim.nodes["detail-" + route + "-preview"].isFocused, true);
-    for (const [mode, skeleton] of [["loading",false],["empty",true],["error",true],["offline",true]]) {
+    // Clicking an already-focused preview invokes its first LOCAL state.
+    assert.equal(sim.stateNodes["detail-state-" + route].dataState,"loading");
+    for (const [mode, skeleton] of [["empty",true],["error",true],["offline",true],["loading",false]]) {
       key(13);
       assert.equal(sim.stateNodes["detail-state-" + route].dataState, mode);
       assert.equal(sim.stateNodes["detail-state-skeleton-" + route].hidden, skeleton);
