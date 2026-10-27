@@ -296,3 +296,18 @@ Status: Source-Integration in PR #33 (DRAFT), CI und echte Samsung-Hardware sepa
 Hardware OPEN: Angekoppeltes DEV-Gerät GU43TU6979UXZG muss tatsächlichen WITs-Datei-Push, neue S8.1-Buildkennung, reale Inhalte/Bilder, 403-Isolation, D-Pad/OK/BACK sowie KeyManager-Persistenz bestätigen. Grün in CI oder Staging allein ist kein Hardware-PASS. PR #33 bleibt Draft, main unangetastet.
 
 S8.2 (breiteres Browse/Backendwahl) und S8.3 (explizite Home-Medienaktionen) bleiben zukünftige, noch nicht begonnene Slices.
+
+
+## S8.1 Samsung-Feldtest und S8.2 UX-/EPG-Timer-Nachbesserung (27.10.2026)
+
+**S8.1 TV-Übertragung BELEGT:** Foto vom gekoppelten Samsung GU43TU6979UXZG zeigt neue S8.1-Oberfläche und Buildkennung, echte Aufnahmen (u. a. T2 Trainspotting 2017) samt Artwork sowie aktuelle echte EPG-Sendungen. Dies ist ein echter WITs-/Home-Sicht-PASS, kein kompletter Samsung-Bedienungs-PASS.
+
+**Nutzerkritik (Hardware OPEN):** Die 97px-Mediathek-Karten wirken gegenüber dem Referenzmockup mager; in der Aufnahmensuche ist die Trefferzahl sichtbar, aber keine nutzbare Ergebnisliste; EPG hat keinen Aufnahmetimer-Knopf. Der bestehende HTML5-Live-Test scheitert mit HTTP 401.
+
+**S8.2 Source-Slice im bisherigen Draft-PR #33:**
+- Home zeigt größere artworkfähige Medienkarten statt schmaler Textkacheln; leere Listen beanspruchen keinen großen Platz.
+- Globale Suche macht die Ergebnisse durch kompakteres Layout oberhalb der TV-Faltkante sichtbar. Nach ersten echten Aufnahmetreffern springt der Fokus vom Suchknopf zur ersten Aufnahme. Meldet der Index Treffer, aber keine Items, wird dies als Serverantwort-Widerspruch angezeigt.
+- Live-EPG und EPG-Suchergebnisse erhalten je einen D-Pad-fähigen Aufnahmeknopf. Ein aktueller Event-GET mit starkem ETag liest die echte Sendung frisch; die erste Aktion zeigt eine ausdrückliche Bestätigung, die zweite sendet genau einen autorisierten POST /api/v1/epg/timer-intents. Ein HTTP 202 ist **kein Erfolg der nativen Aufnahme**: separate bewusst ausgelöste Operation-Abfrage, keine automatische Wiederholung bei unklaren Fehlern.
+- Kein neues Pairing, kein Prod-Deployment, kein Main-Merge, keine native Timer-Direktaktion. Real-TV-Bedienung, Timer-/Agent-Rückmeldung und berechtigte Backend-Installation bleiben jeweils separat abzunehmen.
+
+**Live-TV-Blocker bleibt offen:** Der aktuelle öffentliche Device-Live-Vertrag liefert ausschließlich progressive fMP4 unter browsergebundenem Secure/HttpOnly/SameSite-Media-Cookie. Der reale Samsung-HTML5-Test endet mit HTTP 401. Ein reparierter AVPlay-Pfad erfordert zunächst vom VDR-Suite-Backend ausdrücklich vertraglich freigegebenen Device-Native-Medienzugang; danach Samsung AVPlay-Integration mit eigener Session/STOP. Weder ungeschützte URLs noch Cookie-Auslesetricks sind Ersatz dafür.
