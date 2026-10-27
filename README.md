@@ -153,6 +153,10 @@ Normal: `VDRSuiteTV.VDRSuite` / Paket `VDRSuiteTV`. Isolierter WITs-Host: `VDRSu
 
 **Einschränkung:** Die DEV-App hat eigene Tizen-KeyManager-Daten. Die reale Persistenz der DEV-Kopplung über Watch/Restart ist noch **nicht nachgewiesen**; Datenbewahrung für produktive Updates bleibt separat offen. Keine automatische Neu-Kopplung, Credential-Exports oder Grants.
 
+## S6.18 – Erster Live-TV-Praxistest über API v1 (27.10.2026)
+
+Neue manuelle Schaltfläche **`Live-TV testen`** nach Auswahl eines echten Senders mit OK. Die gekoppelte DEV-App erstellt eine autorisierte `live-channel`-Session über `POST /api/v1/live-playback-sessions` mit gesondertem `media.live.play`-Grant und prüft den geschützten `live/stream.mp4`-Pfad mit HTML5-MP4. STOP/ZURÜCK und Ansichtswechsel lösen Server-Session-STOP aus; kein automatisches Zappen und keine ungeschützten Media-URLs. **Source/CI PASS, realer Samsung-Live-Test noch offen**; kein AVPlay-Cookie im veröffentlichten Live-Device-Vertrag. Siehe [API-Vertragskarte](docs/api-contracts.md), [Hardware-Abnahme](docs/hardware-acceptance.md) und [DEV-Updateweg](docs/wits-isolated-development.md).
+
 ## Phase S4.1 – echte Aufnahmen im Samsung-Client (Source-Kandidat, 2026-10-25)
 
 Der Menüpunkt **Aufnahmen** verwendet jetzt nach **OK → Aufnahmen laden** die vorhandene, sicher im Tizen-KeyManager gespeicherte Geräteanmeldung für `GET /api/v1/backends` und `GET /api/v1/recordings`. `recordings.view@backend` muss der Administrator ausdrücklich für dieses Gerät gewähren; der für Live-TV vorhandene Grant `channels.view` genügt **nicht**.
