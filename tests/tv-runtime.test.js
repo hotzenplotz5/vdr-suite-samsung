@@ -106,7 +106,8 @@ function simulate(options = {}) {
   for(const id of ["global-search-backend-name","global-search-status",
       "global-search-recording-count","global-search-epg-count",
       "global-search-recording-status","global-search-epg-status",
-      "global-search-detail-title","global-search-detail-description"])
+      "global-search-detail-title","global-search-detail-description",
+      "search-epg-timer-status"])
     globalSearchNodes[id]={textContent:""};
   const searchTimerNodes={
     "searchtimer-list":searchTimerList,
@@ -132,6 +133,7 @@ function simulate(options = {}) {
     "live-epg-detail-subtitle":{textContent:"",hidden:true},
     "live-epg-detail-description":{textContent:""},
     "live-epg-artwork-status":{textContent:""},
+    "live-epg-timer-status":{textContent:""},
     "live-epg-detail-poster":{
       hidden:true,src:"",onload:null,onerror:null,
       removeAttribute(name){if(name==="src")this.src="";}
@@ -203,6 +205,7 @@ function simulate(options = {}) {
     readyState: "complete",
     documentElement: {classList: {add(){},remove(){}}},
     getElementById(id) {
+      if (nodes[id]) return nodes[id];
       if (id === "startup-cover") return overlay;
       if (id === "startup-video") return video;
       if (stateNodes[id]) return stateNodes[id];
