@@ -3091,9 +3091,10 @@ function boot() {
       liveStatus("offline", "Bereit für echte Sender",
         "„Sender laden“ nutzt deine gespeicherte Geräteanmeldung.");
     } else if (view === "recordings") {
+      clearRecordingRows();
+      // clearRecordingRows resets row memory; restore the first action after it.
       if (!rowMemory.recordings) rowMemory.recordings = {};
       rowMemory.recordings[1] = "detail-recordings-home";
-      clearRecordingRows();
       recordingCredential = null;
       recordingBackends = [];
       recordingBackendIndex = 0;
