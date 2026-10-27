@@ -2,7 +2,7 @@
 
 Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsung Tizen TV; erstes Testgerät: **Samsung GU43TU6979U (2020 / Tizen-Generation 5.5)**.
 
-> **Status 2026-10-25:** S1-Hardwaretest teilweise erfolgreich: signiertes `.wgt` installiert; Startvideo und Logo am Samsung Tizen 5.5 sichtbar; Tizen/AVPlay/Tasten-API erkannt; D-Pad/OK-Menünavigation bestätigt. Back/Exit/Restart und Medien-/API-Zugriff noch offen.
+> **Stand 27.10.2026 – erster Audio-Hardware-PASS:** Auf dem realen Samsung Tizen 5.5 ist die isolierte DEV-App gekoppelt, der neue S6.17-Button **„HLS-TS + AAC-Ton testen“** sichtbar und der Nutzer bestätigt **tatsächlich hörbaren Ton** bei der getesteten Aufnahme. Das ist kein pauschaler PASS für sämtliche Medien, Standard-AVPlay/Seek/Stop oder den produktiven Updateweg. Frühere S1-Abschnitte dokumentieren den historischen Erststand.
 
 ## Projektgrenzen
 
@@ -19,7 +19,8 @@ Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsu
 3. [docs/api-contracts.md](docs/api-contracts.md) – geprüfte öffentliche Schnittstellen.
 4. [docs/development-setup.md](docs/development-setup.md) – Windows/Tizen/TV-Verbindung.
 5. [docs/hardware-acceptance.md](docs/hardware-acceptance.md) – Abnahme am realen Samsung.
-6. **[docs/windows-update-workflow.md](docs/windows-update-workflow.md)** – verbindlicher Windows-/VS-Code-/Tizen-Updateweg; verhindert wiederkehrende Git-Pull-Abbrüche und schützt lokale Entwicklerdateien.
+6. **[docs/windows-update-workflow.md](docs/windows-update-workflow.md)** – Windows-/Git-Pull-/Build-Reihenfolge und Schutz lokaler Entwicklerdateien.
+7. **[docs/wits-isolated-development.md](docs/wits-isolated-development.md)** – **verbindlicher DEV-TV-Live-Updateweg: genau ein `npm.cmd run tv:watch`**, keine Neuinstallation.
 
 ## Verbindlicher Windows-/Tizen-Updateweg (25.10.2026)
 
@@ -144,11 +145,11 @@ Quellenänderungen erfordern npm run build:tv und danach npm run check. Tests la
 
 **Wichtig:** `Run Project` ist kein datenbewahrendes Update: Eine Tizen-Studio-Testinstallation kann vorher deinstallieren und damit KeyManager-Daten löschen. Der neue **rein lokale** WGT-Preflight liest ein fertig signiertes Paket und vergleicht die Original-App-/Paketkennung, aktuelle Quellen, höhere Version und das Autor-Zertifikat mit einem **nachweislich bereits installierten alten WGT**. Kein TV-Zugriff, keine automatische Installation, keine Credential-Migration. Ohne alte Paket-/Signaturidentität oder belegte datenbewahrende Installationsmethode ist eine TV-Aktualisierung nicht freigegeben. Vollständiger Ablauf: [S7.2 Produktions-Update](docs/production-update-s7-2.md). Hardware-PASS bleibt offen.
 
-## WITs-Updates nur als isolierte DEV-App (S7.1 — Source, Hardware offen)
+## WITs-Updates nur als isolierte DEV-App (S7.1 — S6.17 auf realem TV sichtbar, Ton PASS)
 
 **Kritische Korrektur 2026-10-25:** WITs hängt `WITs` an die Tizen-Application-ID an, **ändert aber nicht zuverlässig die Paket-ID**. `wits --start` im normalen `app/`-Projekt könnte daher `VDRSuiteTV` (bestehende Geräteanmeldung!) treffen. **Dort niemals WITs Start ausführen.** Das bisherige `tv:watch` wurde auf eine vollständig getrennte lokale Entwicklungskopie `.tizen-wits-dev/` umgestellt.
 
-Normal: `VDRSuiteTV.VDRSuite` / Paket `VDRSuiteTV`. Isolierter WITs-Host: `VDRSuitDev.VDRSuiteWITs` / Paket `VDRSuitDev`. Erst offline `npm.cmd run tv:dev:identity` und `npm.cmd run tv:dev:prepare`, dann nur in der isolierten Kopie `wits --init`; eine mögliche einmalige `wits --start`-Installation ist **nicht autorisiert** und erfordert gesonderte Prüfung. Nach bewusster Installation: `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:dev:prepare`, `npm.cmd run tv:watch` — Watch installiert/deinstalliert nichts. Alle Details und Pflichtprüfungen: [docs/wits-isolated-development.md](docs/wits-isolated-development.md).
+Normal: `VDRSuiteTV.VDRSuite` / Paket `VDRSuiteTV`. Isolierter WITs-Host: `VDRSuitDev.VDRSuiteWITs` / Paket `VDRSuitDev`. Erstmaliges `wits --init`/`--start` sind **keine Routineupdates**; Start kann DEV-Daten/Kopplung verlieren. **Für die bereits installierte DEV-App** nach nötigem Build und erfolgreichem `npm.cmd run check` einmal `npm.cmd run tv:dev:prepare` ausführen. **Nur wenn noch kein Watch läuft** im Repo-Hauptverzeichnis `npm.cmd run tv:watch` starten; bei bereits laufendem Watch **keinen zweiten starten** (Port 4050, `EADDRINUSE`). Live-Sync und Funktion auf dem TV bestätigen; `--smoke` ist nur optional und keine Voraussetzung. **S6.17: neuer Knopf am TV sichtbar, Ton hörbar bestätigt.** Alle Details: [docs/wits-isolated-development.md](docs/wits-isolated-development.md).
 
 **Einschränkung:** Die DEV-App hat eigene Tizen-KeyManager-Daten. Die reale Persistenz der DEV-Kopplung über Watch/Restart ist noch **nicht nachgewiesen**; Datenbewahrung für produktive Updates bleibt separat offen. Keine automatische Neu-Kopplung, Credential-Exports oder Grants.
 
