@@ -163,6 +163,8 @@ function simulate(options = {}) {
       return textNodes[id];
     },
     createElement(tag) {
+      if (tag==="video" && options.mediaCanPlayType)
+        return {canPlayType(){return options.mediaCanPlayType;}};
       const attrs={};
       const node={
         tagName:tag.toUpperCase(),children:[],textContent:"",tabIndex:-1,isFocused:false,
@@ -188,7 +190,7 @@ function simulate(options = {}) {
     tizen: { tvinputdevice: { registerKey(name) {
       if (options.blockMediaKeys && /^(Media|Color)/.test(name)) throw Error("SecurityError");
     } }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
-    webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
+    webapis: { avplay: options.avplay || {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
   if (options.keymanager) window.tizen.keymanager = options.keymanager;
   if (options.localBase !== undefined) window.VDR_SUITE_SERVER_BASE = options.localBase;
@@ -1371,4 +1373,79 @@ test("S6.15 INFO on a real loaded channel requests existing authenticated now-ne
   assert.equal(h.calls[3].method,"GET");
   assert.match(sim.liveEpgStatus.textContent,/wird geladen/);
   assert.equal(h.calls.filter(req=>req.method!=="GET").length,0);
+});
+
+
+test("S6.17 HLS-TS AAC test requests only HLS TS and rejects wrong server profile",()=>{
+  const h=liveTransport(), avplay={
+    opened:0,open(){this.opened++;},play(){},
+    prepareAsync(){},setStreamingProperty(){},stop(){},close(){}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    mediaCanPlayType:"probably",avplay});
+  sim.video.finish();
+  sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-all"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={backendId:"home",recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Ton-Test",recordedAt:"2026-10-26T10:00:00Z",
+    durationSeconds:1200,durationKnown:true,sizeMb:100};
+  h.reply(2,200,{items:[rec],page:{limit:100,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  const n=h.calls.length;
+  assert.equal(sim.nodes["detail-recordings-aac-hls"].getAttribute("data-recordings-action"),"aac-hls");
+  sim.nodes["detail-recordings-aac-hls"].click();
+  assert.equal(h.calls.length,n+1);
+  const payload=JSON.parse(h.calls[n].body);
+  assert.equal(payload.nativeMediaAccess,true);
+  assert.deepEqual(Array.from(payload.capabilities.protocols),["hls"]);
+  assert.deepEqual(Array.from(payload.capabilities.containers),["mpeg-ts"]);
+  assert.deepEqual(Array.from(payload.capabilities.audioCodecs),["aac"]);
+  assert.equal(payload.capabilities.maxAudioChannels,2);
+  const sessionId="ms_0123456789abcdef0123456789abcdef";
+  h.reply(n,201,{mediaSession:{id:sessionId,backendId:"home",
+    recordingId:rec.recordingId,presentationProfileId:"progressive-direct",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/recording/stream.ts"}});
+  assert.equal(avplay.opened,0,"no player starts on server profile mismatch");
+  assert.equal(h.calls[n+1].method,"POST","mismatched session must be stopped");
+  assert.match(h.calls[n+1].url,/\/stop$/);
+  assert.match(sim.stateNodes["detail-state-description-recordings"].textContent,
+    /Serverantwort passt nicht/);
+});
+
+test("S6.17 HLS-TS AAC profile passes same-session native cookie to AVPlay",()=>{
+  const h=liveTransport(), avplay={
+    opened:[],cookie:null,
+    open(url){this.opened.push(url);},
+    setStreamingProperty(k,v){if(k==="COOKIE")this.cookie=v;},
+    setListener(){},setDisplayRect(){},
+    prepareAsync(success){this.ready=success;},play(){},stop(){},close(){},
+    getState(){return "PLAYING";},getTotalTrackInfo(){return [];},getCurrentStreamInfo(){return []}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    mediaCanPlayType:"probably",avplay});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-all"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={backendId:"home",recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Ton-Test",recordedAt:"2026-10-26T10:00:00Z",
+    durationSeconds:1200,durationKnown:true,sizeMb:100};
+  h.reply(2,200,{items:[rec],page:{limit:100,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  const n=h.calls.length;sim.nodes["detail-recordings-aac-hls"].click();
+  const sessionId="ms_0123456789abcdef0123456789abcdef";
+  const cookie="vdr_suite_media=mg_0123456789abcdef0123456789abcdef.abcdefghijklmnop";
+  h.reply(n,201,{mediaSession:{id:sessionId,backendId:"home",
+    recordingId:rec.recordingId,presentationProfileId:"hls-ts",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/hls/master.m3u8"},
+    nativeMediaAccess:{transport:"http-cookie",cookie}});
+  assert.equal(avplay.opened.length,1,"valid profile starts native player exactly once");
+  assert.match(avplay.opened[0],/\/hls\/master\.m3u8$/);
+  assert.equal(avplay.cookie,cookie);
+  assert.match(sim.audioHint.textContent,/HLS-TS mit AAC Stereo angefordert/);
+  assert.equal(sim.playerSurface.hidden,false);
 });
