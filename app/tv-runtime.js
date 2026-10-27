@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"997774d7a3f9","label":"Samsung v0.1.0 · S6.4 · b997774d7a3f9"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S6.4","build":"09b06af0abc7","label":"Samsung v0.1.0 · S6.4 · b09b06af0abc7"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -1150,6 +1150,158 @@
     return "Timer-Zugriff nicht vorbereitet; bestehende Geräteanmeldung prüfen.";
   }
   // END app/src/api/native-timers.js
+
+  // BEGIN app/src/api/search-timers.js
+  // S6.20: read saved epgsearch SearchTimers via Device Public-v1 only.
+  // Native timers, TimerAssignments and SearchTimers are three distinct resources.
+  function createSearchTimerCatalog(environment) {
+    var env=environment||{},pending=null,serial=0;
+    function cancel() {
+      serial++;
+      if(pending && typeof pending.abort==="function")
+        try {pending.abort();} catch (_) {}
+      pending=null;
+    }
+    function backend(id) {
+      return typeof id==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(id);
+    }
+    function ruleId(id) {
+      return typeof id==="string" && /^st_[0-9a-f]{32}$/.test(id);
+    }
+    function credential(c) {
+      return c && typeof c.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+        backend(c.credentialId) &&
+        typeof c.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+    }
+    function validItem(x,scope) {
+      return x && ruleId(x.searchTimerId) && x.backendId===scope &&
+        typeof x.name==="string" && x.name.length>0 && x.name.length<=1024 &&
+        typeof x.query==="string" && x.query.length>0 && x.query.length<=1024 &&
+        (x.state==="active" || x.state==="inactive" || x.state==="unknown");
+    }
+    function validList(x,scope) {
+      if (!x || !Array.isArray(x.items) || x.items.length>30 ||
+          !x.page || x.page.limit!==30 ||
+          typeof x.page.hasMore!=="boolean" ||
+          !x.meta || x.meta.partial!==false) return false;
+      if(x.page.hasMore &&
+          (x.items.length!==30 || typeof x.page.nextCursor!=="string" ||
+           !/^st1_[0-9a-f]{2,2044}$/.test(x.page.nextCursor))) return false;
+      if(!x.page.hasMore && x.page.nextCursor!==null)return false;
+      var last="";
+      return x.items.every(function(item){
+        if(!validItem(item,scope) ||
+            (last && item.searchTimerId<=last))return false;
+        last=item.searchTimerId;return true;
+      });
+    }
+    function validEvent(x) {
+      return x && typeof x.title==="string" && x.title.length>0 &&
+        x.title.length<=1024 &&
+        typeof x.subtitle==="string" && x.subtitle.length<=2048 &&
+        typeof x.channelId==="string" && x.channelId.length<=256 &&
+        typeof x.startTime==="string" && x.startTime.length<=64 &&
+        typeof x.endTime==="string" && x.endTime.length<=64;
+    }
+    function request(c,path,validate,done) {
+      if(!credential(c) || typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"credential"});return;
+      }
+      cancel();
+      var ticket=serial,xhr=new env.XMLHttpRequest(),finished=false;
+      pending=xhr;
+      function finish(value) {
+        if(finished || ticket!==serial)return;
+        finished=true;pending=null;done(value);
+      }
+      var url=c.base.replace(/\/$/,"")+path;
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=10000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization",
+          "VDR-Suite-Device "+c.credentialId+"."+c.credentialSecret);
+        xhr.onload=function() {
+          if(xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if(xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var json=null;
+          try {json=JSON.parse(xhr.responseText);} catch (_) {}
+          if(!validate(json)) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:json});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      }catch(_){finish({ok:false,kind:"network"});}
+    }
+    function list(c,scope,cursor,done) {
+      if(!backend(scope) ||
+         (cursor!==null && cursor!==undefined &&
+         (typeof cursor!=="string" || !/^st1_[0-9a-f]{2,2044}$/.test(cursor)))) {
+        done({ok:false,kind:"request"});return;
+      }
+      var path="/api/v1/search-timers?backend="+encodeURIComponent(scope)+"&limit=30";
+      if(cursor)path+="&cursor="+encodeURIComponent(cursor);
+      request(c,path,function(json){return validList(json,scope);},done);
+    }
+    function detail(c,scope,id,done) {
+      if(!backend(scope) || !ruleId(id)) {
+        done({ok:false,kind:"request"});return;
+      }
+      request(c,"/api/v1/search-timers/"+id+"?backend="+encodeURIComponent(scope),
+        function(value){
+          return validItem(value,scope) && value.searchTimerId===id &&
+            value.meta && value.meta.partial===false;
+        },done);
+    }
+    function preview(c,scope,id,done) {
+      if(!backend(scope) || !ruleId(id)) {
+        done({ok:false,kind:"request"});return;
+      }
+      request(c,"/api/v1/search-timers/"+id+
+        "/preview?backend="+encodeURIComponent(scope)+"&limit=30",
+        function(value) {
+          return value && value.searchTimerId===id &&
+            value.backendId===scope && Number.isInteger(value.totalCount) &&
+            value.totalCount>=0 && Array.isArray(value.items) &&
+            value.items.length<=30 && value.items.length<=value.totalCount &&
+            value.items.every(validEvent) &&
+            value.meta && value.meta.partial===false &&
+            value.meta.epgInput==="ready";
+        },done);
+    }
+    return {list:list,detail:detail,preview:preview,cancel:cancel};
+  }
+  function searchTimerCatalogError(result,preview) {
+    if(!result)return "Suchtimer konnten nicht gelesen werden.";
+    if(result.kind==="http") {
+      if(result.status===401)return "Geräteanmeldung abgewiesen (HTTP 401).";
+      if(result.status===403)return preview ?
+        "Treffervorschau nicht freigegeben: searchtimers.view UND epg.view erforderlich (HTTP 403)." :
+        "Suchtimer nicht freigegeben: searchtimers.view für das Backend erforderlich (HTTP 403).";
+      if(result.status===404)return "Suchtimer nicht mehr vorhanden oder API-v1-Endpunkt fehlt (HTTP 404). Neu laden.";
+      if(result.status===503)return preview ?
+        "EPG-Treffercache oder epgsearch nicht bereit (HTTP 503), keine leere Vorschau." :
+        "epgsearch-Provider nicht erreichbar (HTTP 503), keine leere Liste.";
+      if(result.status===400)return "API-v1-Suchtimerabfrage abgewiesen (HTTP 400).";
+      return "Suchtimer-API HTTP "+result.status+".";
+    }
+    if(result.kind==="network")return "Suchtimer-Netzwerkzugriff/TLS/CORS fehlgeschlagen.";
+    if(result.kind==="timeout")return "Zeitüberschreitung bei epgsearch.";
+    if(result.kind==="response")return "Suchtimerantwort entspricht nicht dem Public-v1-Vertrag.";
+    return "Ungültige Anfrage oder keine gültige Geräteanmeldung.";
+  }
+  // END app/src/api/search-timers.js
 
   // BEGIN app/src/api/media-metadata.js
   // Public API v1 metadata reads for the Samsung Device client.
@@ -2336,6 +2488,26 @@
     var channelCatalog = createChannelCatalog(window);
     var recordingCatalog = createRecordingCatalog(window);
     var nativeTimerCatalog = createNativeTimerCatalog(window);
+    var searchTimerCatalog = createSearchTimerCatalog(window);
+    var searchTimerBackendCatalog = createChannelCatalog(window);
+    var searchTimerPairing = createPairingClient(window);
+    var searchTimerCredential = null;
+    var searchTimerBackends = [];
+    var searchTimerBackendIndex = 0;
+    var searchTimerCursor = null;
+    var searchTimerBusy = false;
+    var searchTimerRun = 0;
+    var searchTimerSelectionRun = 0;
+    var searchTimerRows = [];
+    var searchTimerItems = [];
+    var selectedSearchTimer = null;
+    var searchTimerList = document.getElementById("searchtimer-list");
+    var searchTimerBackendLabel = document.getElementById("searchtimer-backend");
+    var searchTimerStatusLabel = document.getElementById("searchtimer-status");
+    var searchTimerDetailTitle = document.getElementById("searchtimer-detail-title");
+    var searchTimerDetailInfo = document.getElementById("searchtimer-detail-info");
+    var searchTimerPreviewStatus = document.getElementById("searchtimer-preview-status");
+    var searchTimerPreviewList = document.getElementById("searchtimer-preview-list");
     var nativeTimerCredential = null;
     var nativeTimerBackends = [];
     var nativeTimerBackendIndex = 0;
@@ -2498,6 +2670,9 @@
         var timerRows=[NAV_ROW,["detail-timers-home","detail-timers-load",
           "detail-timers-more","detail-timers-backend","detail-timers-preview"]];
         nativeTimerRows.forEach(function(id){timerRows.push([id]);});
+        timerRows.push(["searchtimer-load","searchtimer-more",
+          "searchtimer-backend-change","searchtimer-preview"]);
+        searchTimerRows.forEach(function(id){timerRows.push([id]);});
         return timerRows;
       }
       if (currentView === "settings") return [
@@ -3328,6 +3503,257 @@
       });
     }
   
+  
+  
+    // S6.20: independent saved epgsearch rule browser. A rule is neither an
+    // existing native VDR timer nor a Suite TimerAssignment.
+    function searchTimerMessage(message) {
+      if(searchTimerStatusLabel)searchTimerStatusLabel.textContent=message;
+    }
+    function clearSearchTimerPreview() {
+      if(searchTimerPreviewList) {
+        searchTimerPreviewList.textContent="";
+        searchTimerPreviewList.hidden=true;
+      }
+      if(searchTimerPreviewStatus)
+        searchTimerPreviewStatus.textContent=
+          "EPG-Treffer benötigen zusätzlich epg.view; keine Aufnahmeprognose.";
+    }
+    function clearSearchTimerRows() {
+      searchTimerRows.forEach(function(id) {
+        var control=controls[id];
+        delete controls[id];
+        var found=items.indexOf(control);
+        if(found!==-1)items.splice(found,1);
+      });
+      searchTimerRows=[];
+      searchTimerItems=[];
+      searchTimerCursor=null;
+      selectedSearchTimer=null;
+      if(searchTimerList) {
+        searchTimerList.textContent="";
+        searchTimerList.hidden=true;
+      }
+      if(searchTimerDetailTitle)searchTimerDetailTitle.textContent="Noch keine Regel gewählt";
+      if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+        "OK auf eine Regel zeigt ihre aktuellen Details.";
+      clearSearchTimerPreview();
+    }
+    function searchTimerState(rule) {
+      return rule.state==="active"?"AKTIV":
+        rule.state==="inactive"?"INAKTIV":"STATUS UNBEKANNT";
+    }
+    function appendSearchTimerRows(rules) {
+      if(!searchTimerList)return;
+      rules.forEach(function(rule) {
+        var index=searchTimerItems.length,id="searchtimer-row-"+index;
+        var node=document.createElement("li");
+        node.className="native-timer-row tv-focusable";
+        node.tabIndex=-1;
+        node.setAttribute("role","button");
+        node.setAttribute("data-focus-id",id);
+        node.setAttribute("data-searchtimer-index",String(index));
+        node.setAttribute("aria-label",rule.name);
+        var name=document.createElement("strong");
+        name.textContent=rule.name;
+        var info=document.createElement("span");
+        info.textContent="Suchbegriff: "+rule.query+" · "+searchTimerState(rule);
+        node.appendChild(name);
+        node.appendChild(info);
+        controls[id]=node;
+        items.push(node);
+        searchTimerRows.push(id);
+        searchTimerItems.push(rule);
+        searchTimerList.appendChild(node);
+        node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+      });
+      searchTimerList.hidden=searchTimerItems.length===0;
+    }
+    function fetchSearchTimerPage(run,cursor) {
+      if(run!==searchTimerRun || !searchTimerCredential ||
+          !searchTimerBackends.length)return;
+      var backend=searchTimerBackends[searchTimerBackendIndex];
+      searchTimerBusy=true;
+      searchTimerMessage("Lese gespeicherte epgsearch-Suchtimer · "+backend.name+" …");
+      searchTimerCatalog.list(searchTimerCredential,backend.backendId,cursor,
+        function(result) {
+          if(run!==searchTimerRun || currentView!=="timers")return;
+          searchTimerBusy=false;
+          if(!result.ok) {
+            clearSearchTimerRows();
+            searchTimerMessage(searchTimerCatalogError(result,false));
+            return;
+          }
+          if(!cursor)clearSearchTimerRows();
+          var ruleList=result.value.items;
+          if(cursor && searchTimerItems.length && ruleList.length &&
+              ruleList[0].searchTimerId<=
+                searchTimerItems[searchTimerItems.length-1].searchTimerId) {
+            clearSearchTimerRows();
+            searchTimerMessage("Suchtimerreihenfolge geändert – bitte neu laden.");
+            return;
+          }
+          var first=searchTimerRows.length;
+          appendSearchTimerRows(ruleList);
+          searchTimerCursor=result.value.page.hasMore ?
+            result.value.page.nextCursor:null;
+          if(searchTimerBackendLabel)
+            searchTimerBackendLabel.textContent="Backend: "+backend.name+
+              " · "+backend.backendId;
+          searchTimerMessage(searchTimerItems.length ?
+            searchTimerItems.length+" echte Suchtimer geladen · "+
+              (searchTimerCursor?"Weitere Seite verfügbar":"Ende der Liste") :
+            "Keine gespeicherten Suchtimer für dieses Backend.");
+          if(cursor && searchTimerRows[first])setFocus(searchTimerRows[first]);
+        });
+    }
+    function selectSearchTimer(index) {
+      if(searchTimerBusy || !searchTimerCredential ||
+          !searchTimerBackends.length)return;
+      var rule=searchTimerItems[index];
+      if(!rule)return;
+      selectedSearchTimer=rule;
+      ++searchTimerSelectionRun;
+      var ticket=searchTimerSelectionRun;
+      var backend=searchTimerBackends[searchTimerBackendIndex];
+      if(rule.backendId!==backend.backendId)return;
+      clearSearchTimerPreview();
+      if(searchTimerDetailTitle)searchTimerDetailTitle.textContent=rule.name;
+      if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+        "Suchbegriff: "+rule.query+" · "+searchTimerState(rule)+
+        " · Lade aktuellen Regelstand …";
+      searchTimerBusy=true;
+      searchTimerCatalog.detail(searchTimerCredential,backend.backendId,
+        rule.searchTimerId,function(result){
+          if(ticket!==searchTimerSelectionRun || currentView!=="timers" ||
+              selectedSearchTimer!==rule)return;
+          searchTimerBusy=false;
+          if(!result.ok) {
+            if(searchTimerDetailInfo)
+              searchTimerDetailInfo.textContent=searchTimerCatalogError(result,false);
+            if(result.kind==="http" && (result.status===403 || result.status===404))
+              selectedSearchTimer=null;
+            return;
+          }
+          selectedSearchTimer=result.value;
+          if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+            "Suche: "+result.value.query+" · "+searchTimerState(result.value)+
+            " · EPG-Treffer über eigene Schaltfläche ansehen.";
+        });
+    }
+    function searchTimerEventTime(value) {
+      if(/^\d{9,11}$/.test(value)) {
+        var date=new Date(Number(value)*1000);
+        if(!isNaN(date.getTime()))return date.toLocaleString("de-DE");
+      }
+      return value;
+    }
+    function loadSearchTimerPreview() {
+      if(searchTimerBusy || !selectedSearchTimer || !searchTimerCredential ||
+          !searchTimerBackends.length) {
+        if(!selectedSearchTimer)
+          searchTimerMessage("Zuerst einen gespeicherten Suchtimer mit OK auswählen.");
+        return;
+      }
+      var rule=selectedSearchTimer;
+      var backend=searchTimerBackends[searchTimerBackendIndex];
+      if(rule.backendId!==backend.backendId)return;
+      ++searchTimerSelectionRun;
+      var ticket=searchTimerSelectionRun;
+      clearSearchTimerPreview();
+      searchTimerBusy=true;
+      if(searchTimerPreviewStatus)searchTimerPreviewStatus.textContent=
+        "Lese EPG-Treffervorschau … searchtimers.view + epg.view";
+      searchTimerCatalog.preview(searchTimerCredential,backend.backendId,
+        rule.searchTimerId,function(result){
+          if(ticket!==searchTimerSelectionRun || currentView!=="timers" ||
+              selectedSearchTimer!==rule)return;
+          searchTimerBusy=false;
+          if(!result.ok) {
+            if(searchTimerPreviewStatus)
+              searchTimerPreviewStatus.textContent=
+                searchTimerCatalogError(result,true);
+            return;
+          }
+          var value=result.value;
+          if(searchTimerPreviewStatus)
+            searchTimerPreviewStatus.textContent=value.totalCount+
+              " EPG-Texttreffer · "+value.items.length+
+              " angezeigt · keine garantierten Aufnahmen";
+          if(!searchTimerPreviewList)return;
+          value.items.forEach(function(event){
+            var node=document.createElement("li");
+            var title=document.createElement("strong");
+            title.textContent=event.title;
+            var details=document.createElement("span");
+            details.textContent=searchTimerEventTime(event.startTime)+"–"+
+              searchTimerEventTime(event.endTime)+" · "+event.channelId+
+              (event.subtitle?" · "+event.subtitle:"");
+            node.appendChild(title);node.appendChild(details);
+            searchTimerPreviewList.appendChild(node);
+          });
+          searchTimerPreviewList.hidden=value.items.length===0;
+        });
+    }
+    function loadSearchTimers(action) {
+      if(searchTimerBusy || currentView!=="timers")return;
+      if(action==="preview"){loadSearchTimerPreview();return;}
+      if(action==="more") {
+        if(!searchTimerCursor || searchTimerItems.length>=300) {
+          searchTimerMessage("Keine weitere Seite in dieser Ansicht.");return;
+        }
+        fetchSearchTimerPage(searchTimerRun,searchTimerCursor);return;
+      }
+      if(action==="backend") {
+        if(!searchTimerCredential || searchTimerBackends.length<2) {
+          searchTimerMessage("Kein zweites Backend geladen.");return;
+        }
+        ++searchTimerRun;
+        ++searchTimerSelectionRun;
+        searchTimerCatalog.cancel();
+        clearSearchTimerRows();
+        searchTimerBackendIndex=(searchTimerBackendIndex+1)%
+          searchTimerBackends.length;
+        fetchSearchTimerPage(searchTimerRun,null);return;
+      }
+      var read=vault.read();
+      if(!read.ok || !read.credential) {
+        searchTimerMessage("Geräteanmeldung nicht verfügbar – unter Einstellungen prüfen.");
+        return;
+      }
+      var base=serverInput && normalizeSuiteBase(serverInput.value);
+      if(base && base!==read.credential.base) {
+        searchTimerMessage("Gespeicherte Anmeldung gehört zu einem anderen Server.");
+        return;
+      }
+      searchTimerCredential=read.credential;
+      searchTimerBackends=[];
+      searchTimerBackendIndex=0;
+      ++searchTimerSelectionRun;
+      clearSearchTimerRows();
+      var run=++searchTimerRun;
+      searchTimerBusy=true;
+      searchTimerMessage("Prüfe vorhandene Geräteanmeldung …");
+      searchTimerPairing.verify(searchTimerCredential,function(result){
+        if(run!==searchTimerRun || currentView!=="timers")return;
+        if(!result.ok){
+          searchTimerBusy=false;
+          searchTimerMessage(deviceVerificationError(result));return;
+        }
+        markDeviceAuthenticated(searchTimerCredential);
+        searchTimerMessage("Lese Public-v1-Backends …");
+        searchTimerBackendCatalog.listBackends(searchTimerCredential,function(found){
+          if(run!==searchTimerRun || currentView!=="timers")return;
+          if(!found.ok || !found.value.items.length) {
+            searchTimerBusy=false;
+            searchTimerMessage(found.ok?"Keine lesbaren Backends.":
+              channelCatalogError(found));return;
+          }
+          searchTimerBackends=found.value.items;
+          fetchSearchTimerPage(run,null);
+        });
+      });
+    }
   
     // S6.19: one real native VDR timer inventory (not TimerAssignments).
     // No POST, no client-side timer construction and no cross-backend fanout.
@@ -4308,6 +4734,13 @@
         channelCatalog.cancel();
       }
       if (currentView === "timers" && view !== "timers") {
+        ++searchTimerRun;
+        ++searchTimerSelectionRun;
+        searchTimerBusy=false;
+        searchTimerCatalog.cancel();
+        searchTimerBackendCatalog.cancel();
+        searchTimerPairing.cancel();
+        clearSearchTimerRows();
         nativeTimerRun++;
         nativeTimerBusy=false;
         nativeTimerCatalog.cancel();
@@ -4358,6 +4791,19 @@
         recordingStatus("offline", "Bereit für echte Aufnahmen",
           "„Aufnahmen laden“ nutzt die gespeicherte Geräteanmeldung. recordings.view erforderlich.");
       } else if (view === "timers") {
+        ++searchTimerRun;
+        ++searchTimerSelectionRun;
+        searchTimerBusy=false;
+        searchTimerCatalog.cancel();
+        searchTimerBackendCatalog.cancel();
+        searchTimerPairing.cancel();
+        clearSearchTimerRows();
+        searchTimerCredential=null;
+        searchTimerBackends=[];
+        searchTimerBackendIndex=0;
+        if(searchTimerBackendLabel)
+          searchTimerBackendLabel.textContent="Noch kein Backend geladen";
+        searchTimerMessage("Suchtimer laden benötigt searchtimers.view.");
         nativeTimerRun++;
         nativeTimerBusy=false;
         nativeTimerCatalog.cancel();
@@ -4549,6 +4995,14 @@
       if (recordingAction) {
         loadRecordings(recordingAction);
         return;
+      }
+      var searchTimerIndex=item.getAttribute("data-searchtimer-index");
+      if(searchTimerIndex!==null && currentView==="timers") {
+        selectSearchTimer(Number(searchTimerIndex));return;
+      }
+      var searchTimerAction=item.getAttribute("data-searchtimer-action");
+      if(searchTimerAction && currentView==="timers") {
+        loadSearchTimers(searchTimerAction);return;
       }
       var timerIndex=item.getAttribute("data-native-timer-index");
       if(timerIndex!==null && currentView==="timers") {
