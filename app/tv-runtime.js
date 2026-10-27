@@ -4,31 +4,48 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S5.1","build":"226675b93921","label":"Samsung v0.1.0 · S5.1 · b226675b93921"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.3","build":"efa280faa569","label":"Samsung v0.1.0 · S8.3 · befa280faa569"});
 
   // BEGIN app/src/navigation/remote.js
-  // Samsung key events normalized once, before views consume them.
+  // Normalize Samsung Tizen remote events exactly once for the client.
   const KEY_CODES = Object.freeze({
-    37: "LEFT", 38: "UP", 39: "RIGHT", 40: "DOWN",
-    13: "OK", 8: "BACK", 27: "BACK", 10009: "BACK",
-    415: "PLAY", 19: "PAUSE", 413: "STOP",
-    403: "RED", 404: "GREEN", 405: "YELLOW", 406: "BLUE"
+    37:"LEFT",38:"UP",39:"RIGHT",40:"DOWN",13:"OK",
+    8:"BACK",27:"BACK",10009:"BACK",
+    48:"DIGIT_0",49:"DIGIT_1",50:"DIGIT_2",51:"DIGIT_3",52:"DIGIT_4",
+    53:"DIGIT_5",54:"DIGIT_6",55:"DIGIT_7",56:"DIGIT_8",57:"DIGIT_9",
+    415:"PLAY",19:"PAUSE",10252:"PLAY_PAUSE",413:"STOP",
+    412:"REWIND",417:"FAST_FORWARD",10232:"TRACK_PREVIOUS",10233:"TRACK_NEXT",
+    403:"RED",404:"GREEN",405:"YELLOW",406:"BLUE",
+    427:"CHANNEL_UP",428:"CHANNEL_DOWN",10190:"PREVIOUS_CHANNEL",
+    457:"INFO",18:"SETTINGS",10135:"TOOLS",10200:"TELETEXT"
   });
-  
   const NAMED_KEYS = Object.freeze({
-    ArrowLeft: "LEFT", ArrowUp: "UP", ArrowRight: "RIGHT", ArrowDown: "DOWN",
-    Enter: "OK", Escape: "BACK", Backspace: "BACK", BrowserBack: "BACK",
-    MediaPlay: "PLAY", MediaPause: "PAUSE", MediaStop: "STOP",
-    ColorF0Red: "RED", ColorF1Green: "GREEN",
-    ColorF2Yellow: "YELLOW", ColorF3Blue: "BLUE"
+    ArrowLeft:"LEFT",ArrowUp:"UP",ArrowRight:"RIGHT",ArrowDown:"DOWN",
+    Enter:"OK",Escape:"BACK",Backspace:"BACK",BrowserBack:"BACK",
+    MediaPlay:"PLAY",MediaPause:"PAUSE",MediaPlayPause:"PLAY_PAUSE",MediaStop:"STOP",
+    MediaRewind:"REWIND",MediaFastForward:"FAST_FORWARD",
+    MediaTrackPrevious:"TRACK_PREVIOUS",MediaTrackNext:"TRACK_NEXT",
+    ColorF0Red:"RED",ColorF1Green:"GREEN",ColorF2Yellow:"YELLOW",ColorF3Blue:"BLUE",
+    ChannelUp:"CHANNEL_UP",ChannelDown:"CHANNEL_DOWN",PreviousChannel:"PREVIOUS_CHANNEL",
+    Info:"INFO",Menu:"SETTINGS",Tools:"TOOLS",Teletext:"TELETEXT"
   });
-  
   function normalizeRemoteKey(event) {
     if (!event) return null;
-    if (typeof event.key === "string" && NAMED_KEYS[event.key]) {
-      return NAMED_KEYS[event.key];
+    if (typeof event.key === "string") {
+      if (/^[0-9]$/.test(event.key)) return "DIGIT_" + event.key;
+      if (NAMED_KEYS[event.key]) return NAMED_KEYS[event.key];
     }
     return KEY_CODES[event.keyCode || event.which] || null;
+  }
+  function playbackRemoteAction(key) {
+    if (key === "STOP" || key === "BACK") return "stop";
+    if (key === "PLAY") return "play";
+    if (key === "PAUSE") return "pause";
+    if (key === "PLAY_PAUSE" || key === "OK") return "toggle";
+    if (key === "BLUE") return "audio";
+    if (key === "REWIND") return "rewind";
+    if (key === "FAST_FORWARD") return "fastforward";
+    return null;
   }
   // END app/src/navigation/remote.js
 
@@ -95,27 +112,34 @@
   // END app/src/platform/capabilities.js
 
   // BEGIN app/src/platform/keys.js
+  // Optional Tizen remote keys need tv.inputdevice in the installed host manifest.
   const OPTIONAL_KEYS = [
-    "MediaPlay", "MediaPause", "MediaStop",
-    "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue"
+    "MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
+    "MediaRewind", "MediaFastForward", "MediaTrackPrevious", "MediaTrackNext",
+    "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue",
+    "ChannelUp", "ChannelDown", "PreviousChannel",
+    "Info", "Menu", "Tools", "Teletext",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
   ];
-  
-  // Directions, Enter and Back are normally delivered without explicit registration.
+  // D-pad, Enter and Back are mandatory and must not be registered.
   function registerOptionalKeys(globals) {
     const api = globals && globals.tizen && globals.tizen.tvinputdevice;
-    if (!api) return { supported: false, registered: [] };
-    const registered = [];
-    if (typeof api.registerKey === "function") {
-      for (let i = 0; i < OPTIONAL_KEYS.length; i += 1) {
-        try {
-          api.registerKey(OPTIONAL_KEYS[i]);
-          registered.push(OPTIONAL_KEYS[i]);
-        } catch (_) {
-          // Some remote keys are not available on every Samsung TV.
-        }
-      }
+    if (!api || typeof api.registerKey !== "function")
+      return { supported: false, registered: [], unavailable: [], failed: [] };
+    const registered = [], unavailable = [], failed = [];
+    let available = null;
+    if (typeof api.getSupportedKeys === "function") {
+      try {
+        const keys = api.getSupportedKeys();
+        if (Array.isArray(keys)) available = new Set(keys.filter(k => k && typeof k.name === "string").map(k => k.name));
+      } catch (_) { /* Discovery is optional; try individual registrations. */ }
     }
-    return { supported: true, registered: registered };
+    for (const name of OPTIONAL_KEYS) {
+      if (available && !available.has(name)) { unavailable.push(name); continue; }
+      try { api.registerKey(name); registered.push(name); }
+      catch (_) { failed.push(name); }
+    }
+    return { supported: true, registered, unavailable, failed };
   }
   // END app/src/platform/keys.js
 
@@ -756,7 +780,7 @@
         callback({ok:false,kind:"bad_request"}); return;
       }
       var path = "/api/v1/channels?backendId=" + encodeURIComponent(backendId) +
-        "&limit=20&sort=backendId,channelId&order=asc";
+        "&limit=20&sort=backendId,channelNumber,channelId&order=asc";
       if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
       fetchPage(credential, path, function (value) {
         return value.items.length <= 20 &&
@@ -784,6 +808,7 @@
     if (result.kind === "network") return "Server auf diesem TV nicht erreichbar (Netzwerk/TLS/CORS).";
     if (result.kind === "bad_response") return "Antwort entspricht nicht dem Public-API-v1-Vertrag.";
     if (result.kind === "http") {
+      if (result.status === 400) return "Dieser Server unterstützt die numerische VDR-Senderreihenfolge noch nicht (HTTP 400). Installierten API-v1-Stand prüfen; kein stiller Rückfall auf falsche Sortierung.";
       if (result.status === 401) return "Geräteanmeldung abgewiesen: Credential ungültig, abgelaufen oder widerrufen. Administrator kontaktieren.";
       if (result.status === 403) return "Senderzugriff verweigert. Der Administrator muss channels.view für dieses Backend freigeben.";
       if (result.status === 409) return "Senderliste hat sich geändert. Bitte mit „Sender laden“ neu beginnen.";
@@ -1011,6 +1036,881 @@
   }
   // END app/src/api/recording-catalog.js
 
+  // BEGIN app/src/api/home-continue.js
+  // S8.1 Home content: true actor-scoped Continue Watching, never inferred from
+  // a recording list or from localStorage. Read-only Device Public API v1.
+  function createHomeContinueWatching(environment) {
+    var env=environment||{},pending=null,serial=0;
+    function cancel(){
+      serial++;
+      if(pending && typeof pending.abort==="function")
+        try{pending.abort();}catch(_){}
+      pending=null;
+    }
+    function validCredential(c){
+      return c && typeof c.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+        /^[A-Za-z0-9._-]{1,128}$/.test(c.credentialId) &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+    }
+    function load(credential,backendId,done){
+      if(!validCredential(credential) ||
+         typeof backendId!=="string" ||
+         !/^[A-Za-z0-9._-]{1,128}$/.test(backendId) ||
+         typeof env.XMLHttpRequest!=="function"){
+        done({ok:false,kind:"request"});return;
+      }
+      cancel();
+      var ticket=serial,finished=false,xhr=new env.XMLHttpRequest();
+      pending=xhr;
+      var url=credential.base.replace(/\/$/,"")+
+        "/api/v1/recording-playback-sessions/continue-watching?backendId="+
+        encodeURIComponent(backendId);
+      function finish(result){
+        if(finished || ticket!==serial)return;
+        finished=true;pending=null;done(result);
+      }
+      try{
+        xhr.open("GET",url,true);xhr.timeout=10000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          credential.credentialId+"."+credential.credentialSecret);
+        xhr.onload=function(){
+          if(xhr.responseURL && xhr.responseURL!==url){
+            finish({ok:false,kind:"response"});return;
+          }
+          if(xhr.status!==200){
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var data=null;try{data=JSON.parse(xhr.responseText);}catch(_){}
+          if(!data || data.backendId!==backendId || data.limit!==50 ||
+             !Array.isArray(data.items) || data.items.length>50 ||
+             !data.items.every(function(item){
+               return item && /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+                 Number.isInteger(item.positionSeconds) &&
+                 item.positionSeconds>0 &&
+                 (item.durationSeconds===null ||
+                   (Number.isInteger(item.durationSeconds) &&
+                    item.durationSeconds>item.positionSeconds)) &&
+                 typeof item.resumeSupport==="string" &&
+                 item.resumeSupport.length>0 && item.resumeSupport.length<=64;
+             })){
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:data});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      }catch(_){finish({ok:false,kind:"network"});}
+    }
+    return {load:load,cancel:cancel};
+  }
+  function homeContinueError(result){
+    if(result && result.kind==="http"){
+      if(result.status===401)return "Geräteanmeldung abgewiesen.";
+      if(result.status===403)return "Weitersehen benötigt media.recording.play.";
+      if(result.status===404)return "Weitersehen auf diesem API-v1-Server noch nicht verfügbar.";
+      if(result.status===503)return "Wiedergabeverlauf derzeit nicht verfügbar.";
+      return "Weitersehen HTTP "+result.status+".";
+    }
+    return "Weitersehen derzeit nicht abrufbar.";
+  }
+  // END app/src/api/home-continue.js
+
+  // BEGIN app/src/api/native-timers.js
+  // S6.19: read-only Public v1 snapshot of real native VDR timers.
+  // Separate from Suite TimerAssignments and epgsearch SearchTimers.
+  function createNativeTimerCatalog(environment) {
+    var env=environment || {};
+    var pending=null,serial=0;
+    function cancel() {
+      serial++;
+      if (pending && typeof pending.abort==="function")
+        try {pending.abort();} catch (_) {}
+      pending=null;
+    }
+    function safeBackend(value) {
+      return typeof value==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+    }
+    function validCredential(c) {
+      return c && typeof c.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+        safeBackend(c.credentialId) &&
+        typeof c.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+    }
+    function validItem(item) {
+      return item && typeof item==="object" &&
+        typeof item.timerId==="string" && item.timerId.length>0 &&
+        item.timerId.length<=512 &&
+        typeof item.channelId==="string" && item.channelId.length<=512 &&
+        typeof item.channelName==="string" && item.channelName.length<=512 &&
+        typeof item.title==="string" && item.title.length<=2048 &&
+        typeof item.day==="string" && item.day.length<=32 &&
+        typeof item.weekdays==="string" && item.weekdays.length<=32 &&
+        typeof item.startTime==="string" && item.startTime.length<=16 &&
+        typeof item.endTime==="string" && item.endTime.length<=16 &&
+        typeof item.enabled==="boolean" && typeof item.recording==="boolean" &&
+        typeof item.pending==="boolean";
+    }
+    function validPage(value,backendId,offset) {
+      var page=value && value.page;
+      return value && value.backendId===backendId &&
+        Array.isArray(value.items) && value.items.length<=30 &&
+        value.items.every(validItem) &&
+        page && page.limit===30 && page.offset===offset &&
+        typeof page.hasMore==="boolean" &&
+        (page.hasMore ?
+          Number.isInteger(page.nextOffset) &&
+            page.nextOffset===offset+value.items.length &&
+            page.nextOffset>offset && page.nextOffset<=100000 :
+          page.nextOffset===null) &&
+        value.meta && value.meta.partial===false;
+    }
+    function list(credential,backendId,offset,done) {
+      if (!validCredential(credential) || !safeBackend(backendId) ||
+          !Number.isInteger(offset) || offset<0 || offset>100000 ||
+          typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"invalid_request"});return;
+      }
+      cancel();
+      var generation=serial;
+      var path="/api/v1/native-timers?backendId="+encodeURIComponent(backendId)+
+        "&offset="+offset+"&limit=30";
+      var url=credential.base.replace(/\/$/,"")+path;
+      var xhr=new env.XMLHttpRequest();
+      pending=xhr;
+      var finished=false;
+      function finish(result) {
+        if(finished || generation!==serial)return;
+        finished=true;pending=null;done(result);
+      }
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=8000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          credential.credentialId+"."+credential.credentialSecret);
+        xhr.onload=function() {
+          if(xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"bad_response"});return;
+          }
+          if(xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var response;
+          try {response=JSON.parse(xhr.responseText);} catch (_) {
+            finish({ok:false,kind:"bad_response"});return;
+          }
+          if(!validPage(response,backendId,offset)) {
+            finish({ok:false,kind:"bad_response"});return;
+          }
+          finish({ok:true,value:response});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      } catch (_) {finish({ok:false,kind:"network"});}
+    }
+    return {list:list,cancel:cancel};
+  }
+  function nativeTimerCatalogError(result) {
+    if (!result) return "Unbekannter Timerfehler.";
+    if(result.kind==="http") {
+      if(result.status===401)return "Geräteanmeldung für Timer abgewiesen (HTTP 401).";
+      if(result.status===403)return "Timerzugriff verweigert: timers.view für dieses Backend freigeben (HTTP 403).";
+      if(result.status===404)return "Dieser API-v1-Server hat noch keinen Native-Timer-Leseendpunkt (HTTP 404).";
+      if(result.status===503)return "VDR-Timer-Snapshot nicht erreichbar (HTTP 503). Nicht als leere Timerliste anzeigen.";
+      return "Timer-API HTTP "+result.status+".";
+    }
+    if(result.kind==="bad_response")return "Timer-Antwort weicht vom Public-v1-Vertrag ab.";
+    if(result.kind==="timeout")return "Zeitüberschreitung beim Lesen der Timer.";
+    if(result.kind==="network")return "Timer-API durch Netzwerk/TLS/CORS nicht erreichbar.";
+    return "Timer-Zugriff nicht vorbereitet; bestehende Geräteanmeldung prüfen.";
+  }
+  // END app/src/api/native-timers.js
+
+  // BEGIN app/src/api/search-timers.js
+  // S6.20: read saved epgsearch SearchTimers via Device Public-v1 only.
+  // Native timers, TimerAssignments and SearchTimers are three distinct resources.
+  function createSearchTimerCatalog(environment) {
+    var env=environment||{},pending=null,serial=0;
+    function cancel() {
+      serial++;
+      if(pending && typeof pending.abort==="function")
+        try {pending.abort();} catch (_) {}
+      pending=null;
+    }
+    function backend(id) {
+      return typeof id==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(id);
+    }
+    function ruleId(id) {
+      return typeof id==="string" && /^st_[0-9a-f]{32}$/.test(id);
+    }
+    function credential(c) {
+      return c && typeof c.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+        backend(c.credentialId) &&
+        typeof c.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+    }
+    function validItem(x,scope) {
+      return x && ruleId(x.searchTimerId) && x.backendId===scope &&
+        typeof x.name==="string" && x.name.length>0 && x.name.length<=1024 &&
+        typeof x.query==="string" && x.query.length>0 && x.query.length<=1024 &&
+        (x.state==="active" || x.state==="inactive" || x.state==="unknown");
+    }
+    function validList(x,scope) {
+      if (!x || !Array.isArray(x.items) || x.items.length>30 ||
+          !x.page || x.page.limit!==30 ||
+          typeof x.page.hasMore!=="boolean" ||
+          !x.meta || x.meta.partial!==false) return false;
+      if(x.page.hasMore &&
+          (x.items.length!==30 || typeof x.page.nextCursor!=="string" ||
+           !/^st1_[0-9a-f]{2,2044}$/.test(x.page.nextCursor))) return false;
+      if(!x.page.hasMore && x.page.nextCursor!==null)return false;
+      var last="";
+      return x.items.every(function(item){
+        if(!validItem(item,scope) ||
+            (last && item.searchTimerId<=last))return false;
+        last=item.searchTimerId;return true;
+      });
+    }
+    function validEvent(x) {
+      return x && typeof x.title==="string" && x.title.length>0 &&
+        x.title.length<=1024 &&
+        typeof x.subtitle==="string" && x.subtitle.length<=2048 &&
+        typeof x.channelId==="string" && x.channelId.length<=256 &&
+        typeof x.startTime==="string" && x.startTime.length<=64 &&
+        typeof x.endTime==="string" && x.endTime.length<=64;
+    }
+    function request(c,path,validate,done) {
+      if(!credential(c) || typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"credential"});return;
+      }
+      cancel();
+      var ticket=serial,xhr=new env.XMLHttpRequest(),finished=false;
+      pending=xhr;
+      function finish(value) {
+        if(finished || ticket!==serial)return;
+        finished=true;pending=null;done(value);
+      }
+      var url=c.base.replace(/\/$/,"")+path;
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=10000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization",
+          "VDR-Suite-Device "+c.credentialId+"."+c.credentialSecret);
+        xhr.onload=function() {
+          if(xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if(xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var json=null;
+          try {json=JSON.parse(xhr.responseText);} catch (_) {}
+          if(!validate(json)) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:json});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      }catch(_){finish({ok:false,kind:"network"});}
+    }
+    function list(c,scope,cursor,done) {
+      if(!backend(scope) ||
+         (cursor!==null && cursor!==undefined &&
+         (typeof cursor!=="string" || !/^st1_[0-9a-f]{2,2044}$/.test(cursor)))) {
+        done({ok:false,kind:"request"});return;
+      }
+      var path="/api/v1/search-timers?backend="+encodeURIComponent(scope)+"&limit=30";
+      if(cursor)path+="&cursor="+encodeURIComponent(cursor);
+      request(c,path,function(json){return validList(json,scope);},done);
+    }
+    function detail(c,scope,id,done) {
+      if(!backend(scope) || !ruleId(id)) {
+        done({ok:false,kind:"request"});return;
+      }
+      request(c,"/api/v1/search-timers/"+id+"?backend="+encodeURIComponent(scope),
+        function(value){
+          return validItem(value,scope) && value.searchTimerId===id &&
+            value.meta && value.meta.partial===false;
+        },done);
+    }
+    function preview(c,scope,id,done) {
+      if(!backend(scope) || !ruleId(id)) {
+        done({ok:false,kind:"request"});return;
+      }
+      request(c,"/api/v1/search-timers/"+id+
+        "/preview?backend="+encodeURIComponent(scope)+"&limit=30",
+        function(value) {
+          return value && value.searchTimerId===id &&
+            value.backendId===scope && Number.isInteger(value.totalCount) &&
+            value.totalCount>=0 && Array.isArray(value.items) &&
+            value.items.length<=30 && value.items.length<=value.totalCount &&
+            value.items.every(validEvent) &&
+            value.meta && value.meta.partial===false &&
+            value.meta.epgInput==="ready";
+        },done);
+    }
+    return {list:list,detail:detail,preview:preview,cancel:cancel};
+  }
+  function searchTimerCatalogError(result,preview) {
+    if(!result)return "Suchtimer konnten nicht gelesen werden.";
+    if(result.kind==="http") {
+      if(result.status===401)return "Geräteanmeldung abgewiesen (HTTP 401).";
+      if(result.status===403)return preview ?
+        "Treffervorschau nicht freigegeben: searchtimers.view UND epg.view erforderlich (HTTP 403)." :
+        "Suchtimer nicht freigegeben: searchtimers.view für das Backend erforderlich (HTTP 403).";
+      if(result.status===404)return "Suchtimer nicht mehr vorhanden oder API-v1-Endpunkt fehlt (HTTP 404). Neu laden.";
+      if(result.status===503)return preview ?
+        "EPG-Treffercache oder epgsearch nicht bereit (HTTP 503), keine leere Vorschau." :
+        "epgsearch-Provider nicht erreichbar (HTTP 503), keine leere Liste.";
+      if(result.status===400)return "API-v1-Suchtimerabfrage abgewiesen (HTTP 400).";
+      return "Suchtimer-API HTTP "+result.status+".";
+    }
+    if(result.kind==="network")return "Suchtimer-Netzwerkzugriff/TLS/CORS fehlgeschlagen.";
+    if(result.kind==="timeout")return "Zeitüberschreitung bei epgsearch.";
+    if(result.kind==="response")return "Suchtimerantwort entspricht nicht dem Public-v1-Vertrag.";
+    return "Ungültige Anfrage oder keine gültige Geräteanmeldung.";
+  }
+  // END app/src/api/search-timers.js
+
+  // BEGIN app/src/api/global-search.js
+  // S6.21: common TV search backed by the SAME server-side GlobalSearchService
+  // as the Web frontend. This is an authorized Public-v1 projection, not a
+  // client-side substring scan of recordings or 14 days of EPG.
+  function createPublicGlobalSearch(environment) {
+    var env=environment||{},serial=0;
+    var inflight={epg:null,recordings:null};
+    function cancel() {
+      serial++;
+      ["epg","recordings"].forEach(function(kind){
+        var old=inflight[kind];inflight[kind]=null;
+        if(old && typeof old.abort==="function")try{old.abort();}catch(_){}
+      });
+    }
+    function backend(value) {
+      return typeof value==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+    }
+    function credential(value) {
+      return value && typeof value.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(value.base) &&
+        backend(value.credentialId) &&
+        typeof value.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(value.credentialSecret);
+    }
+    function searchText(value) {
+      if(typeof value!=="string")return null;
+      var text=value.trim();
+      if(text.length<2 || /[\x00-\x1f\x7f]/.test(text))return null;
+      // Backend checks encoded request length and decoded UTF-8 byte limits.
+      try {
+        // Percent escapes represent individual UTF-8 bytes; no TextEncoder or
+        // deprecated unescape() is needed on Tizen Chromium M69 or Node VM.
+        var encoded=encodeURIComponent(text);
+        if(encoded.replace(/%[0-9A-Fa-f]{2}/g,"x").length>240 ||
+            encoded.length>360)return null;
+      } catch(_){return null;}
+      return text;
+    }
+    function validRow(item,scope,kind) {
+      if(!item || item.kind!==(kind==="recordings"?"recording":"epg") ||
+          item.backendId!==scope ||
+          typeof item.title!=="string" || !item.title ||
+          item.title.length>4096)return false;
+      if(kind==="recordings")return /^rec_[0-9a-f]{32}$/.test(item.recordingId) &&
+        typeof item.edited==="boolean";
+      return typeof item.channelId==="string" && item.channelId.length>0 &&
+        item.channelId.length<=256 &&
+        typeof item.eventId==="string" && item.eventId.length>0 &&
+        item.eventId.length<=160 &&
+        typeof item.subtitle==="string" && item.subtitle.length<=2048 &&
+        typeof item.startTime==="string" && item.startTime.length<=64 &&
+        typeof item.endTime==="string" && item.endTime.length<=64;
+    }
+    function validPage(value,scope,kind,offset) {
+      var page=value && value.page;
+      if(!page || !Array.isArray(value.items) || value.items.length>30 ||
+          page.limit!==30 || page.offset!==offset ||
+          !Number.isInteger(page.totalCount) ||
+          page.totalCount<offset+value.items.length ||
+          typeof page.hasMore!=="boolean" ||
+          page.hasMore!==(offset+value.items.length<page.totalCount))return false;
+      return value.items.every(function(item){return validRow(item,scope,kind);});
+    }
+    function request(value,scope,term,kind,offset,done) {
+      var normalized=searchText(term);
+      if(!credential(value) || !backend(scope) || !normalized ||
+          ["epg","recordings"].indexOf(kind)<0 ||
+          !Number.isInteger(offset) || offset<0 || offset>1000000 ||
+          typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"request"});return;
+      }
+      var old=inflight[kind];
+      if(old && typeof old.abort==="function")try{old.abort();}catch(_){}
+      var xhr=new env.XMLHttpRequest(),token=serial;
+      inflight[kind]=xhr;
+      var path="/api/v1/search/"+kind+"?backendId="+scope+
+        "&query="+encodeURIComponent(normalized)+"&limit=30&offset="+offset;
+      var url=value.base.replace(/\/$/,"")+path,finished=false;
+      function finish(result) {
+        if(finished || token!==serial || inflight[kind]!==xhr)return;
+        finished=true;inflight[kind]=null;done(result);
+      }
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=12000;
+        xhr.withCredentials=false;
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          value.credentialId+"."+value.credentialSecret);
+        xhr.onload=function(){
+          if(xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if(xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var json=null;
+          try{json=JSON.parse(xhr.responseText);}catch(_){}
+          if(!validPage(json,scope,kind,offset)) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:json});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      }catch(_){finish({ok:false,kind:"network"});}
+    }
+    return {request:request,cancel:cancel,normalizeQuery:searchText};
+  }
+  function publicGlobalSearchError(result,kind) {
+    var scope=kind==="epg"?"EPG":"Aufnahmen";
+    if(!result)return scope+"-Suche fehlgeschlagen.";
+    if(result.kind==="http"){
+      if(result.status===401)return "Geräteanmeldung abgewiesen (HTTP 401).";
+      if(result.status===403)return kind==="epg" ?
+        "EPG-Suche benötigt epg.view für dieses Backend (HTTP 403)." :
+        "Aufnahmesuche benötigt recordings.view für dieses Backend (HTTP 403).";
+      if(result.status===503)return scope+
+        "-Suchindex/Backend nicht verfügbar (HTTP 503), nicht als 0 Treffer behandeln.";
+      if(result.status===404)return "Öffentlicher Suchendpunkt fehlt auf diesem Backend (HTTP 404).";
+      if(result.status===400)return "Suchbegriff oder Parameter abgewiesen (HTTP 400).";
+      return scope+"-Suche HTTP "+result.status+".";
+    }
+    if(result.kind==="timeout")return scope+"-Suche hat zu lange gedauert.";
+    if(result.kind==="network")return scope+"-Suche durch Netzwerk/TLS/CORS blockiert.";
+    if(result.kind==="response")return "Suchantwort entspricht nicht dem Public-v1-Vertrag.";
+    return "Mindestens zwei Zeichen eingeben und bestehende Anmeldung prüfen.";
+  }
+  // END app/src/api/global-search.js
+
+  // BEGIN app/src/api/epg-timer-intents.js
+  // S8.2: deliberately confirmed one-shot EPG TimerIntent through Public API v1.
+  // No native timer specs, private routes, automatic POST retries or scheduling claims.
+  function createEpgTimerIntents(environment) {
+    var env=environment||{},read=null,serial=0,postPending=false,attempted={};
+    function cancel() {
+      serial++;
+      if(read && typeof read.abort==="function")try{read.abort();}catch(_){}
+      read=null;
+      // Never abort/retry an in-flight CREATE on navigation: its outcome may be unknown.
+    }
+    function safeBackend(v){return typeof v==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(v);}
+    function safeChannel(v){return typeof v==="string" && /^[A-Za-z0-9._-]{1,256}$/.test(v);}
+    function safeEvent(v){return typeof v==="string" && /^[A-Za-z0-9._:-]{1,160}$/.test(v);}
+    function credOk(c){return c && typeof c.base==="string" &&
+      /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+      safeBackend(c.credentialId) &&
+      typeof c.credentialSecret==="string" &&
+      /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);}
+    function strongTag(v){return typeof v==="string" &&
+      /^"[\x21\x23-\x7e]{1,220}"$/.test(v);}
+    function request(c,method,path,body,headers,done) {
+      if(!credOk(c)||typeof env.XMLHttpRequest!=="function"){
+        done({ok:false,kind:"request"});return null;
+      }
+      var xhr=new env.XMLHttpRequest(),url=c.base.replace(/\/$/,"")+path;
+      try{
+        xhr.open(method,url,true);xhr.timeout=12000;xhr.withCredentials=false;
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          c.credentialId+"."+c.credentialSecret);
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        Object.keys(headers||{}).forEach(function(k){xhr.setRequestHeader(k,headers[k]);});
+        xhr.onload=function(){
+          if(xhr.responseURL && xhr.responseURL!==url){
+            done({ok:false,kind:"redirect"});return;
+          }
+          var data=null;
+          if(xhr.responseText)try{data=JSON.parse(xhr.responseText);}catch(_){}
+          done({ok:xhr.status===200||xhr.status===202,
+            status:xhr.status,data:data,
+            etag:typeof xhr.getResponseHeader==="function" ?
+              xhr.getResponseHeader("ETag"):null});
+        };
+        xhr.onerror=function(){done({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){done({ok:false,kind:"timeout"});};
+        xhr.send(body);
+        return xhr;
+      }catch(_){done({ok:false,kind:"network"});return null;}
+    }
+    function freshEvent(c,bid,cid,eid,done){
+      if(!safeBackend(bid)||!safeChannel(cid)||!safeEvent(eid)){
+        done({ok:false,kind:"request"});return;
+      }
+      cancel();
+      var token=serial;
+      read=request(c,"GET","/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&eventId="+encodeURIComponent(eid),
+        null,{},function(r){
+          if(token!==serial)return;
+          read=null;
+          if(!r.ok||r.status!==200){done(r.ok?{ok:false,kind:"response"}:r);return;}
+          var v=r.data;
+          if(!strongTag(r.etag)||!v||v.backendId!==bid||
+             v.channelId!==cid||v.eventId!==eid||
+             typeof v.title!=="string"||!v.title||
+             typeof v.startTime!=="string"||!/^[0-9]{10,12}$/.test(v.startTime)||
+             typeof v.endTime!=="string"||!/^[0-9]{10,12}$/.test(v.endTime)||
+             Number(v.endTime)<=Math.floor(Date.now()/1000)){
+            done({ok:false,kind:"stale"});return;
+          }
+          done({ok:true,value:v,etag:r.etag});
+        });
+    }
+    function idempotencyKey(){
+      if(!env.crypto||typeof env.crypto.getRandomValues!=="function")return null;
+      var bytes=new Uint8Array(16);
+      try{env.crypto.getRandomValues(bytes);}catch(_){return null;}
+      return "samsung-epg-"+Array.prototype.map.call(bytes,function(x){
+        return ("0"+x.toString(16)).slice(-2);
+      }).join("");
+    }
+    function create(c,bid,cid,eid,etag,done){
+      if(postPending||!safeBackend(bid)||!safeChannel(cid)||
+         !safeEvent(eid)||!strongTag(etag)||!credOk(c)){
+        done({ok:false,kind:"request"});return;
+      }
+      // Same event cannot generate another CREATE on the same TV runtime.
+      var logical=bid+"|"+cid+"|"+eid;
+      if(attempted[logical]){done({ok:false,kind:"already"});return;}
+      var key=idempotencyKey();
+      if(!key){done({ok:false,kind:"crypto"});return;}
+      attempted[logical]=key;
+      postPending=true;
+      request(c,"POST","/api/v1/epg/timer-intents",
+        JSON.stringify({backendId:bid,channelId:cid,eventId:eid}),
+        {"Content-Type":"application/json","If-Match":etag,"Idempotency-Key":key},
+        function(r){
+          postPending=false;
+          if(!r.ok||r.status!==202){done(r.ok?{ok:false,kind:"response"}:r);return;}
+          var v=r.data;
+          if(!v||typeof v.operationId!=="string"||
+             !/^op_[A-Za-z0-9._:-]{1,160}$/.test(v.operationId)||
+             v.backendId!==bid||typeof v.state!=="string"){
+            done({ok:false,kind:"response"});return;
+          }
+          done({ok:true,value:v});
+        });
+    }
+    function operation(c,operationId,done){
+      if(typeof operationId!=="string"||
+         !/^op_[A-Za-z0-9._:-]{1,160}$/.test(operationId)){
+        done({ok:false,kind:"request"});return;
+      }
+      cancel();var token=serial;
+      read=request(c,"GET","/api/v1/operations/"+encodeURIComponent(operationId),
+        null,{},function(r){
+          if(token!==serial)return;
+          read=null;
+          if(!r.ok||r.status!==200){done(r.ok?{ok:false,kind:"response"}:r);return;}
+          if(!r.data||r.data.operationId!==operationId||
+             typeof r.data.state!=="string"){
+            done({ok:false,kind:"response"});return;
+          }
+          done({ok:true,value:r.data});
+        });
+    }
+    return {freshEvent:freshEvent,create:create,operation:operation,cancel:cancel};
+  }
+  function epgTimerIntentError(r){
+    if(!r)return "Timer-Anfrage nicht verfügbar.";
+    if(r.kind==="stale")return "Sendung ist vorbei, wurde geändert oder liefert keinen gültigen ETag. EPG neu laden.";
+    if(r.kind==="already")return "Für diese Sendung wurde schon ein Timerauftrag versucht. Status am Server prüfen, nicht doppelt anlegen.";
+    if(r.kind==="crypto")return "Sichere Zufallsquelle fehlt – keine Timerbuchung durchgeführt.";
+    if(r.kind==="timeout"||r.kind==="network")return
+      "Netzwerkantwort unklar. Keinen weiteren Timer anlegen; zuerst Timerstatus am Server prüfen.";
+    if(r.kind==="http"){
+      if(r.status===401)return "Geräteanmeldung abgewiesen (401).";
+      if(r.status===403)return "timers.create fehlt oder Backend ist schreibgeschützt (403).";
+      if(r.status===409||r.status===412)return "EPG/Backend wurde verändert. Bitte neu auswählen (409/412).";
+      if(r.status===503)return "Backend/Agent derzeit nicht bereit (503).";
+      return "Timer-API HTTP "+r.status+".";
+    }
+    return "Timer-API-Vertrag nicht erfüllt; keine Erfolgsmeldung.";
+  }
+  // END app/src/api/epg-timer-intents.js
+
+  // BEGIN app/src/api/media-metadata.js
+  // Public API v1 metadata reads for the Samsung Device client.
+  // All calls use an explicit Device credential and backend-scoped grants.
+  // Never follow response-provided image URLs, redirects or native paths.
+  function createPublicMediaMetadata(environment) {
+    var env=environment || {};
+    var pending=null, generation=0;
+    function cancel() {
+      generation++;
+      if (pending && typeof pending.abort==="function") {
+        try {pending.abort();} catch (_) {}
+      }
+      pending=null;
+    }
+    function backend(id) {return typeof id==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(id);}
+    function channel(id) {return typeof id==="string" && /^[A-Za-z0-9._-]{1,256}$/.test(id);}
+    function recording(id) {return typeof id==="string" && /^rec_[0-9a-f]{32}$/.test(id);}
+    function artworkId(id) {return typeof id==="string" && /^[0-9a-f]{32}$/.test(id);}
+    function epoch(value) {return Number.isInteger(value) && value>=1000000000 && value<=999999999999;}
+    function credentials(cred) {
+      return cred && typeof cred.base==="string" &&
+        /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(cred.base) &&
+        typeof cred.credentialId==="string" &&
+        /^[A-Za-z0-9._-]{1,128}$/.test(cred.credentialId) &&
+        typeof cred.credentialSecret==="string" &&
+        /^[A-Za-z0-9._~-]{16,512}$/.test(cred.credentialSecret);
+    }
+    function request(cred,path,binary,validate,done) {
+      if (!credentials(cred) || typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"unavailable"});return;
+      }
+      cancel();
+      var token=generation;
+      var xhr=new env.XMLHttpRequest(),ended=false;
+      pending=xhr;
+      var url=cred.base.replace(/\/$/,"")+path;
+      function finish(result) {
+        if (ended || token!==generation) return;
+        ended=true;pending=null;done(result);
+      }
+      try {
+        xhr.open("GET",url,true);
+        xhr.timeout=8000;
+        xhr.withCredentials=false;
+        if (binary) xhr.responseType="arraybuffer";
+        xhr.setRequestHeader("Accept",binary?"image/jpeg, image/png, image/webp":"application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          cred.credentialId+"."+cred.credentialSecret);
+        xhr.onload=function() {
+          if (xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if (xhr.status!==200) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var data;
+          if (binary) {
+            var mime=typeof xhr.getResponseHeader==="function" ?
+              (xhr.getResponseHeader("Content-Type")||"").split(";")[0].trim().toLowerCase() : "";
+            var bytes=xhr.response;
+            if (!/^(image\/jpeg|image\/png|image\/webp)$/.test(mime) ||
+                !bytes || typeof bytes.byteLength!=="number" ||
+                bytes.byteLength<1 || bytes.byteLength>2*1024*1024) {
+              finish({ok:false,kind:"response"});return;
+            }
+            data={bytes:bytes,contentType:mime};
+          } else {
+            try {data=JSON.parse(xhr.responseText);}
+            catch (_) {finish({ok:false,kind:"response"});return;}
+          }
+          if (!validate(data)) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:data});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(null);
+      } catch (_) {finish({ok:false,kind:"network"});}
+    }
+    function validEvent(item,ch) {
+      if (!item || item.channelId!==ch || typeof item.title!=="string" ||
+          item.title.length>4096 || (item.subtitle!==undefined &&
+          (typeof item.subtitle!=="string" || item.subtitle.length>4096)) ||
+          typeof item.startTime!=="string" || !/^\d{10,12}$/.test(item.startTime) ||
+          typeof item.endTime!=="string" || !/^\d{10,12}$/.test(item.endTime) ||
+          Number(item.endTime)<=Number(item.startTime) ||
+          !Number.isInteger(item.durationSeconds) || item.durationSeconds<0) return false;
+      return item.eventId===undefined ||
+        (typeof item.eventId==="string" && /^[A-Za-z0-9._:-]{1,160}$/.test(item.eventId));
+    }
+    function nowNext(cred,bid,cid,from,done) {
+      if (!backend(bid) || !channel(cid) || !epoch(from)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path="/api/v1/epg/now-next?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&fromTime="+from+"&limit=2";
+      request(cred,path,false,function(data) {
+        return data && data.backendId===bid && data.channelId===cid &&
+          Array.isArray(data.items) && data.items.length<=2 &&
+          data.items.every(function(e){return validEvent(e,cid);}) &&
+          data.page && data.page.limit===2 && data.page.hasMore===false &&
+          data.meta && data.meta.partial===false;
+      },done);
+    }
+    function epgWindow(cred,bid,cid,from,until,cursor,done) {
+      if (!backend(bid) || !channel(cid) || !epoch(from) || !epoch(until) ||
+          until<=from || until-from>172800 ||
+          (cursor!==null && cursor!==undefined &&
+           (typeof cursor!=="string" || !/^[A-Za-z0-9._~-]{1,4096}$/.test(cursor)))) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path="/api/v1/epg/window?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&fromTime="+from+
+        "&untilTime="+until+"&limit=24";
+      if(cursor)path+="&cursor="+encodeURIComponent(cursor);
+      request(cred,path,false,function(data) {
+        if (!data || data.backendId!==bid || data.channelId!==cid ||
+            !Array.isArray(data.items) || data.items.length>24 ||
+            !data.items.every(function(e){return validEvent(e,cid);}) ||
+            !data.page || data.page.limit!==24 ||
+            typeof data.page.hasMore!=="boolean" || !data.meta ||
+            data.meta.partial!==false) return false;
+        var next=data.page.nextCursor;
+        return data.page.hasMore ?
+          (typeof next==="string" && /^[A-Za-z0-9._~-]{1,4096}$/.test(next) &&
+           next!==cursor) : next===null;
+      },done);
+    }
+    // Native EPG event detail is a separate read: no guessed cache keys,
+    // no timer mutation and no request without a proven source eventId.
+    function eventDetail(cred,bid,cid,eid,done) {
+      if (!backend(bid) || !channel(cid) ||
+          typeof eid!=="string" || !/^[A-Za-z0-9._:-]{1,160}$/.test(eid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path="/api/v1/epg/event?backendId="+encodeURIComponent(bid)+
+        "&channelId="+encodeURIComponent(cid)+"&eventId="+eid;
+      request(cred,path,false,function(data) {
+        return data && data.backendId===bid && data.channelId===cid &&
+          data.eventId===eid && typeof data.title==="string" &&
+          data.title.length>0 && data.title.length<=512 &&
+          typeof data.subtitle==="string" && data.subtitle.length<=512 &&
+          typeof data.description==="string" && data.description.length<=1536 &&
+          typeof data.startTime==="string" && /^\d{10,12}$/.test(data.startTime) &&
+          typeof data.endTime==="string" && /^\d{10,12}$/.test(data.endTime) &&
+          Number(data.endTime)>Number(data.startTime) &&
+          Number.isInteger(data.durationSeconds) && data.durationSeconds>=0;
+      },done);
+    }
+    // Public-v1 EPG images are binary, device-authorized GETs only.
+    // Do not accept provider image URLs, paths, or media credentials in query.
+    function epgImage(cred,bid,cid,eid,preferred,done) {
+      if (!backend(bid) || !channel(cid) ||
+          typeof eid!=="string" || !/^[A-Za-z0-9._:-]{1,160}$/.test(eid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      var path=(preferred ? "/api/v1/epg/preferred-artwork" :
+        "/api/v1/epg/artwork")+"?backendId="+bid+
+        "&channelId="+cid+"&eventId="+eid;
+      request(cred,path,true,function(data){
+        return !!(data && data.bytes && data.contentType);
+      },done);
+    }
+    function epgPreferredArtwork(cred,bid,cid,eid,done) {
+      epgImage(cred,bid,cid,eid,true,done);
+    }
+    function epgDirectArtwork(cred,bid,cid,eid,done) {
+      epgImage(cred,bid,cid,eid,false,done);
+    }
+    function recordingDetail(cred,bid,rid,done) {
+      if (!backend(bid) || !recording(rid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      request(cred,"/api/v1/recordings/"+rid+"?backendId="+encodeURIComponent(bid),
+        false,function(data) {
+          if (!data || data.backendId!==bid || data.recordingId!==rid ||
+              typeof data.title!=="string" || data.title.length>4096 ||
+              typeof data.description!=="string" || data.description.length>65536 ||
+              typeof data.recordedAt!=="string" || data.recordedAt.length>64 ||
+              !Number.isInteger(data.durationSeconds) || data.durationSeconds<0 ||
+              typeof data.durationKnown!=="boolean" ||
+              typeof data.sizeMb!=="number" || !isFinite(data.sizeMb) || data.sizeMb<0) return false;
+          var meta=data.metadata;
+          if (!meta || ["absent","partial","available"].indexOf(meta.state)<0 ||
+              ["none","restfulapi-scraper-bridge","manual"].indexOf(meta.source)<0 ||
+              ["unknown","movie","series","series-episode"].indexOf(meta.contentKind)<0) return false;
+          var fields=["subtitle","seriesTitle","episodeTitle","genreText","overview","releaseDate","epgTitle","tagline"];
+          return fields.every(function(field){return meta[field]===undefined ||
+            (typeof meta[field]==="string" && meta[field].length<=16384);}) &&
+            ["seasonNumber","episodeNumber"].every(function(field){return meta[field]===undefined ||
+              (Number.isInteger(meta[field]) && meta[field]>=0 && meta[field]<=99999);});
+        },done);
+    }
+    function artworkList(cred,bid,rid,done) {
+      if (!backend(bid) || !recording(rid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      request(cred,"/api/v1/recordings/"+rid+"/artwork?backendId="+encodeURIComponent(bid),
+        false,function(data){
+          return data && data.backendId===bid && data.recordingId===rid &&
+            Array.isArray(data.items) && data.items.length<=32 &&
+            data.items.every(function(item){
+              return item && artworkId(item.artworkId) &&
+                ["poster","fanart","banner","still"].indexOf(item.kind)>=0 &&
+                (item.width===undefined ||
+                 (Number.isInteger(item.width)&&item.width>0&&item.width<=16384)) &&
+                (item.height===undefined ||
+                 (Number.isInteger(item.height)&&item.height>0&&item.height<=16384));
+            });
+        },done);
+    }
+    function artworkBytes(cred,bid,rid,aid,done) {
+      if (!backend(bid) || !recording(rid) || !artworkId(aid)) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      request(cred,"/api/v1/recordings/"+rid+"/artwork/"+aid+
+        "?backendId="+encodeURIComponent(bid),true,function(data){
+          return !!(data && data.bytes && data.contentType);
+        },done);
+    }
+    return {cancel:cancel,nowNext:nowNext,epgWindow:epgWindow,eventDetail:eventDetail,
+      epgPreferredArtwork:epgPreferredArtwork,epgDirectArtwork:epgDirectArtwork,
+      recordingDetail:recordingDetail,artworkList:artworkList,artworkBytes:artworkBytes};
+  }
+  
+  function mediaMetadataError(result) {
+    if (!result) return "Metadaten nicht verfügbar.";
+    if (result.kind==="http") {
+      if (result.status===400) return "Anfrage nicht kompatibel mit dem Serververtrag (HTTP 400).";
+      if (result.status===401) return "Geräteanmeldung abgewiesen.";
+      if (result.status===403) return "Berechtigung fehlt: epg.view bzw. recordings.view.";
+      if (result.status===404) return "EPG-Eintrag, Aufnahme oder Funktion auf diesem Server nicht vorhanden.";
+      if (result.status===409) return "EPG-Zeitfenster hat sich geändert; bitte neu laden.";
+      if (result.status===503) return "Backend oder Metadaten-Cache derzeit nicht verfügbar.";
+      return "Public-v1-Metadaten HTTP "+result.status+".";
+    }
+    if (result.kind==="timeout") return "Metadaten-Zeitüberschreitung.";
+    if (result.kind==="network") return "Metadaten: Netzwerk/TLS/CORS-Fehler.";
+    if (result.kind==="response") return "Antwort verletzt den Public-v1-Metadatenvertrag.";
+    return "Metadatenanfrage nicht möglich.";
+  }
+  // END app/src/api/media-metadata.js
+
   // BEGIN app/src/api/recording-playback.js
   // S5.1 experimental Device-owned Recording playback. No Browser/private API.
   function validId(value,prefix) {
@@ -1160,6 +2060,137 @@
   }
   // END app/src/api/recording-playback.js
 
+  // BEGIN app/src/api/live-playback.js
+  // S6.18: Device-owned, explicitly requested Public-v1 Live-TV session.
+  // No Browser/private media endpoint, query token or untrusted provider URL.
+  function safeId(value,prefix) {
+    return typeof value==="string" &&
+      new RegExp("^"+prefix+"_[0-9a-f]{32}$").test(value);
+  }
+  function validCredential(c) {
+    return c && typeof c.base==="string" &&
+      /^https:\/\/[^\s/?#]+(?:\/[^?#]*)?$/.test(c.base) &&
+      /^[A-Za-z0-9._-]{1,128}$/.test(c.credentialId) &&
+      /^[A-Za-z0-9._~-]{16,512}$/.test(c.credentialSecret);
+  }
+  function safeBackend(value) {
+    return typeof value==="string" && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+  }
+  function safeChannel(value) {
+    return typeof value==="string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value);
+  }
+  function createLivePlaybackClient(environment) {
+    var env=environment || {};
+    function send(credential,path,payload,success,done) {
+      if (!validCredential(credential) || typeof env.XMLHttpRequest!=="function") {
+        done({ok:false,kind:"unavailable"});return;
+      }
+      var url=credential.base.replace(/\/$/,"")+path;
+      var xhr=new env.XMLHttpRequest();
+      var finished=false;
+      function finish(result) {
+        if (finished) return;
+        finished=true;
+        done(result);
+      }
+      try {
+        xhr.open("POST",url,true);
+        xhr.timeout=15000;
+        xhr.withCredentials=true; // HttpOnly cookie, not JavaScript-visible
+        xhr.setRequestHeader("Accept","application/json");
+        xhr.setRequestHeader("Content-Type","application/json");
+        xhr.setRequestHeader("Cache-Control","no-store");
+        xhr.setRequestHeader("Authorization","VDR-Suite-Device "+
+          credential.credentialId+"."+credential.credentialSecret);
+        xhr.onload=function() {
+          if (xhr.responseURL && xhr.responseURL!==url) {
+            finish({ok:false,kind:"response"});return;
+          }
+          if (xhr.status!==success && !(success===200 && xhr.status===204)) {
+            finish({ok:false,kind:"http",status:xhr.status});return;
+          }
+          var value=null;
+          try {value=JSON.parse(xhr.responseText);} catch (_) {}
+          if (success===201 && !value) {
+            finish({ok:false,kind:"response"});return;
+          }
+          finish({ok:true,value:value});
+        };
+        xhr.onerror=function(){finish({ok:false,kind:"network"});};
+        xhr.ontimeout=function(){finish({ok:false,kind:"timeout"});};
+        xhr.send(JSON.stringify(payload));
+      } catch (_) {finish({ok:false,kind:"network"});}
+    }
+    function stop(credential,backendId,sessionId,done) {
+      if (!safeBackend(backendId) || !safeId(sessionId,"ms")) {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      send(credential,"/api/v1/live-playback-sessions/"+sessionId+"/stop",
+        {operation:"stop",resourceKind:"live-channel",backendId:backendId,
+          sessionId:sessionId},200,done);
+    }
+    function begin(credential,backendId,channelId,capabilities,done) {
+      if (!safeBackend(backendId) || !safeChannel(channelId) ||
+          !capabilities || typeof capabilities!=="object" ||
+          !Array.isArray(capabilities.protocols) ||
+          capabilities.protocols.length!==1 ||
+          capabilities.protocols[0]!=="progressive") {
+        done({ok:false,kind:"bad_request"});return;
+      }
+      // One deliberate Device CREATE. No replacesSessionId, URL bearer or retry.
+      send(credential,"/api/v1/live-playback-sessions",
+        {resourceKind:"live-channel",backendId:backendId,channelId:channelId,
+          capabilities:capabilities},201,function(result){
+        if (!result.ok) {done(result);return;}
+        var session=result.value && result.value.mediaSession;
+        if (!session || !safeId(session.id,"ms") ||
+            session.resourceKind!=="live-channel" ||
+            session.backendId!==backendId || session.channelId!==channelId ||
+            session.state!=="ready" || typeof session.mediaPath!=="string") {
+          // If a valid own-session identity exists, relinquish the server lease.
+          if (session && safeId(session.id,"ms") &&
+              session.backendId===backendId && session.channelId===channelId) {
+            stop(credential,backendId,session.id,function(){
+              done({ok:false,kind:"response"});
+            });
+          } else done({ok:false,kind:"response"});
+          return;
+        }
+        var base=credential.base.replace(/\/$/,"");
+        var origin=base.match(/^https:\/\/[^/]+/);
+        var prefix=origin ? base.slice(origin[0].length) : "";
+        var expected=prefix+"/api/v1/media/sessions/"+session.id+
+          "/live/stream.mp4";
+        if (!origin || session.mediaPath!==expected ||
+            session.presentationProfileId!=="live-progressive-fmp4") {
+          stop(credential,backendId,session.id,function(){
+            done({ok:false,kind:"response"});
+          });
+          return;
+        }
+        done({ok:true,sessionId:session.id,mediaUrl:origin[0]+expected,
+          profile:session.presentationProfileId});
+      });
+    }
+    return {begin:begin,stop:stop};
+  }
+  function livePlaybackError(result) {
+    if (!result) return "Unbekannter Live-TV-Fehler.";
+    if (result.kind==="http") {
+      if (result.status===401) return "Geräteanmeldung abgewiesen.";
+      if (result.status===403) return "Live-TV nicht freigegeben: media.live.play für Gerät und Backend erforderlich.";
+      if (result.status===400) return "Public-v1-Live-Vertrag/Client-Fähigkeiten vom Server abgewiesen.";
+      if (result.status===409 || result.status===422 || result.status===503)
+        return "Live-Provider/Transcoder/Tuner nicht verfügbar (HTTP "+result.status+").";
+      return "Live-MediaSession HTTP "+result.status+".";
+    }
+    if (result.kind==="response") return "Live-MediaSession/Medienpfad widerspricht dem öffentlichen Vertrag.";
+    if (result.kind==="timeout") return "Live-MediaSession hat nicht rechtzeitig geantwortet; Server-Lease prüfen.";
+    if (result.kind==="network") return "Live-API auf dem TV durch Netzwerk/TLS/CORS blockiert.";
+    return "Live-TV-Anfrage ungültig oder Geräteanmeldung nicht lesbar.";
+  }
+  // END app/src/api/live-playback.js
+
   // BEGIN app/src/api/media-access-probe.js
   // Read-only diagnostics for an already issued public v1 MediaSession.
   // Avoid HEAD: MediaGatewayHttpServer allows GET only.
@@ -1167,7 +2198,7 @@
   function probeMediaHttpHeaders(environment,mediaUrl,done) {
     if (!environment || typeof environment.XMLHttpRequest !== "function" ||
         typeof mediaUrl !== "string" ||
-        !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts))$/.test(mediaUrl)) {
+        !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/(?:hls\/master\.m3u8|recording\/stream\.(?:mp4|ts)|live\/stream\.mp4)$/.test(mediaUrl)) {
       done({kind:"not_supported"}); return;
     }
     var xhr = new environment.XMLHttpRequest();
@@ -1244,10 +2275,179 @@
       ". Möglich: TV-Decoder/Container oder geschützter Medienzugang (HttpOnly-Cookie im AVPlay-Netzwerkstack).";
   }
   
+  // Restrict AVPlay extra_info to a small non-secret audio diagnostics schema.
+  function samsungAudioTracks(raw) {
+    var tracks = [];
+    if (!Array.isArray(raw)) return tracks;
+    for (var i=0;i<raw.length && i<32;i++) {
+      var item=raw[i];
+      if (!item || item.type !== "AUDIO" || typeof item.index !== "number" ||
+          !isFinite(item.index) || item.index<0 || item.index>65535 ||
+          Math.floor(item.index)!==item.index) continue;
+      if (tracks.some(function(t){return t.index===item.index;})) continue;
+      var info={};
+      if (typeof item.extra_info==="string" && item.extra_info.length<=2048) {
+        try {
+          var parsed=JSON.parse(item.extra_info);
+          if (parsed && typeof parsed==="object" && !Array.isArray(parsed)) info=parsed;
+        } catch (_) { /* never copy raw metadata into UI */ }
+      }
+      var cc=typeof info.fourCC==="string" ? info.fourCC.toUpperCase() : "";
+      // A broad MPEG FOURCC does not distinguish MP2 from MP3.
+      var fourCC=/^[A-Z0-9._-]{1,16}$/.test(cc) ? cc : "";
+      var rate=Number(info.sample_rate);
+      if (!isFinite(rate) || rate<8000 || rate>192000 ||
+          Math.floor(rate)!==rate) rate=null;
+      var codec=["AAC","AACL","MP4A","AAC-LC"].indexOf(cc)>=0 ? "AAC" :
+        ["AC3","AC-3"].indexOf(cc)>=0 ? "AC3" :
+        ["EAC3","EC3","E-AC3"].indexOf(cc)>=0 ? "EAC3" :
+        ["MPEG","MP2","MP3"].indexOf(cc)>=0 ? "MPEG" : "unbekannt";
+      var channels=Number(info.channels);
+      if (!isFinite(channels) || Math.floor(channels)!==channels ||
+          channels<1 || channels>16) channels=null;
+      var language=typeof info.language==="string" ? info.language :
+        typeof info.track_lang==="string" ? info.track_lang : "";
+      language=/^[A-Za-z]{2,3}$/.test(language) ? language.toLowerCase() : "";
+      tracks.push({index:item.index,codec:codec,channels:channels,
+        language:language,fourCC:fourCC,sampleRate:rate});
+    }
+    return tracks;
+  }
+  function samsungAudioRead(api,method) {
+    if (typeof api[method]!=="function") return {ok:false,tracks:[]};
+    try {return {ok:true,tracks:samsungAudioTracks(api[method]())};}
+    catch (_) {return {ok:false,tracks:[]};}
+  }
+  function inspectSamsungAudio(api) {
+    var state="";
+    try {if (typeof api.getState==="function") state=api.getState();}
+    catch (_) {}
+    if (state!=="PLAYING")
+      return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+    var all=samsungAudioRead(api,"getTotalTrackInfo");
+    if (!all.ok)
+      return {status:"unavailable",total:0,currentIndex:null,tracks:[]};
+    var current=samsungAudioRead(api,"getCurrentStreamInfo");
+    var selected=current.tracks.length ? current.tracks[0] : null;
+    var result={status:"observed",total:all.tracks.length,
+      currentIndex:selected ? selected.index : null,tracks:all.tracks};
+    if (!all.tracks.length) {result.status="no_audio";return result;}
+    var compatible=null;
+    for (var i=0;i<all.tracks.length;i++)
+      if (all.tracks[i].codec==="AAC" && all.tracks[i].channels!==null &&
+          all.tracks[i].channels<=2) {compatible=all.tracks[i];break;}
+    if (selected && selected.codec==="AAC" && selected.channels!==null &&
+        selected.channels<=2) {result.status="active_compatible";return result;}
+    // Samsung permits AUDIO track switching only in PLAYING. Avoid switching
+    // single-track streams, guessing codecs or selecting unknown track IDs.
+    // A single explicitly advertised AAC stereo track may still be unselected.
+    // Selecting it while PLAYING is safer than assuming that demuxed means active.
+    if (!compatible || typeof api.setSelectTrack!=="function") {
+      result.status="no_safe_switch";return result;
+    }
+    try {api.setSelectTrack("AUDIO",compatible.index);}
+    catch (_) {result.status="selection_failed";return result;}
+    var after=samsungAudioRead(api,"getCurrentStreamInfo");
+    result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
+    result.status=result.currentIndex===compatible.index ?
+      "selected_confirmed" : "selection_requested";
+    return result;
+  }
+  // Explicit BLUE-key selection helps diagnose audio that is detected but silent.
+  // Only Tizen-reported AUDIO indices with a known codec/channel count are used.
+  // No guessed index, raw extra_info, media URL, credential or cookie escapes.
+  function cycleSamsungAudio(api) {
+    var state="";
+    try {state=typeof api.getState==="function" ? api.getState() : "";}
+    catch (_) {}
+    if (state!=="PLAYING") return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+    var all=samsungAudioRead(api,"getTotalTrackInfo");
+    if (!all.ok) return {status:"unavailable",total:0,currentIndex:null,tracks:[]};
+    var current=samsungAudioRead(api,"getCurrentStreamInfo");
+    var selected=current.tracks.length ? current.tracks[0] : null;
+    var result={status:"no_safe_switch",total:all.tracks.length,
+      currentIndex:selected ? selected.index : null,tracks:all.tracks};
+    var choices=all.tracks.filter(function(track) {
+      return ["AAC","AC3","EAC3","MPEG"].indexOf(track.codec)>=0 &&
+        track.channels!==null && track.channels<=6;
+    });
+    if (!choices.length || typeof api.setSelectTrack!=="function") return result;
+    var at=-1;
+    if (selected) for (var i=0;i<choices.length;i++)
+      if (choices[i].index===selected.index) {at=i;break;}
+    var target=choices[(at+1)%choices.length];
+    try {api.setSelectTrack("AUDIO",target.index);}
+    catch (_) {result.status="selection_failed";return result;}
+    var after=samsungAudioRead(api,"getCurrentStreamInfo");
+    result.currentIndex=after.tracks.length ? after.tracks[0].index : null;
+    result.status=result.currentIndex===target.index ?
+      "manual_confirmed" : "manual_requested";
+    return result;
+  }
+  function describeSamsungAudio(detail) {
+    if (!detail || typeof detail!=="object") return "Audio · keine Diagnose";
+    if (detail.status==="not_playing") return "Audio · AVPlay noch nicht PLAYING";
+    if (detail.status==="unavailable") return "Audio · Spurdaten nicht verfügbar";
+    if (detail.status==="no_audio") return "Audio · AVPlay meldet keine Audiospur";
+    var tracks=Array.isArray(detail.tracks) ? detail.tracks : [];
+    var current=tracks.filter(function(t){return t.index===detail.currentIndex;})[0];
+    var count=typeof detail.total==="number" && detail.total>=0 ? detail.total : 0;
+    var label="Audio · "+count+" Spur(en)" +
+      (detail.currentIndex===null ? " · keine gewählt" : " · Index "+detail.currentIndex);
+    if (current) label+=" · "+current.codec +
+      (current.fourCC ? " ["+current.fourCC+"]" : "")+
+      (current.channels===null ? "" : " "+current.channels+"ch") +
+      (current.sampleRate ? " "+current.sampleRate+"Hz" : "")+
+      (current.language ? " "+current.language : "");
+    if (current && current.codec==="MPEG")
+      label+=" · MP2/MP3 nicht bestimmt";
+    var labels={active_compatible:"bereits aktiv",
+      selected_confirmed:"AAC-Spur bestätigt",selection_requested:"AAC-Spur angefordert",
+      manual_confirmed:"Tonspur manuell bestätigt · Hörtest erforderlich",
+      manual_requested:"Tonspur manuell angefordert · Hörtest erforderlich",
+      selection_failed:"Spurauswahl fehlgeschlagen",
+      no_safe_switch:"keine sichere automatische Wahl",observed:"nur Diagnose"};
+    return label+" · "+(labels[detail.status]||"Status unbekannt");
+  }
+  
+  // TV audio state can be inspected without changing volume or output routing.
+  function samsungTvSoundStatus(environment) {
+    var api=environment && environment.tizen && environment.tizen.tvaudiocontrol;
+    if (!api) return "TV-Tonstatus nicht verfügbar";
+    var facts=[],value;
+    try {
+      if (typeof api.isMute==="function") {
+        value=api.isMute();
+        if (typeof value==="boolean") facts.push("Stumm: "+(value?"ja":"nein"));
+      }
+    } catch (_) {}
+    try {
+      if (typeof api.getVolume==="function") {
+        value=api.getVolume();
+        if (typeof value==="number" && isFinite(value) &&
+            Math.floor(value)===value && value>=0 && value<=100)
+          facts.push("Lautstärke: "+value);
+      }
+    } catch (_) {}
+    try {
+      if (typeof api.getOutputMode==="function") {
+        value=api.getOutputMode();
+        if (["PCM","DOLBY","DTS","AAC","DOLBY_DIGITAL_PLUS"].indexOf(value)>=0)
+          facts.push("Ausgabe: "+value);
+      }
+    } catch (_) {}
+    return facts.length ? "TV · "+facts.join(" · ") : "TV-Tonstatus nicht lesbar";
+  }
+  
   function createSamsungRecordingPlayer(environment) {
     var api = environment && environment.webapis && environment.webapis.avplay;
     var generation = 0;
     var active = false;
+    // Some 2020 AVPlay implementations report PLAYING transiently after pause().
+    // Remember the last explicit pause command, not a guessed decoder result.
+    var pauseRequested = false;
+    // Bounded, non-secret AVPlay telemetry; clock progress does not prove frames or audio.
+    var lastPlaybackMs = null, progressedMilliseconds = 0;
     function available() {
       return !!(api && typeof api.open === "function" &&
         typeof api.prepareAsync === "function" && typeof api.play === "function");
@@ -1255,6 +2455,9 @@
     function stop() {
       generation += 1;
       active = false;
+      pauseRequested = false;
+      lastPlaybackMs = null;
+      progressedMilliseconds = 0;
       if (!api) return;
       try { if (typeof api.stop === "function") api.stop(); } catch (_) {}
       try { if (typeof api.close === "function") api.close(); } catch (_) {}
@@ -1289,8 +2492,22 @@
         if (typeof api.setListener === "function")
           api.setListener({
             onbufferingstart:function () {if (token === generation) onState("buffering");},
-            onbufferingcomplete:function () {if (token === generation) onState("ready");},
+            onbufferingcomplete:function () {
+              if (token === generation) onState("ready");
+            },
             onstreamcompleted:function () {if (token === generation) onState("finished");},
+            oncurrentplaytime:function(ms) {
+              if (token!==generation || !active || typeof ms!=="number" ||
+                  !isFinite(ms) || ms<0 || ms>4294967295 ||
+                  Math.floor(ms)!==ms) return;
+              var previous=lastPlaybackMs;
+              if (previous!==null && ms>previous)
+                progressedMilliseconds+=Math.min(30000,ms-previous);
+              lastPlaybackMs=ms;
+              onState("progress",{seconds:Math.floor(ms/1000),
+                advanced:previous!==null && ms>previous,
+                deltaSeconds:Math.floor(progressedMilliseconds/1000)});
+            },
             onerror:function (type) {if (token === generation) onState("error",{stage:"stream",code:safeAvplayCode(type)});}
           });
         api.prepareAsync(function () {
@@ -1299,6 +2516,8 @@
             api.play();
             active = true;
             onState("playing");
+            // Only PLAYING permits an AUDIO track selection on Tizen 5.5.
+            if (token===generation) onState("audio",inspectSamsungAudio(api));
           } catch (_) {onState("error",{stage:"play"});}
         },function (error) {
           if (token !== generation) return;
@@ -1320,18 +2539,61 @@
         return false;
       }
     }
-    function pauseOrResume() {
+    function pauseOrResume(action) {
       if (!active || !api) return "unavailable";
+      var intent=action==="play" || action==="pause" ? action : "toggle";
       try {
-        var state = typeof api.getState === "function" ? api.getState() : "";
-        if (state === "PLAYING" && typeof api.pause === "function") {
-          api.pause(); return "paused";
+        var state=typeof api.getState==="function" ? api.getState() : "";
+        if (state==="PLAYING") {
+          if (pauseRequested) {
+            // getState() can lag the previous pause request. A second OK must
+            // request resume, not repeat pause and leave video frozen.
+            if (intent==="pause") return "already_paused";
+            api.play();pauseRequested=false;
+            return "resume_requested";
+          }
+          if (intent==="play") return "already_playing";
+          if (typeof api.pause!=="function") return "unavailable";
+          api.pause();pauseRequested=true;
+          return "paused";
         }
-        if (state === "PAUSED") {api.play();return "playing";}
+        if (state==="PAUSED") {
+          if (intent==="pause") return "already_paused";
+          api.play();pauseRequested=false;
+          // AVPlay.play() from PAUSED requests resume. It is not evidence of
+          // progressing frames or audible output; do not claim hardware PASS.
+          return "resume_requested";
+        }
+        if (state==="READY" && (intent==="play" ||
+            (intent==="toggle" && pauseRequested))) {
+          api.play();pauseRequested=false;
+          return "resume_requested";
+        }
       } catch (_) {return "error";}
       return "unavailable";
     }
-    return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};
+    // Read-only, bounded evidence after a real remote command.
+    function inspectPlayback() {
+      var state="unavailable",timeSeconds=null;
+      if (!active || !api) return {state:state,seconds:null,deltaSeconds:Math.floor(progressedMilliseconds/1000)};
+      try {
+        var raw=typeof api.getState==="function" ? api.getState() : "";
+        if (["NONE","IDLE","READY","PLAYING","PAUSED"].indexOf(raw)>=0)
+          state=raw;
+      } catch (_) {}
+      try {
+        var ms=typeof api.getCurrentTime==="function" ? api.getCurrentTime() : null;
+        if (typeof ms==="number" && isFinite(ms) && ms>=0 &&
+            ms<=4294967295 && Math.floor(ms)===ms) timeSeconds=Math.floor(ms/1000);
+      } catch (_) {}
+      return {state:state,seconds:timeSeconds,deltaSeconds:Math.floor(progressedMilliseconds/1000)};
+    }
+    function cycleAudioTrack() {
+      if (!active || !api) return {status:"not_playing",total:0,currentIndex:null,tracks:[]};
+      return cycleSamsungAudio(api);
+    }
+    return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
+      cycleAudioTrack:cycleAudioTrack,inspectPlayback:inspectPlayback};
   }
   // Advertise only the narrow H.264/AAC path observed via a TV decoder probe.
   // This is not proof that all VDR recordings are decodable.
@@ -1348,62 +2610,280 @@
       videoCodecs:["h264"],audioCodecs:["aac"],supportsByteRanges:true,
       maxVideoWidth:1920,maxVideoHeight:1080,maxAudioChannels:2};
   }
+  
+  // Explicit Tizen 5.5 comparison path: request HLS TS with AAC stereo via Public v1.
+  // The server's typed selector may transcode incompatible audio, preserving video.
+  // Neither this request nor AVPlay track enumeration proves audible playback.
+  function samsungAacHlsTsCapabilities(environment) {
+    var base=conservativeSamsungCapabilities(environment);
+    if (!base) return null;
+    return {
+      protocols:["hls"],containers:["mpeg-ts"],
+      videoCodecs:["h264"],audioCodecs:["aac"],
+      supportsByteRanges:true,maxVideoWidth:1920,maxVideoHeight:1080,
+      maxAudioChannels:2
+    };
+  }
   // END app/src/platform/recording-player.js
 
+  // BEGIN app/src/platform/streamdev-live.js
+  // Samsung DEV-only direct Live-TV via local VDR streamdev-server MPEG-TS.
+  // Explicit user-configured host, one selected Public-v1 VDR channel ID, native AVPlay.
+  // No API-v1 MediaSession, no cookies, no URL tokens and no background autoplay.
+  // Only used after a conscious user action. Does not change the protected API-v1 player.
+  function parseStreamdevBase(input) {
+    if (typeof input!=="string" || input.length>180) return null;
+    var value=input.trim().replace(/\/$/,"");
+    var match=/^http:\/\/([^\/:?#@]+):(\d{1,5})$/.exec(value);
+    if (!match) return null;
+    var host=match[1].toLowerCase(),port=Number(match[2]);
+    if (port<1 || port>65535) return null;
+    // Direct-stream trial is limited to an explicitly configured local endpoint.
+    // Do not accidentally turn the TV into a client for arbitrary external URLs.
+    var ipv4=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    var local=false;
+    if (ipv4) {
+      var n=ipv4.slice(1).map(Number);
+      local=n.every(function(x){return x>=0&&x<=255;}) &&
+        (n[0]===10 || (n[0]===172 && n[1]>=16 && n[1]<=31) ||
+         (n[0]===192 && n[1]===168));
+    } else local=/^[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63})*\.local$/.test(host);
+    return local ? "http://"+host+":"+port : null;
+  }
+  function streamdevChannelUrl(base,channelId) {
+    var url=parseStreamdevBase(base);
+    if (!url || typeof channelId!=="string" ||
+        !/^[A-Za-z0-9._-]{1,128}$/.test(channelId))
+      return null;
+    return url+"/TS/"+encodeURIComponent(channelId);
+  }
+  function createStreamdevLivePlayer(environment) {
+    var api=environment&&environment.webapis&&environment.webapis.avplay;
+    var generation=0,active=false,busy=false,opened=false,paused=false;
+    function available() {
+      return !!(api&&typeof api.open==="function"&&
+        typeof api.prepareAsync==="function"&&typeof api.play==="function"&&
+        typeof api.stop==="function"&&typeof api.close==="function");
+    }
+    function stop() {
+      generation++;active=false;busy=false;paused=false;
+      // NEVER close a player that was never opened by this adapter.
+      // The Recording adapter shares the singleton native AVPlay instance.
+      if (!opened) return;
+      opened=false;
+      try{api.stop();}catch(_){}
+      try{api.close();}catch(_){}
+    }
+    function start(base,channelId,onState) {
+      var url=streamdevChannelUrl(base,channelId);
+      if(!available()||!url||typeof onState!=="function"){
+        if(typeof onState==="function")onState("unsupported",{stage:"input"});
+        return false;
+      }
+      if(busy||active)return false;
+      busy=true;
+      var token=++generation;
+      try {
+        api.open(url);
+        opened=true;
+        if(typeof api.setDisplayRect==="function")
+          api.setDisplayRect(0,0,1920,1080);
+        if(typeof api.setDisplayMethod==="function")
+          try{api.setDisplayMethod("PLAYER_DISPLAY_MODE_LETTER_BOX");}catch(_){}
+        if(typeof api.setListener==="function")
+          api.setListener({
+            onbufferingstart:function(){if(token===generation)onState("buffering");},
+            onbufferingcomplete:function(){if(token===generation)onState("ready");},
+            onstreamcompleted:function(){
+              if(token!==generation)return;
+              // A continuous TS stream ending means provider/connection EOF.
+              stop();onState("ended");
+            },
+            onerror:function(){
+              if(token!==generation)return;
+              stop();onState("error",{stage:"stream"});
+            }
+          });
+        api.prepareAsync(function(){
+          if(token!==generation)return;
+          try {
+            api.play();busy=false;active=true;paused=false;
+            onState("playing");
+          } catch(_) {
+            stop();onState("error",{stage:"play"});
+          }
+        },function(){
+          if(token!==generation)return;
+          stop();onState("error",{stage:"prepare"});
+        });
+        onState("preparing");
+        return true;
+      } catch(_) {
+        stop();onState("error",{stage:"open"});
+        return false;
+      }
+    }
+    function pauseOrResume(action) {
+      if(!active)return "unavailable";
+      // Pausing an unbounded real-time broadcast can create an unbounded gap
+      // in the decoder. First reliability slice supports STOP, not time shift.
+      return "live_no_pause";
+    }
+    return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume,
+      isBusy:function(){return busy;},isActive:function(){return active;}};
+  }
+  // END app/src/platform/streamdev-live.js
+
   // BEGIN app/src/platform/html5-recording-player.js
-  // Opt-in HTML5 progressive-MP4 alternative to native Samsung AVPlay.
-  // Uses the browser's normal Secure/HttpOnly cookie handling; does not read
-  // cookies, construct credential URLs or request extra server permissions.
-  function createHtml5RecordingPlayer(video) {
-    var generation=0,active=false;
+  // Opt-in HTML5 progressive-MP4 diagnostic. AVPlay remains the default player.
+  // Never expose the HttpOnly media cookie, URLs or native exception messages.
+  function html5PlaybackDiagnosis(detail) {
+    var code = detail && detail.code;
+    var explanations = {
+      "1":"Medienabruf abgebrochen",
+      "2":"Netzwerkfehler beim Medienabruf",
+      "3":"Decoder konnte den MP4-Stream nicht verarbeiten",
+      "4":"MP4-Container oder Codec wird nicht unterstützt",
+      "play_rejected":"Browser hat den Videostart abgelehnt",
+      "startup_timeout":"Schwarzes Bild: weder Videostart noch rechtzeitige Wiedergabebereitschaft",
+      "stall_timeout":"Videopufferung ohne Fortschritt abgebrochen",
+      "load_failed":"HTML5 konnte die Videoquelle nicht laden"
+    };
+    return "HTML5 MP4 · " + (explanations[code] || "Unbekannter Wiedergabefehler") +
+      " · kein automatischer AVPlay-Fallback.";
+  }
+  
+  function createHtml5RecordingPlayer(video, environment, resourceKind) {
+    var generation=0,active=false,phase="idle",watchdog=null,notifyFailure=null;
+    var env=environment || {};
+    var live=resourceKind==="live-channel";
+    var setTimer=typeof env.setTimeout==="function" ?
+      function(fn,ms){return env.setTimeout(fn,ms);} : null;
+    var clearTimer=typeof env.clearTimeout==="function" ?
+      function(id){env.clearTimeout(id);} : null;
     function available() {return !!(video && typeof video.play==="function" &&
       typeof video.pause==="function" && typeof video.load==="function");}
+    function cancelWatchdog() {
+      if (watchdog !== null && clearTimer) clearTimer(watchdog);
+      watchdog=null;
+    }
+    function armWatchdog(token,ms,code,onState) {
+      cancelWatchdog();
+      if (!setTimer || !clearTimer) return;
+      watchdog=setTimer(function(){
+        if (token!==generation || phase==="stopped" || phase==="finished" ||
+            phase==="failed") return;
+        watchdog=null;
+        phase="failed";
+        active=false;
+        onState("error",{stage:"html5",code:code});
+      },ms);
+    }
     function stop() {
       generation+=1;
       active=false;
+      phase="stopped";
+      cancelWatchdog();
+      notifyFailure=null;
       if (!video) return;
       try {video.pause();} catch (_) {}
       video.onplaying=null;video.oncanplay=null;video.onwaiting=null;
-      video.onerror=null;video.onended=null;
+      video.onstalled=null;video.onerror=null;video.onended=null;
       try {video.removeAttribute("src");video.load();} catch (_) {}
     }
     function start(mediaUrl,onState) {
-      if(!available()||typeof mediaUrl!=="string"||
-         !/^https:\/\/[^\s?#]+\/[^?#]*\/api\/v1\/media\/sessions\/ms_[0-9a-f]{32}\/recording\/stream\.mp4$/.test(mediaUrl)){
+      if (!available() || typeof mediaUrl!=="string" ||
+          !new RegExp("^https:\\/\\/[^\\s?#]+\\/[^?#]*\\/api\\/v1\\/media\\/sessions\\/ms_[0-9a-f]{32}\\/"+
+            (live ? "live\\/stream" : "recording\\/stream")+"\\.mp4$").test(mediaUrl)) {
         onState("unsupported",{stage:"html5"});return false;
       }
       stop();
       var token=generation;
-      video.onplaying=function () {if(token===generation){active=true;onState("playing");}};
-      video.onwaiting=function () {if(token===generation)onState("buffering");};
-      video.onerror=function () {
-        if(token!==generation)return;
-        var code=video.error && video.error.code;
-        onState("error",{stage:"html5",code:typeof code==="number"&&
-          code>=1&&code<=4?String(code):"unbekannt"});
+      phase="preparing";
+      function fail(code) {
+        if (token!==generation || phase==="failed" || phase==="finished" ||
+            phase==="stopped") return;
+        phase="failed";
+        active=false;
+        cancelWatchdog();
+        onState("error",{stage:"html5",code:code});
+      }
+      notifyFailure=fail;
+      video.onplaying=function () {
+        if (token!==generation || phase==="failed" || phase==="finished") return;
+        phase="playing";
+        active=true;
+        cancelWatchdog();
+        onState("playing");
       };
-      video.onended=function () {if(token===generation)onState("finished");};
+      function buffering() {
+        if (token!==generation || phase==="failed" || phase==="finished" ||
+            phase==="stopped") return;
+        if (phase==="preparing" || phase==="paused") return; // startup or intentional pause
+        phase="buffering";
+        onState("buffering");
+        armWatchdog(token,20000,"stall_timeout",onState);
+      }
+      video.onwaiting=buffering;
+      video.onstalled=buffering;
+      video.onerror=function () {
+        var code=video.error && video.error.code;
+        fail(typeof code==="number" && code>=1 && code<=4 &&
+          Math.floor(code)===code ? String(code) : "load_failed");
+      };
+      video.onended=function () {
+        if (token!==generation || phase==="failed" || phase==="finished") return;
+        phase="finished";
+        active=false;
+        cancelWatchdog();
+        onState("finished");
+      };
       video.oncanplay=function () {
-        if(token!==generation)return;
+        if (token!==generation || phase==="failed" || phase==="finished") return;
         video.oncanplay=null;
         try {
           var attempt=video.play();
-          if(attempt&&typeof attempt.catch==="function")attempt.catch(function (){
-            if(token===generation)onState("error",{stage:"html5",code:"play_rejected"});
-          });
-        } catch (_) {if(token===generation)onState("error",{stage:"html5",code:"play_rejected"});}
+          if (attempt && typeof attempt.catch==="function")
+            attempt.catch(function () {fail("play_rejected");});
+        } catch (_) {fail("play_rejected");}
       };
-      try {video.src=mediaUrl;video.load();onState("preparing");return true;}
-      catch (_) {stop();onState("error",{stage:"html5"});return false;}
+      try {
+        video.src=mediaUrl;
+        video.load();
+        if (phase==="failed") return true; // synchronous media error keeps precedence
+        onState("preparing");
+        // Catches the real-device black-screen case where neither canplay nor
+        // error is emitted; does not assert that the codec is the root cause.
+        if (phase==="preparing") armWatchdog(token,12000,"startup_timeout",onState);
+        return true;
+      } catch (_) {stop();onState("error",{stage:"html5",code:"load_failed"});return false;}
     }
-    function pauseOrResume() {
-      if(!active||!video)return "unavailable";
-      try{
-        if(!video.paused){video.pause();return "paused";}
+    function pauseOrResume(action) {
+      if (!active || !video || phase==="failed" || phase==="finished") return "unavailable";
+      var intent=action==="play" || action==="pause" ? action : "toggle";
+      try {
+        if (!video.paused) {
+          if (intent==="play") return "already_playing";
+          video.pause();
+          phase="paused";
+          cancelWatchdog();
+          return "paused";
+        }
+        if (intent==="pause") return "already_paused";
+        var token=generation;
         var attempt=video.play();
-        if(attempt&&typeof attempt.catch==="function")attempt.catch(function(){});
-        return "playing";
-      }catch(_){return "error";}
+        phase="buffering";
+        if (notifyFailure) {
+          var failure=notifyFailure;
+          armWatchdog(token,20000,"stall_timeout",function(state,detail){
+            if (state==="error") failure(detail.code);
+          });
+          if (attempt && typeof attempt.catch==="function")
+            attempt.catch(function(){if (token===generation)failure("play_rejected");});
+        }
+        // This is a play request, not proof of frames: onplaying confirms it.
+        return "resume_requested";
+      } catch (_) {return "error";}
     }
     return {available:available,start:start,stop:stop,pauseOrResume:pauseOrResume};
   }
@@ -1450,11 +2930,6 @@
   const NAV_ROW = [
     "nav-home", "nav-live", "nav-recordings", "nav-search", "nav-timers", "nav-settings"
   ];
-  const HOME_ROWS = [
-    ["stage-favorites", "stage-hero", "stage-recordings"],
-    ["action-live", "action-recordings", "action-settings"],
-    ["rail-recordings", "rail-live", "rail-search", "rail-timers"]
-  ];
   const ROUTES = ["home", "live", "recordings", "search", "timers", "settings"];
   const PREVIEW_ROUTES = ["live", "recordings", "search", "timers"];
   
@@ -1470,22 +2945,122 @@
     var rowMemory = {};
     var previewStates = {};
     var editingServerAddress = false;
+    var remoteChannelDigits = "";
+    var remoteLastDigitAt = 0;
     var testingConnection = false;
     var discovery = createDiscoveryClient(window);
     var pairingClient = createPairingClient(window);
     var vault = createDeviceVault(window);
     var channelCatalog = createChannelCatalog(window);
     var recordingCatalog = createRecordingCatalog(window);
+    var homePairing = createPairingClient(window);
+    var homeBackendCatalog = createChannelCatalog(window);
+    var homeRecordingCatalog = createRecordingCatalog(window);
+    var homeResume = createHomeContinueWatching(window);
+    var homeTimerCatalog = createNativeTimerCatalog(window);
+    var homeChannelCatalog = createChannelCatalog(window);
+    var homeEpgMetadata = createPublicMediaMetadata(window);
+    var homeFeatureMetadata = createPublicMediaMetadata(window);
+    var homeFeatureArtwork = createPublicMediaMetadata(window);
+    var homeContinueMetadata = [
+      createPublicMediaMetadata(window),
+      createPublicMediaMetadata(window),
+      createPublicMediaMetadata(window)
+    ];
+    var homeRun = 0;
+    var homeFeatureRun = 0;
+    var homeCredential = null;
+    var homeBackendId = null;
+    var homeFeatureKind = "recordings";
+    var homeFeaturePriority = 0;
+    var homeArtworkUrl = null;
+    var homeCardArtworkClients = [];
+    var homeCardDetailClients = [];
+    var homeCardUrls = [];
+    var homeEpgReaders = [];
+    var homeCardIds = {continue:[],recordings:[],epg:[]};
+    var homeCardItems = {continue:[],recordings:[],epg:[]};
+    var homeFeaturePoster = document.getElementById("home-feature-poster");
+    var globalSearchClient = createPublicGlobalSearch(window);
+    var globalSearchMetadata = createPublicMediaMetadata(window);
+    var globalSearchCatalog = createChannelCatalog(window);
+    var globalSearchPairing = createPairingClient(window);
+    var globalSearchCredential = null;
+    var globalSearchBackends = [];
+    var globalSearchBackendIndex = 0;
+    var globalSearchRun = 0;
+    var globalSearchDetailRun = 0;
+    var globalSearchBusy = false;
+    var globalSearchEditing = false;
+    var globalSearchTerm = "";
+    var globalSearchPages = {epg:null,recordings:null};
+    var globalSearchRows = {epg:[],recordings:[]};
+    var globalSearchItems = {epg:[],recordings:[]};
+    var globalSearchInput = document.getElementById("global-search-input");
+    var globalSearchBackendLabel = document.getElementById("global-search-backend-name");
+    var globalSearchStatusLabel = document.getElementById("global-search-status");
+    var globalSearchDetailTitle = document.getElementById("global-search-detail-title");
+    var globalSearchDetailDescription = document.getElementById("global-search-detail-description");
+    var epgTimerClient=createEpgTimerIntents(window);
+    var epgTimerStage=null,epgTimerEpoch=0;
+    var selectedSearchEpg=null,selectedLiveEpg=null,selectedLiveEpgId=null;
+    var liveEpgRecord=document.getElementById("live-epg-record");
+    var liveEpgOperation=document.getElementById("live-epg-operation");
+    var searchEpgRecord=document.getElementById("search-epg-record");
+    var searchEpgOperation=document.getElementById("search-epg-operation");
+    var nativeTimerCatalog = createNativeTimerCatalog(window);
+    var searchTimerCatalog = createSearchTimerCatalog(window);
+    var searchTimerBackendCatalog = createChannelCatalog(window);
+    var searchTimerPairing = createPairingClient(window);
+    var searchTimerCredential = null;
+    var searchTimerBackends = [];
+    var searchTimerBackendIndex = 0;
+    var searchTimerCursor = null;
+    var searchTimerBusy = false;
+    var searchTimerRun = 0;
+    var searchTimerSelectionRun = 0;
+    var searchTimerRows = [];
+    var searchTimerItems = [];
+    var selectedSearchTimer = null;
+    var searchTimerList = document.getElementById("searchtimer-list");
+    var searchTimerBackendLabel = document.getElementById("searchtimer-backend");
+    var searchTimerStatusLabel = document.getElementById("searchtimer-status");
+    var searchTimerDetailTitle = document.getElementById("searchtimer-detail-title");
+    var searchTimerDetailInfo = document.getElementById("searchtimer-detail-info");
+    var searchTimerPreviewStatus = document.getElementById("searchtimer-preview-status");
+    var searchTimerPreviewList = document.getElementById("searchtimer-preview-list");
+    var nativeTimerCredential = null;
+    var nativeTimerBackends = [];
+    var nativeTimerBackendIndex = 0;
+    var nativeTimerRun = 0;
+    var nativeTimerBusy = false;
+    var nativeTimerNextOffset = null;
+    var nativeTimerRows = [];
+    var nativeTimerItems = [];
+    var nativeTimerList = document.getElementById("native-timer-list");
+    var nativeTimerBackendName = document.getElementById("native-timer-backend-name");
+    var liveMetadata = createPublicMediaMetadata(window);
+    var liveDetailMetadata = createPublicMediaMetadata(window);
+    var liveArtworkMetadata = createPublicMediaMetadata(window);
+    var liveEpgArtworkUrl = null;
+    var recordingMetadata = createPublicMediaMetadata(window);
     var recordingPlaybackClient = createRecordingPlaybackClient(window);
     var recordingPlayer = createSamsungRecordingPlayer(window);
     var recordingSelected = null;
+    var recordingDetailRun = 0;
+    var recordingPosterUrl = null;
     var recordingPlayBusy = false;
+    // Invalidate deferred read-only AVPlay key latency probes after changes.
+    var recordingControlSequence = 0;
     var recordingTeardownBusy = false;
     var recordingPlaybackSession = null;
     var recordingPlayerSurface = document.getElementById("recording-player-surface");
     var recordingHtml5Video = document.getElementById("recording-html5-video");
     var recordingAvplayObject = document.getElementById("recording-avplay-object");
-    var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video);
+    var recordingRemoteHint = document.getElementById("recording-remote-hint");
+    var recordingAudioHint = document.getElementById("recording-audio-hint");
+    var recordingLifecycleHint = document.getElementById("recording-lifecycle-hint");
+    var recordingHtml5Player = createHtml5RecordingPlayer(recordingHtml5Video,window);
     var recordingPlayerMode = "avplay";
     // Samsung native AVPlay requires a viewport-level object, not one clipped by
     // .detail-page / .recording-catalog scrolling containers.
@@ -1508,12 +3083,44 @@
     var recordingBusy = false;
     var recordingRun = 0;
     var liveCredential = null;
+    var livePlaybackClient = createLivePlaybackClient(window);
+    var liveHtml5Video = document.getElementById("live-html5-video");
+    var livePlayerSurface = document.getElementById("live-player-surface");
+    var livePlayerHint = document.getElementById("live-player-hint");
+    var liveHtml5Player = createHtml5RecordingPlayer(liveHtml5Video,window,"live-channel");
+    var streamdevPlayer=createStreamdevLivePlayer(window);
+    var streamdevBaseInput=document.getElementById("live-streamdev-base");
+    var streamdevStatus=document.getElementById("live-streamdev-status");
+    var streamdevBase=null,streamdevEditing=false,streamdevActive=false;
+    var streamdevRun=0;
+    try {
+      var storedStreamdev=window.localStorage &&
+        window.localStorage.getItem("vdr-suite.samsung.streamdevBase");
+      streamdevBase=parseStreamdevBase(storedStreamdev);
+    } catch(_) {}
+    if(streamdevBaseInput && streamdevBase)streamdevBaseInput.value=streamdevBase;
+    if(streamdevStatus && streamdevBase)
+      streamdevStatus.textContent="Streamdev im Heimnetz konfiguriert · bereit für direkte AVPlay-Wiedergabe.";
+    var livePlaybackSession = null;
+    var livePlayBusy = false;
+    var liveTeardownBusy = false;
+    var livePlayRun = 0;
+    if (livePlayerSurface && document.body)
+      document.body.appendChild(livePlayerSurface);
     var liveBackends = [];
     var liveBackendIndex = 0;
     var liveCursor = null;
     var liveBusy = false;
     var liveRun = 0;
     var liveRows = 0;
+    var liveFocusIds = [];
+    var liveEpgFocusIds = [];
+    var liveEpgRows = [];
+    var liveEpgDetailRun = 0;
+    var liveCurrentChannels = [];
+    var selectedLiveChannel = null;
+    var liveEpgRun = 0;
+    var liveWindow = null;
     var pairingRequest = null;
     var pairingBase = null;
     var pairingApproved = false;
@@ -1531,13 +3138,31 @@
     var pairingCode = document.getElementById("pairing-user-code");
     var liveList = document.getElementById("live-channel-list");
     var liveBackendName = document.getElementById("live-backend-name");
+    var liveEpgStatus = document.getElementById("live-epg-status");
+    var liveEpgList = document.getElementById("live-epg-list");
+    var liveEpgDetail = document.getElementById("live-epg-detail");
+    var liveEpgScrollActions = document.getElementById("live-epg-scroll-actions");
+    var liveEpgDetailTime = document.getElementById("live-epg-detail-time");
+    var liveEpgDetailTitle = document.getElementById("live-epg-detail-title");
+    var liveEpgDetailSubtitle = document.getElementById("live-epg-detail-subtitle");
+    var liveEpgDetailDescription = document.getElementById("live-epg-detail-description");
+    var liveEpgPoster = document.getElementById("live-epg-detail-poster");
+    var liveEpgArtworkStatus = document.getElementById("live-epg-artwork-status");
     var recordingList = document.getElementById("recording-list");
     var recordingBackendName = document.getElementById("recording-backend-name");
+    var recordingDetailInfo = document.getElementById("recording-detail-info");
+    var recordingPoster = document.getElementById("recording-detail-poster");
     var serverInput = document.getElementById("suite-base-input");
     var serverTest = document.getElementById("settings-test-button");
     var connectionResult = document.getElementById("suite-connection-result");
     var homeServerState = document.getElementById("home-server-state");
     var topbarServerState = document.getElementById("topbar-server-status");
+    var homeContentStatus = document.getElementById("home-content-status");
+    var homeFeatureKicker = document.getElementById("home-feature-kicker");
+    var homeFeatureTitle = document.getElementById("home-feature-title");
+    var homeFeatureDescription = document.getElementById("home-feature-description");
+    var homeFeatureMeta = document.getElementById("home-feature-meta");
+    var homeTimerSummary = document.getElementById("home-timer-summary");
     var message = document.getElementById("message");
     var keyStatus = document.getElementById("key-status");
     // The visible label comes from the packaged runtime, never from Git, a
@@ -1554,18 +3179,71 @@
     });
   
     function focusRows() {
-      if (currentView === "home") return [NAV_ROW].concat(HOME_ROWS);
-      if (currentView === "live") return [NAV_ROW,
-        ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend"]];
+      if (currentView === "home") {
+        var homeRows=[NAV_ROW,["home-refresh"],["home-feature","home-timer-open"]];
+        ["continue","recordings","epg"].forEach(function(kind){
+          if(homeCardIds[kind].length)homeRows.push(homeCardIds[kind].slice());
+        });
+        return homeRows;
+      }
+      if (currentView === "live") {
+        var liveFocusRows = [NAV_ROW,
+          ["detail-live-home", "detail-live-preview", "detail-live-more", "detail-live-backend",
+         "detail-live-streamdev", "detail-live-play", "detail-live-epg-now", "detail-live-epg-window", "detail-live-epg-more",
+           "live-streamdev-base","live-streamdev-save"]];
+        var count=Math.max(liveFocusIds.length,liveEpgFocusIds.length);
+        for (var i=0;i<count;i++) {
+          var cells=[];
+          if (liveFocusIds[i]) cells.push(liveFocusIds[i]);
+          if (liveEpgFocusIds[i]) cells.push(liveEpgFocusIds[i]);
+          if (cells.length) liveFocusRows.push(cells);
+        }
+        var liveTimerActions=[];
+        if(liveEpgRecord && !liveEpgRecord.hidden)liveTimerActions.push("live-epg-record");
+        if(liveEpgOperation && !liveEpgOperation.hidden)liveTimerActions.push("live-epg-operation");
+        if(liveTimerActions.length)liveFocusRows.push(liveTimerActions);
+        if (liveEpgScrollActions && !liveEpgScrollActions.hidden)
+          liveFocusRows.push(["live-epg-scroll-up","live-epg-scroll-down"]);
+        return liveFocusRows;
+      }
       if (currentView === "recordings") {
         var rows = [NAV_ROW,
           ["detail-recordings-home", "detail-recordings-load",
            "detail-recordings-backend", "detail-recordings-up",
            "detail-recordings-all", "detail-recordings-play",
-           "detail-recordings-html5", "detail-recordings-previous"]];
+           "detail-recordings-html5", "detail-recordings-aac-hls",
+           "detail-recordings-previous"]];
         recordingFocusIds.forEach(function (id) { rows.push([id]); });
         rows.push(["detail-recordings-next"]);
         return rows;
+      }
+      if (currentView === "search") {
+        var searchRows=[NAV_ROW,
+          ["global-search-input","global-search-go","global-search-clear",
+            "global-search-backend"],
+          ["global-search-recording-more","global-search-epg-more"]];
+        var count=Math.max(globalSearchRows.recordings.length,globalSearchRows.epg.length);
+        for(var n=0;n<count;n++){
+          var group=[];
+          if(globalSearchRows.recordings[n])group.push(globalSearchRows.recordings[n]);
+          if(globalSearchRows.epg[n])group.push(globalSearchRows.epg[n]);
+          if(group.length)searchRows.push(group);
+        }
+        var searchTimerActions=[];
+        if(searchEpgRecord && !searchEpgRecord.hidden)searchTimerActions.push("search-epg-record");
+        if(searchEpgOperation && !searchEpgOperation.hidden)searchTimerActions.push("search-epg-operation");
+        if(searchTimerActions.length)searchRows.push(searchTimerActions);
+        searchRows.push(["detail-search-home","detail-search-preview"]);
+        return searchRows;
+      }
+      if (currentView === "timers") {
+        var timerRows=[NAV_ROW,["detail-timers-home","detail-timers-load",
+          "detail-timers-more","detail-timers-backend","detail-timers-preview"]];
+        nativeTimerRows.forEach(function(id){timerRows.push([id]);});
+        timerRows.push(["searchtimer-load","searchtimer-more",
+          "searchtimer-backend-change","searchtimer-preview"]);
+        searchTimerRows.forEach(function(id){timerRows.push([id]);});
+        return timerRows;
       }
       if (currentView === "settings") return [
         NAV_ROW,
@@ -1577,6 +3255,432 @@
       return [NAV_ROW, PREVIEW_ROUTES.indexOf(currentView) >= 0
         ? ["detail-" + currentView + "-home", "detail-" + currentView + "-preview"]
         : ["detail-" + currentView + "-home"]];
+    }
+  
+  
+    // S8.1: Home composes existing backend-owned domains. No synthetic
+    // "recently recorded" ordering and no invented resume positions.
+    function homeMessage(id,message) {
+      var node=document.getElementById(id);
+      if(node)node.textContent=message;
+    }
+    function homeAlive(token){
+      return token===homeRun && currentView==="home";
+    }
+    function homeClearArtwork(){
+      if(homeFeaturePoster){
+        homeFeaturePoster.hidden=true;
+        homeFeaturePoster.onerror=null;
+        homeFeaturePoster.onload=null;
+        homeFeaturePoster.removeAttribute("src");
+      }
+      if(homeArtworkUrl && window.URL &&
+          typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(homeArtworkUrl);
+      homeArtworkUrl=null;
+    }
+    function homeCancelReads(){
+      ++homeRun;++homeFeatureRun;
+      homePairing.cancel();homeBackendCatalog.cancel();
+      homeRecordingCatalog.cancel();homeResume.cancel();
+      homeTimerCatalog.cancel();homeChannelCatalog.cancel();
+      homeEpgMetadata.cancel();homeFeatureMetadata.cancel();
+      homeFeatureArtwork.cancel();
+      homeContinueMetadata.forEach(function(client){client.cancel();});
+      homeCardArtworkClients.forEach(function(client){client.cancel();});
+      homeCardDetailClients.forEach(function(client){client.cancel();});
+      homeEpgReaders.forEach(function(client){client.cancel();});
+      homeCardArtworkClients=[];homeCardDetailClients=[];homeEpgReaders=[];
+      homeCardUrls.forEach(function(url){
+        if(window.URL && typeof window.URL.revokeObjectURL==="function")
+          window.URL.revokeObjectURL(url);
+      });
+      homeCardUrls=[];
+      homeClearArtwork();
+    }
+    function homeClearCards(){
+      // Always leave the focused dynamic rail before removing its DOM node.
+      if((homeCardIds.continue.concat(homeCardIds.recordings,homeCardIds.epg))
+          .indexOf(focusedId)>=0) setFocus("home-refresh");
+      ["continue","recordings","epg"].forEach(function(kind){
+        homeCardIds[kind].forEach(function(id){
+          var node=controls[id];delete controls[id];
+          var i=items.indexOf(node);if(i!==-1)items.splice(i,1);
+        });
+        homeCardIds[kind]=[];homeCardItems[kind]=[];
+        var list=document.getElementById("home-"+kind+"-list");
+        if(list)list.textContent="";
+      });
+      homeFeaturePriority=0;homeFeatureKind="recordings";
+      homeClearArtwork();
+      if(homeFeatureKicker)homeFeatureKicker.textContent="DEINE MEDIATHEK";
+      if(homeFeatureTitle)homeFeatureTitle.textContent="Fernsehen neu erleben.";
+      if(homeFeatureDescription)homeFeatureDescription.textContent=
+        "Echte Sendungen, Aufnahmen und dein Wiedergabeverlauf – direkt von VDR-Suite.";
+      if(homeFeatureMeta)homeFeatureMeta.textContent="Inhalte werden geladen …";
+      if(homeTimerSummary)homeTimerSummary.textContent="Timerstatus wird gelesen …";
+    }
+    function homeCard(kind,item,label,meta,progress){
+      var list=document.getElementById("home-"+kind+"-list");
+      if(!list)return null;
+      var idx=homeCardItems[kind].length,id="home-"+kind+"-row-"+idx;
+      var node=document.createElement("button");
+      node.type="button";
+      node.className="home-media-card tv-focusable";
+      node.setAttribute("data-focus-id",id);
+      node.setAttribute("data-home-kind",kind);
+      node.setAttribute("data-home-index",String(idx));
+      node.setAttribute("aria-label",label);
+      var art=document.createElement("img");art.className="home-card-art";
+      art.alt="";art.hidden=true;
+      var title=document.createElement("strong");title.textContent=label;
+      var info=document.createElement("small");info.textContent=meta;
+      node.appendChild(art);node.appendChild(title);node.appendChild(info);
+      if(typeof progress==="number" && progress>0 && progress<100) {
+        var bar=document.createElement("span");bar.className="home-card-progress";
+        var value=document.createElement("span");
+        value.style.width=Math.min(99,Math.max(1,Math.round(progress)))+"%";
+        bar.appendChild(value);node.appendChild(bar);
+      }
+      list.appendChild(node);
+      homeCardIds[kind].push(id);homeCardItems[kind].push(item);
+      items.push(node);controls[id]=node;
+      node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+      return {node:node,title:title,info:info,art:art};
+    }
+    function homeMetadataText(row,fallback) {
+      var m=row && row.metadata || {},parts=[];
+      if(m.genreText)parts.push(m.genreText.split("[").join("").split("]").join("").split("|").join(" · "));
+      if(Number.isInteger(m.seasonNumber) && Number.isInteger(m.episodeNumber))
+        parts.push("S"+m.seasonNumber+" E"+m.episodeNumber);
+      else if(m.episodeTitle)parts.push(m.episodeTitle);
+      if(row && row.durationKnown && Number.isInteger(row.durationSeconds) &&
+         row.durationSeconds>0)parts.push(Math.ceil(row.durationSeconds/60)+" Min.");
+      if(!parts.length && fallback)parts.push(fallback);
+      return parts.join(" · ");
+    }
+    function homeAttachCardArt(credential,backendId,kind,row,card,token) {
+      if(!card || !card.art)return;
+      var client=createPublicMediaMetadata(window);
+      homeCardArtworkClients.push(client);
+      function alive(){
+        return homeAlive(token) && homeBackendId===backendId &&
+          card.node===controls[card.node.getAttribute("data-focus-id")];
+      }
+      function loaded(result) {
+        if(!alive() || !result.ok || !window.URL ||
+           typeof window.URL.createObjectURL!=="function" ||
+           typeof window.Blob!=="function")return;
+        var url;
+        try{url=window.URL.createObjectURL(new window.Blob(
+          [result.value.bytes],{type:result.value.contentType}));}catch(_){return;}
+        if(!alive()){
+          if(typeof window.URL.revokeObjectURL==="function")window.URL.revokeObjectURL(url);
+          return;
+        }
+        homeCardUrls.push(url);
+        card.art.onerror=function(){
+          card.art.hidden=true;card.art.removeAttribute("src");
+          if(typeof window.URL.revokeObjectURL==="function")window.URL.revokeObjectURL(url);
+          var at=homeCardUrls.indexOf(url);if(at!==-1)homeCardUrls.splice(at,1);
+        };
+        card.art.src=url;card.art.hidden=false;
+      }
+      if(kind==="epg"){
+        if(row.event && row.event.eventId)
+          client.epgPreferredArtwork(credential,backendId,row.channel.channelId,
+            row.event.eventId,loaded);
+        return;
+      }
+      if(!/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
+      client.artworkList(credential,backendId,row.recordingId,function(list){
+        if(!alive() || !list.ok)return;
+        var art=list.value.items.filter(function(x){return x.kind==="poster";})[0] ||
+          list.value.items.filter(function(x){return x.kind==="fanart";})[0];
+        if(art)client.artworkBytes(credential,backendId,
+          row.recordingId,art.artworkId,loaded);
+      });
+    }
+    function homeFeatureShow(row,kind,priority,subtitle) {
+      if(!row || priority<homeFeaturePriority)return;
+      homeFeaturePriority=priority;homeFeatureKind=kind;
+      if(homeFeatureKicker)homeFeatureKicker.textContent=kind==="epg" ?
+        "JETZT IM TV" : priority>=3 ? "WEITERSEHEN" : "AUS DEINER MEDIATHEK";
+      if(homeFeatureTitle)homeFeatureTitle.textContent=row.title || "Unbenannt";
+      if(homeFeatureDescription)homeFeatureDescription.textContent=
+        (row.metadata && (row.metadata.overview || row.metadata.tagline)) ||
+        row.description || row.subtitle || subtitle ||
+        "Keine ausführliche Beschreibung verfügbar.";
+      if(homeFeatureMeta)homeFeatureMeta.textContent=subtitle || "";
+      homeClearArtwork();
+      homeFeatureArtwork.cancel();
+      // Images are fetched only through the authenticated public binary API.
+      if(!homeCredential || !homeBackendId)return;
+      var ticket=++homeFeatureRun,token=homeRun;
+      if(kind==="epg"){
+        if(!row.eventId || !row.channelId)return;
+        homeFeatureArtwork.epgPreferredArtwork(homeCredential,homeBackendId,
+          row.channelId,row.eventId,function(bytes){
+            if(!homeAlive(token) || ticket!==homeFeatureRun || !bytes.ok ||
+               !window.URL || typeof window.URL.createObjectURL!=="function" ||
+               typeof window.Blob!=="function")return;
+            var url;
+            try{url=window.URL.createObjectURL(new window.Blob(
+              [bytes.value.bytes],{type:bytes.value.contentType}));}catch(_){return;}
+            homeClearArtwork();homeArtworkUrl=url;
+            if(homeFeaturePoster){
+              homeFeaturePoster.onerror=function(){
+                if(homeArtworkUrl===url)homeClearArtwork();
+              };
+              homeFeaturePoster.src=url;homeFeaturePoster.hidden=false;
+            }
+          });
+        return;
+      }
+      if(kind!=="recordings" || !/^rec_[0-9a-f]{32}$/.test(row.recordingId))return;
+      homeFeatureArtwork.artworkList(homeCredential,homeBackendId,
+        row.recordingId,function(result){
+          if(!homeAlive(token) || ticket!==homeFeatureRun ||
+             !result.ok || !result.value.items.length)return;
+          var artwork=result.value.items.filter(function(x){
+            return x.kind==="poster";
+          })[0] || result.value.items.filter(function(x){
+            return x.kind==="fanart";
+          })[0];
+          if(!artwork)return;
+          homeFeatureArtwork.artworkBytes(homeCredential,homeBackendId,
+            row.recordingId,artwork.artworkId,function(bytes){
+              if(!homeAlive(token) || ticket!==homeFeatureRun || !bytes.ok ||
+                 !window.URL || typeof window.URL.createObjectURL!=="function" ||
+                 typeof window.Blob!=="function")return;
+              var url=null;
+              try {url=window.URL.createObjectURL(new window.Blob(
+                [bytes.value.bytes],{type:bytes.value.contentType}));}
+              catch(_) {return;}
+              homeClearArtwork();homeArtworkUrl=url;
+              if(homeFeaturePoster){
+                homeFeaturePoster.onerror=function(){
+                  if(homeArtworkUrl===url)homeClearArtwork();
+                };
+                homeFeaturePoster.src=url;
+                homeFeaturePoster.hidden=false;
+              }
+            });
+        });
+    }
+    function homeSelectRecording(row,kind,force){
+      if(!row || !homeCredential || !homeBackendId)return;
+      var token=homeRun;
+      ++homeFeatureRun;homeFeatureMetadata.cancel();
+      if(force)homeFeaturePriority=0;
+      var priority=force?4:kind==="continue"?3:2;
+      homeFeatureShow(row,"recordings",priority,
+        kind==="continue" ?
+          "Gespeicherte Position: "+Math.floor(row.positionSeconds/60)+" Min." :
+          (row.recordedAt ? "Aufgenommen: "+row.recordedAt : "Aufnahme"));
+      var selected=homeFeatureRun;
+      homeFeatureMetadata.recordingDetail(homeCredential,homeBackendId,
+        row.recordingId,function(result){
+          if(!homeAlive(token) || selected!==homeFeatureRun)return;
+          if(result.ok){
+            var desc=kind==="continue" ?
+              "Gespeicherte Position: "+Math.floor(row.positionSeconds/60)+" Min." :
+              "Metadaten aus VDR-Suite";
+            // Upgraded title, overview and genre are authoritative, never made up.
+            homeFeatureShow(result.value,"recordings",priority,
+              [desc,result.value.metadata.genreText||""].filter(Boolean).join(" · "));
+          } else if(homeFeatureMeta)
+            homeFeatureMeta.textContent="Details: "+mediaMetadataError(result);
+        });
+    }
+    function homeDisplayContinue(credential,backendId,token){
+      homeResume.load(credential,backendId,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          homeMessage("home-continue-status",homeContinueError(result));return;
+        }
+        var first=result.value.items.slice(0,3);
+        homeMessage("home-continue-status",first.length ?
+          first.length+" von "+result.value.items.length+" gespeicherten Positionen" :
+          "Noch keine fortsetzbaren Aufnahmen.");
+        first.forEach(function(progress,index){
+          // A Continue Watching card has an actual server checkpoint, not a
+          // position guessed from a recording entry.
+          var pct=progress.durationSeconds===null ? null :
+            progress.positionSeconds*100/progress.durationSeconds;
+          var item={backendId:backendId,recordingId:progress.recordingId,
+            positionSeconds:progress.positionSeconds,
+            durationSeconds:progress.durationSeconds,
+            durationKnown:progress.durationSeconds!==null,
+            title:"Aufnahmedetails werden geladen"};
+          var position="Position "+Math.floor(progress.positionSeconds/60)+" Min."+
+            (progress.durationSeconds===null?"":" von "+
+              Math.ceil(progress.durationSeconds/60)+" Min.");
+          var card=homeCard("continue",item,item.title,position,pct);
+          homeContinueMetadata[index].recordingDetail(credential,backendId,
+            progress.recordingId,function(detail){
+              if(!homeAlive(token))return;
+              if(!detail.ok){
+                if(card)card.title.textContent="Aufnahme (Details nicht verfügbar)";
+                return;
+              }
+              Object.assign(item,detail.value);
+              // Checkpoint duration has its own truth and may not equal the
+              // catalog duration. Never rewrite its position or percentage.
+              item.positionSeconds=progress.positionSeconds;
+              item.resumeDurationSeconds=progress.durationSeconds;
+              if(card){
+                card.title.textContent=item.title;
+                card.info.textContent=position+
+                  (homeMetadataText(item,"") ? " · "+homeMetadataText(item,"") : "");
+                homeAttachCardArt(credential,backendId,"continue",item,card,token);
+              }
+              if(index===0 && homeFeaturePriority<3)homeSelectRecording(item,"continue");
+            });
+        });
+      });
+    }
+    function homeDisplayRecordings(credential,backendId,token){
+      homeRecordingCatalog.listRecordings(credential,backendId,null,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          homeMessage("home-recordings-status",recordingCatalogError(result));return;
+        }
+        var list=result.value.items.slice(0,4);
+        homeMessage("home-recordings-status",list.length ?
+          "Aus dem freigegebenen VDR-Katalog · "+list.length+" angezeigt" :
+          "Noch keine Aufnahmen vorhanden");
+        list.forEach(function(row){
+          var card=homeCard("recordings",row,row.title,
+            homeMetadataText(row,row.recordedAt ?
+              "Aufgenommen: "+row.recordedAt : "Aufnahme"),null);
+          homeAttachCardArt(credential,backendId,"recordings",row,card,token);
+          var client=createPublicMediaMetadata(window);
+          homeCardDetailClients.push(client);
+          client.recordingDetail(credential,backendId,row.recordingId,function(detail){
+            if(!homeAlive(token) || !detail.ok)return;
+            Object.assign(row,detail.value);
+            if(card){
+              card.title.textContent=row.title;
+              card.info.textContent=homeMetadataText(row,
+                row.recordedAt ? "Aufgenommen: "+row.recordedAt : "Aufnahme");
+            }
+          });
+        });
+        if(list.length && homeFeaturePriority<2)
+          homeSelectRecording(list[0],"recordings");
+      });
+    }
+    function homeDisplayTimers(credential,backendId,token){
+      homeTimerCatalog.list(credential,backendId,0,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          if(homeTimerSummary)homeTimerSummary.textContent=
+            nativeTimerCatalogError(result);return;
+        }
+        var list=result.value.items;
+        var recording=list.filter(function(x){return x.recording;}).length;
+        if(homeTimerSummary){
+          var upcoming=list.filter(function(x){return x.enabled && !x.recording;})
+            .slice(0,2).map(function(x){
+              return x.title+" ("+x.day+" "+x.startTime+")";
+            });
+          homeTimerSummary.textContent=
+            (result.value.page.hasMore?"Mindestens ":"")+list.length+
+            " native VDR-Timer · "+recording+" gerade aktiv"+
+            (upcoming.length?" · Geplant: "+upcoming.join(" · "):"");
+        }
+      });
+    }
+    function homeDisplayEpg(credential,backendId,token){
+      homeChannelCatalog.listChannels(credential,backendId,null,function(result){
+        if(!homeAlive(token))return;
+        if(!result.ok){
+          homeMessage("home-epg-status",channelCatalogError(result));return;
+        }
+        var channels=result.value.items.filter(function(x){
+          return x.enabled && !x.radio;
+        }).slice(0,3);
+        if(!channels.length){
+          homeMessage("home-epg-status","Keine TV-Sender auf der ersten Seite verfügbar.");
+          return;
+        }
+        homeMessage("home-epg-status","Jetzt im TV · "+channels.length+" Sender");
+        var now=Math.floor(Date.now()/1000),found=0,failures=0;
+        channels.forEach(function(channel){
+          var reader=createPublicMediaMetadata(window);
+          homeEpgReaders.push(reader);
+          reader.nowNext(credential,backendId,channel.channelId,now,function(epg){
+            if(!homeAlive(token))return;
+            if(!epg.ok){
+              failures++;
+              if(!found)homeMessage("home-epg-status",mediaMetadataError(epg));
+              return;
+            }
+            var event=epg.value.items.filter(function(x){
+              return Number(x.startTime)<=now && Number(x.endTime)>now;
+            })[0];
+            if(!event)return;
+            found++;
+            homeMessage("home-epg-status","Jetzt im TV · "+found+" Sendungen");
+            var row={event:event,channel:channel};
+            var card=homeCard("epg",row,event.title,
+              channel.name+" · "+globalSearchDate(event.startTime)+
+              (event.subtitle?" · "+event.subtitle:""),null);
+            homeAttachCardArt(credential,backendId,"epg",row,card,token);
+          });
+        });
+      });
+    }
+    function homeRefresh(){
+      if(currentView!=="home")return;
+      homeCancelReads();homeClearCards();
+      homeCredential=null;homeBackendId=null;
+      var saved=vault.read();
+      if(!saved.ok || !saved.credential){
+        homeMessage("home-content-status",
+          "Keine gekoppelte Geräteanmeldung · Einstellungen prüfen");
+        ["continue","recordings","epg"].forEach(function(k){
+          homeMessage("home-"+(k==="continue"?"continue":k)+"-status",
+            "Ohne Geräteanmeldung nicht verfügbar");
+        });
+        return;
+      }
+      var address=serverInput && normalizeSuiteBase(serverInput.value);
+      if(address && address!==saved.credential.base){
+        homeMessage("home-content-status","Serveradresse stimmt nicht mit Geräteanmeldung überein.");
+        return;
+      }
+      var credential=saved.credential,token=homeRun;
+      homeCredential=credential;
+      homeMessage("home-content-status","Prüfe vorhandene Geräteanmeldung …");
+      homePairing.verify(credential,function(valid){
+        if(!homeAlive(token))return;
+        if(!valid.ok){
+          homeMessage("home-content-status",deviceVerificationError(valid));return;
+        }
+        markDeviceAuthenticated(credential);
+        homeBackendCatalog.listBackends(credential,function(backendResult){
+          if(!homeAlive(token))return;
+          if(!backendResult.ok || !backendResult.value.items.length){
+            homeMessage("home-content-status",backendResult.ok ?
+              "Kein freigegebenes Backend" : channelCatalogError(backendResult));
+            return;
+          }
+          // One explicit selected/first accessible backend, no hidden fanout.
+          var backend=backendResult.value.items[0];
+          homeBackendId=backend.backendId;
+          homeMessage("home-content-status","Backend: "+backend.name+
+            " · echte API-v1-Metadaten");
+          homeMessage("home-continue-status","Lade gespeicherte Positionen …");
+          homeMessage("home-recordings-status","Lade Aufnahmekatalog …");
+          homeMessage("home-epg-status","Lade Jetzt/Nächste …");
+          homeDisplayContinue(credential,homeBackendId,token);
+          homeDisplayRecordings(credential,homeBackendId,token);
+          homeDisplayTimers(credential,homeBackendId,token);
+          homeDisplayEpg(credential,homeBackendId,token);
+        });
+      });
     }
   
     function reportDiscoverySuccess(result) {
@@ -1927,6 +4031,10 @@
       if (!isVisibleFocus(id)) return false;
       var chosen = controls[id];
       focusedId = id;
+      // On Tizen TV, simply focusing a text input can open the native IME.
+      // Its arrow/Backspace keys belong to editing, not to the app focus graph.
+      if (currentView === "settings") editingServerAddress = id === "settings-base-input";
+      if (currentView === "search") globalSearchEditing = id === "global-search-input";
       if (currentView === "home") lastHomeFocus = id;
       if (!rowMemory[currentView]) rowMemory[currentView] = {};
       var rows = focusRows();
@@ -1980,8 +4088,1301 @@
       if (skeleton) skeleton.hidden = state !== "loading";
     }
   
+    function clearEpgArtwork() {
+      if (liveEpgPoster) {
+        liveEpgPoster.hidden=true;
+        liveEpgPoster.onerror=null;
+        liveEpgPoster.onload=null;
+        liveEpgPoster.removeAttribute("src");
+      }
+      if (liveEpgArtworkUrl && window.URL &&
+          typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(liveEpgArtworkUrl);
+      liveEpgArtworkUrl=null;
+      if (liveEpgArtworkStatus) liveEpgArtworkStatus.textContent="";
+    }
+    function epgTimerMessage(source,message){
+      var el=document.getElementById(source==="live"?
+        "live-epg-timer-status":"search-epg-timer-status");
+      if(el)el.textContent=message;
+    }
+    function epgTimerReset(source){
+      ++epgTimerEpoch;epgTimerClient.cancel();epgTimerStage=null;
+      var action=source==="live"?liveEpgRecord:searchEpgRecord;
+      var status=source==="live"?liveEpgOperation:searchEpgOperation;
+      if(action){action.textContent=source==="live"?
+        "Sendung aufnehmen":"EPG-Sendung aufnehmen";action.hidden=true;action.disabled=false;}
+      if(status)status.hidden=true;
+      epgTimerMessage(source,"");
+    }
+    function epgTimerShow(source){
+      var action=source==="live"?liveEpgRecord:searchEpgRecord;
+      if(action)action.hidden=false;
+      epgTimerMessage(source,"OK auf „Aufnehmen“ prüft das aktuelle EPG. Erst die zweite Bestätigung legt einen Timer an.");
+    }
+    function epgTimerAction(action){
+      var source=currentView;
+      if(source!=="live" && source!=="search")return;
+      var token=epgTimerEpoch;
+      if(action==="status"){
+        var stage=epgTimerStage;
+        if(!stage || stage.source!==source || !stage.operationId)return;
+        epgTimerMessage(source,"Lese bestätigten Timerauftrag …");
+        epgTimerClient.operation(stage.cred,stage.operationId,function(r){
+          if(token!==epgTimerEpoch || currentView!==source)return;
+          if(!r.ok){epgTimerMessage(source,epgTimerIntentError(r));return;}
+          var state=r.value.state;
+          epgTimerMessage(source,state==="succeeded"?
+            "Timer im VDR bestätigt (Operation succeeded)." :
+            state==="outcome_unknown"?
+            "Timer-Ausgang UNGEKLÄRT. Nicht erneut anlegen; Serverstatus prüfen.":
+            "Timerauftrag: "+state+" · kein automatischer erneuter CREATE.");
+        });
+        return;
+      }
+      if(action!=="prepare")return;
+      var selected=source==="live"?selectedLiveEpg:selectedSearchEpg;
+      var id=source==="live"?selectedLiveEpgId:selected && selected.eventId;
+      var backend=source==="live"?liveBackends[liveBackendIndex]:
+        globalSearchBackend();
+      var cred=source==="live"?liveCredential:globalSearchCredential;
+      if(!selected || !backend || !id || !cred){
+        epgTimerMessage(source,"Zuerst eine aktuelle EPG-Sendung mit Event-ID auswählen.");
+        return;
+      }
+      var stage=epgTimerStage;
+      if(stage && stage.source===source && stage.phase==="confirm"){
+        stage.phase="submitting";
+        var button=source==="live"?liveEpgRecord:searchEpgRecord;
+        if(button){button.textContent="Timer wird angelegt …";button.disabled=true;}
+        epgTimerMessage(source,"Sende einen bestätigten Timerauftrag; keine automatische Wiederholung …");
+        epgTimerClient.create(stage.cred,stage.bid,stage.cid,stage.eid,
+          stage.etag,function(result){
+            if(token!==epgTimerEpoch||currentView!==source)return;
+            stage.phase="submitted";
+            if(button){button.disabled=true;button.textContent="Timerauftrag wurde versucht";}
+            if(!result.ok){
+              epgTimerMessage(source,epgTimerIntentError(result)+
+                " Kein automatischer zweiter Versuch.");return;
+            }
+            if(button)button.hidden=true;
+            stage.operationId=result.value.operationId;
+            var status=source==="live"?liveEpgOperation:searchEpgOperation;
+            if(status)status.hidden=false;
+            epgTimerMessage(source,"Timerauftrag angenommen (HTTP 202). "+
+              "Mit „Timerstatus prüfen“ den tatsächlichen VDR-Ausgang kontrollieren.");
+            setFocus(source==="live"?"live-epg-operation":"search-epg-operation");
+          });
+        return;
+      }
+      if(stage && stage.source===source)return;
+      var bid=backend.backendId,cid=selected.channelId,eid=id;
+      epgTimerMessage(source,"Lese aktuelle EPG-Revision und Aufnahmedaten …");
+      epgTimerClient.freshEvent(cred,bid,cid,eid,function(result){
+        if(token!==epgTimerEpoch||currentView!==source)return;
+        if(!result.ok){epgTimerMessage(source,epgTimerIntentError(result));return;}
+        var data=result.value;
+        if(data.startTime!==selected.startTime ||
+           data.endTime!==selected.endTime || data.title!==selected.title){
+          epgTimerMessage(source,"Die Sendung wurde im EPG verändert. Bitte Treffer neu wählen.");
+          return;
+        }
+        epgTimerStage={source:source,cred:cred,bid:bid,cid:cid,eid:eid,
+          etag:result.etag,phase:"confirm",operationId:null};
+        var button=source==="live"?liveEpgRecord:searchEpgRecord;
+        if(button)button.textContent="Timer jetzt wirklich anlegen";
+        epgTimerMessage(source,"Bestätigen: „"+data.title+"“, "+
+          globalSearchDate(data.startTime)+" bis "+globalSearchDate(data.endTime)+
+          ". OK legt einen echten VDR-Timer an.");
+      });
+    }
+    function clearEpgFocusRows() {
+      if (currentView==="live" && liveEpgFocusIds.indexOf(focusedId)>=0)
+        setFocus("detail-live-epg-now");
+      liveEpgFocusIds.forEach(function(id) {
+        var element=controls[id];
+        delete controls[id];
+        var index=items.indexOf(element);
+        if (index!==-1) items.splice(index,1);
+      });
+      liveEpgFocusIds=[];
+      liveEpgRows=[];
+      selectedLiveEpg=null;selectedLiveEpgId=null;
+      epgTimerReset("live");
+      liveDetailMetadata.cancel();
+      liveArtworkMetadata.cancel();
+      clearEpgArtwork();
+      liveEpgDetailRun+=1;
+      if (liveEpgDetail) liveEpgDetail.hidden=true;
+      if (liveEpgScrollActions) liveEpgScrollActions.hidden=true;
+    }
+    function clearLiveEpg() {
+      liveMetadata.cancel();
+      clearEpgFocusRows();
+      liveEpgRun += 1;
+      selectedLiveChannel = null;
+      liveWindow = null;
+      if (liveEpgStatus) liveEpgStatus.textContent =
+        "EPG: Sender mit OK auswählen. epg.view ist erforderlich.";
+      if (liveEpgList) {liveEpgList.textContent = "";liveEpgList.hidden = true;}
+    }
+    function epgRow(item,index,nowNext) {
+      var start=new Date(Number(item.startTime)*1000);
+      var end=new Date(Number(item.endTime)*1000);
+      var clock=function(value) {
+        return isFinite(value.getTime()) ?
+          value.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+      };
+      var label=nowNext ? (index===0 ? "Jetzt · " : "Danach · ") : "";
+      return label+clock(start)+"–"+clock(end)+" · "+item.title+
+        (item.subtitle ? " · "+item.subtitle : "");
+    }
+    // OK on a focusable EPG row must do something visible. A description
+    // can only be fetched if Public v1 advertises a proven native eventId.
+    function selectEpgEvent(item,loadDescription) {
+      epgTimerReset("live");
+      selectedLiveEpg=item;selectedLiveEpgId=item && item.eventId || null;
+      liveDetailMetadata.cancel();
+      liveArtworkMetadata.cancel();
+      clearEpgArtwork();
+      var token=++liveEpgDetailRun;
+      if (!item || !liveEpgDetail) return;
+      var start=new Date(Number(item.startTime)*1000);
+      var end=new Date(Number(item.endTime)*1000);
+      var clock=function(date) {
+        return isFinite(date.getTime()) ?
+          date.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : "--:--";
+      };
+      var date=isFinite(start.getTime()) ?
+        start.toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"2-digit"}) : "";
+      liveEpgDetail.hidden=false;
+      liveEpgDetail.scrollTop=0;
+      if(selectedLiveEpgId && Number(item.endTime)>Math.floor(Date.now()/1000))
+        epgTimerShow("live");
+      if (liveEpgScrollActions) liveEpgScrollActions.hidden=false;
+      if (liveEpgDetailTime) liveEpgDetailTime.textContent =
+        date+" · "+clock(start)+"–"+clock(end);
+      if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=item.title.slice(0,512);
+      if (liveEpgDetailSubtitle) {
+        liveEpgDetailSubtitle.textContent=(item.subtitle || "").slice(0,512);
+        liveEpgDetailSubtitle.hidden=!item.subtitle;
+      }
+      if (!liveEpgDetailDescription) return;
+      if (!loadDescription) {
+        liveEpgDetailDescription.textContent="OK: Sendungsinformationen anzeigen.";
+        if (liveEpgArtworkStatus) liveEpgArtworkStatus.textContent=
+          "Sendungsbild wird bei OK geladen, sofern im EPG vorhanden.";
+        return;
+      }
+      var backend=liveBackends[liveBackendIndex];
+      var channel=selectedLiveChannel;
+      if (!backend || !channel || !liveCredential ||
+          channel.backendId!==backend.backendId || item.channelId!==channel.channelId)
+        return;
+      function stillSelected() {
+        return token===liveEpgDetailRun && currentView==="live" &&
+          selectedLiveChannel && selectedLiveChannel.channelId===channel.channelId &&
+          selectedLiveChannel.backendId===channel.backendId;
+      }
+      // Reuse Public v1's already authorized EPG artwork service. An absent
+      // preferred image may fall back to the direct EPG image only on 404.
+      // Every old selection's image request and Object URL are cancelled.
+      function loadEpgArtwork(id) {
+        if (!stillSelected() || !liveEpgPoster || !liveEpgArtworkStatus) return;
+        liveEpgArtworkStatus.textContent="Prüfe vorhandenes Sendungsbild …";
+        function receiveArtwork(result) {
+          if (!stillSelected()) return;
+          if (!result.ok) {
+            liveEpgArtworkStatus.textContent=result.kind==="http" &&
+              result.status===404 ? "Kein Sendungsbild hinterlegt." :
+              "Sendungsbild: "+mediaMetadataError(result);
+            return;
+          }
+          try {
+            if (!window.URL || !window.Blob ||
+                typeof window.URL.createObjectURL!=="function")
+              throw Error("No object URL support");
+            var objectUrl=window.URL.createObjectURL(
+              new window.Blob([result.value.bytes],{type:result.value.contentType}));
+            if (!stillSelected()) {
+              window.URL.revokeObjectURL(objectUrl);return;
+            }
+            clearEpgArtwork();
+            liveEpgArtworkUrl=objectUrl;
+            liveEpgPoster.onload=function() {
+              if (stillSelected() && liveEpgArtworkUrl===objectUrl)
+                liveEpgArtworkStatus.textContent="";
+            };
+            liveEpgPoster.onerror=function() {
+              if (!stillSelected() || liveEpgArtworkUrl!==objectUrl) return;
+              clearEpgArtwork();
+              liveEpgArtworkStatus.textContent="Sendungsbild konnte nicht dargestellt werden.";
+            };
+            liveEpgPoster.src=objectUrl;
+            liveEpgPoster.hidden=false;
+            liveEpgArtworkStatus.textContent="Sendungsbild geladen.";
+          } catch (_) {
+            clearEpgArtwork();
+            liveEpgArtworkStatus.textContent="Bildanzeige auf diesem TV nicht verfügbar.";
+          }
+        }
+        liveArtworkMetadata.epgPreferredArtwork(liveCredential,
+          backend.backendId,channel.channelId,id,function(result) {
+            if (!stillSelected()) return;
+            if (!result.ok && result.kind==="http" && result.status===404) {
+              liveArtworkMetadata.epgDirectArtwork(liveCredential,
+                backend.backendId,channel.channelId,id,receiveArtwork);
+              return;
+            }
+            receiveArtwork(result);
+          });
+      }
+      function loadEventDetail(id) {
+        if (!stillSelected()) return;
+        selectedLiveEpgId=id;
+        if(Number(item.endTime)>Math.floor(Date.now()/1000))
+          epgTimerShow("live");
+        liveEpgDetailDescription.textContent="Lade Sendungsbeschreibung …";
+        liveDetailMetadata.eventDetail(liveCredential,backend.backendId,
+          channel.channelId,id,function(result) {
+            if (!stillSelected()) return;
+            if (!result.ok) {
+              liveEpgDetailDescription.textContent =
+                "Sendungsdetails: "+mediaMetadataError(result);
+              return;
+            }
+            var info=result.value;
+            // Native IDs can be reused after a cache refresh. Show only the
+            // exact airing that the user selected, never a stale replacement.
+            if (info.startTime!==item.startTime || info.endTime!==item.endTime) {
+              liveEpgDetailDescription.textContent =
+                "Das EPG wurde aktualisiert. Bitte das Programm neu laden.";
+              return;
+            }
+            if (liveEpgDetailTitle) liveEpgDetailTitle.textContent=info.title;
+            if (liveEpgDetailSubtitle) {
+              liveEpgDetailSubtitle.textContent=info.subtitle || "";
+              liveEpgDetailSubtitle.hidden=!info.subtitle;
+            }
+            liveEpgDetailDescription.textContent=info.description ||
+              "Für diese Sendung ist keine ausführliche Beschreibung hinterlegt.";
+            loadEpgArtwork(id);
+          });
+      }
+      if (/^[A-Za-z0-9._:-]{1,160}$/.test(item.eventId || "")) {
+        loadEventDetail(item.eventId);
+        return;
+      }
+      // Public v1 now-next deliberately omits eventId even when the native
+      // EPG source has one. A single authorized window GET can expose a
+      // source-provenanced ID without guessing or using a Browser-only API.
+      var from=Number(item.startTime),until=Number(item.endTime);
+      if (!isFinite(from) || !isFinite(until) || from<1000000000 ||
+          until<=from || until-from>172800) {
+        liveEpgDetailDescription.textContent="Sendezeit nicht für Detailabfrage geeignet.";
+        return;
+      }
+      liveEpgDetailDescription.textContent="Prüfe Event-ID im EPG-Zeitfenster …";
+      liveDetailMetadata.epgWindow(liveCredential,backend.backendId,
+        channel.channelId,from,until,null,function(result) {
+          if (!stillSelected()) return;
+          if (!result.ok) {
+            liveEpgDetailDescription.textContent =
+              "EPG-Zeitfenster: "+mediaMetadataError(result);
+            return;
+          }
+          var candidates=result.value.items.filter(function(e) {
+            return e.channelId===item.channelId &&
+              e.startTime===item.startTime && e.endTime===item.endTime &&
+              e.title===item.title &&
+              (e.subtitle || "")===(item.subtitle || "") &&
+              e.durationSeconds===item.durationSeconds;
+          });
+          if (result.value.page.hasMore || candidates.length!==1 ||
+              !/^[A-Za-z0-9._:-]{1,160}$/.test(candidates[0].eventId || "")) {
+            liveEpgDetailDescription.textContent =
+              "Die Public-v1-EPG-Antwort liefert keine eindeutig belegte native Event-ID für diese Sendung.";
+            return;
+          }
+          loadEventDetail(candidates[0].eventId);
+        });
+    }
+    function showEpgRows(rows,append,nowNext) {
+      if (!liveEpgList) return;
+      if (!append) {
+        clearEpgFocusRows();
+        liveEpgList.textContent="";
+      }
+      rows.forEach(function(item,index){
+        var eventIndex=liveEpgFocusIds.length;
+        var id="live-epg-row-"+eventIndex;
+        var node=document.createElement("li");
+        node.className="live-epg-event tv-focusable";
+        node.tabIndex=-1;
+        node.setAttribute("role","button");
+        node.setAttribute("data-focus-id",id);
+        node.setAttribute("data-epg-index",String(eventIndex));
+        node.setAttribute("aria-label",epgRow(item,index,!!nowNext).slice(0,400));
+        node.textContent=epgRow(item,index,!!nowNext).slice(0,550);
+        controls[id]=node;
+        items.push(node);
+        liveEpgFocusIds.push(id);
+        liveEpgRows.push(item);
+        liveEpgList.appendChild(node);
+        node.addEventListener("click",function(){
+          if (setFocus(id)) selectEpgEvent(item,true);
+        });
+      });
+      liveEpgList.hidden=!liveEpgList.children.length;
+      if (!append) {
+        liveEpgList.scrollTop=0;
+        if (rows.length) selectEpgEvent(rows[0],false);
+      }
+    }
+    function loadSelectedEpg(action) {
+      if (!selectedLiveChannel || !liveCredential || !liveBackends.length) {
+        if (liveEpgStatus) liveEpgStatus.textContent =
+          "Zuerst einen geladenen Sender mit OK auswählen.";
+        return;
+      }
+      var backendId = liveBackends[liveBackendIndex].backendId;
+      var channelId = selectedLiveChannel.channelId;
+      if (selectedLiveChannel.backendId !== backendId) return;
+      var token = ++liveEpgRun;
+      if (action === "now") {
+        liveWindow = null;
+        if (liveEpgStatus) liveEpgStatus.textContent = "EPG Jetzt/Nächste wird geladen …";
+        liveMetadata.nowNext(liveCredential,backendId,channelId,
+          Math.floor(Date.now()/1000),function(result){
+            if (token!==liveEpgRun || currentView!=="live") return;
+            if (!result.ok) {
+              if (liveEpgStatus) liveEpgStatus.textContent =
+                "EPG Jetzt/Nächste: " + mediaMetadataError(result);
+              showEpgRows([],false);return;
+            }
+            showEpgRows(result.value.items,false,true);
+            if (liveEpgStatus) liveEpgStatus.textContent = result.value.items.length ?
+              "EPG Jetzt/Nächste · "+result.value.items.length+" Einträge" :
+              "EPG-Cache enthält keine passenden Sendungen.";
+          });
+        return;
+      }
+      if (action==="more" && (!liveWindow || !liveWindow.cursor)) {
+        if (liveEpgStatus) liveEpgStatus.textContent = "Keine weitere EPG-Seite.";
+        return;
+      }
+      var previous = action==="more" ? liveWindow.cursor : null;
+      if (action!=="more") {
+        var from=Math.floor(Date.now()/1000);
+        liveWindow={from:from,until:from+86400,cursor:null};
+        showEpgRows([],false);
+      }
+      var scope = liveWindow;
+      if (liveEpgStatus) liveEpgStatus.textContent = "24-Stunden-EPG wird geladen …";
+      liveMetadata.epgWindow(liveCredential,backendId,channelId,
+        scope.from,scope.until,previous,function(result){
+          if (token!==liveEpgRun || currentView!=="live" || liveWindow!==scope) return;
+          if (!result.ok) {
+            if (liveEpgStatus) liveEpgStatus.textContent =
+              "EPG-Zeitfenster: "+mediaMetadataError(result);
+            return;
+          }
+          showEpgRows(result.value.items,!!previous);
+          scope.cursor = result.value.page.hasMore ?
+            result.value.page.nextCursor : null;
+          if (liveEpgStatus) liveEpgStatus.textContent =
+            "24-Stunden-Programm · "+(scope.cursor ?
+              "Weitere Sendungen verfügbar" : "Ende des Zeitfensters");
+        });
+    }
+    function streamdevMessage(msg){if(streamdevStatus)streamdevStatus.textContent=msg;}
+    function saveStreamdevBase(){
+      if(streamdevActive||streamdevPlayer.isBusy()){
+        streamdevMessage("Vor Änderungen zuerst Live-TV mit STOP beenden.");return;
+      }
+      var base=parseStreamdevBase(streamdevBaseInput && streamdevBaseInput.value);
+      if(!base){
+        streamdevMessage("Bitte die lokale Streamdev-Adresse im Format HTTP + LAN-IP + Port eingeben.");
+        return;
+      }
+      streamdevBase=base;
+      if(streamdevBaseInput)streamdevBaseInput.value=base;
+      try {if(window.localStorage)window.localStorage.setItem(
+        "vdr-suite.samsung.streamdevBase",base);
+      } catch(_) { /* Live test remains possible for this app session. */ }
+      streamdevMessage("Streamdev-Adresse gespeichert · Sender wählen und direkt starten.");
+      setFocus("live-streamdev-save");
+    }
+    function stopStreamdevLive(reason) {
+      ++streamdevRun;
+      streamdevPlayer.stop();
+      streamdevActive=false;
+      if(livePlayerSurface)livePlayerSurface.hidden=true;
+      if(document.documentElement)document.documentElement.classList.remove("streamdev-live-active");
+      if(liveHtml5Video)liveHtml5Video.hidden=false;
+      if(reason==="user" && currentView==="live")
+        liveStatus("ready","Streamdev Live-TV beendet",
+          "AVPlay gestoppt, TCP-Stream geschlossen. Nächsten Sender wählen.");
+    }
+    function startStreamdevLive(){
+      if(livePlaybackSession||livePlayBusy||liveTeardownBusy||
+         streamdevActive||streamdevPlayer.isBusy())return;
+      if(!selectedLiveChannel||!liveBackends.length||
+         selectedLiveChannel.backendId!==liveBackends[liveBackendIndex].backendId){
+        liveStatus("error","Kein Sender gewählt","Zuerst Sender laden und mit OK auswählen.");return;
+      }
+      if(!streamdevBase){
+        liveStatus("error","Streamdev-Adresse fehlt",
+          "Bitte die lokale Streamdev-Adresse eingeben und speichern.");return;
+      }
+      if(!streamdevPlayer.available()){
+        liveStatus("error","Samsung AVPlay fehlt",
+          "Tizen stellt die native AVPlay-API nicht bereit.");return;
+      }
+      var token=++streamdevRun;
+      streamdevActive=true;
+      if(liveHtml5Video)liveHtml5Video.hidden=true;
+      if(livePlayerSurface)livePlayerSurface.hidden=false;
+      if(document.documentElement)document.documentElement.classList.add("streamdev-live-active");
+      if(livePlayerHint)livePlayerHint.textContent=
+        "Streamdev · MPEG-TS · AVPlay verbindet … · STOP/ZURÜCK beendet";
+      liveStatus("loading","Streamdev wird geöffnet",
+        "Direkter MPEG-TS vom eigenen VDR · ohne HTML5 und ohne MediaSession.");
+      var started=streamdevPlayer.start(streamdevBase,selectedLiveChannel.channelId,
+        function(state,detail){
+          if(token!==streamdevRun||currentView!=="live")return;
+          if(state==="playing"){
+            liveStatus("ready","AVPlay Live-TV gestartet",
+              "AVPlay PLAYING gemeldet · Bild und Ton am Fernseher überprüfen.");
+            if(livePlayerHint)livePlayerHint.textContent=
+              "AVPlay PLAYING · Bild/Ton prüfen · STOP/ZURÜCK beendet";
+          } else if(state==="buffering"||state==="preparing"){
+            if(livePlayerHint)livePlayerHint.textContent=
+              "Streamdev · "+(state==="buffering"?"puffert":"bereitet vor")+
+              " · STOP/ZURÜCK beendet";
+          } else if(state==="error"||state==="ended"||state==="unsupported"){
+            stopStreamdevLive("failure");
+            liveStatus("error",state==="ended"?
+              "Streamdev-Verbindung beendet":"Streamdev/AVPlay fehlgeschlagen",
+              state==="ended"?
+                "Der direkte VDR-Stream ist abgebrochen. Streamdev-Tuner/Netzwerk prüfen.":
+                "AVPlay konnte den MPEG-TS nicht starten oder dekodieren ("+
+                (detail&&detail.stage||"Stream")+
+                "). TV-Decoder, Streamdev-Port und VDR-Sender prüfen.");
+          }
+        });
+      if(!started && streamdevActive)stopStreamdevLive("failure");
+    }
+    // Explicit S6.18 Live-TV API v1 test, never triggered by focusing a channel.
+    // STOP releases the server tuner before a new Live-TV session may begin.
+    function stopLivePlayback(reason) {
+      var session=livePlaybackSession;
+      ++livePlayRun; // Fence a pending CREATE response and player callbacks.
+      livePlayBusy=false;
+      livePlaybackSession=null;
+      liveHtml5Player.stop();
+      if (livePlayerSurface) livePlayerSurface.hidden=true;
+      if (session && !liveTeardownBusy) {
+        liveTeardownBusy=true;
+        livePlaybackClient.stop(session.credential,session.backendId,session.sessionId,
+          function(result) {
+            liveTeardownBusy=false;
+            if (!result.ok && reason==="user" && currentView==="live")
+              liveStatus("error","Live-TV gestoppt · Tunerfreigabe unbestätigt",
+                livePlaybackError(result)+" · Backend-Session-Status prüfen.");
+          });
+      }
+      if (reason==="user" && currentView==="live")
+        liveStatus("ready","Live-TV beendet",
+          session ? "Lokaler Player gestoppt, Public-v1-MediaSession-STOP angefordert." :
+            "Live-Start abgebrochen; unbekannte Serverantwort wird nicht erneut angefordert.");
+    }
+    function startSelectedLive() {
+      if (livePlayBusy || livePlaybackSession || liveTeardownBusy) return;
+      if (!selectedLiveChannel || !liveCredential || !liveBackends.length ||
+          selectedLiveChannel.backendId!==liveBackends[liveBackendIndex].backendId) {
+        liveStatus("error","Kein Sender gewählt",
+          "Erst Sender laden und einen realen Sender mit OK auswählen.");
+        return;
+      }
+      if (!liveHtml5Player.available()) {
+        liveStatus("error","HTML5-Liveplayer fehlt",
+          "Dieser erste Device-v1-Live-MP4-Test nutzt HTML5; kein unautorisierter AVPlay-Fallback.");
+        return;
+      }
+      var capabilities=conservativeSamsungCapabilities({document:document});
+      if (!capabilities) {
+        liveStatus("error","HTML5-MP4-Decoder nicht belegt",
+          "Browser meldet keine H.264/AAC-Unterstützung. Kein Medien-POST.");
+        return;
+      }
+      // The published Live Device contract provides only protected progressive
+      // fMP4 with an HttpOnly browser cookie, not AVPlay's native COOKIE.
+      capabilities.protocols=["progressive"];
+      capabilities.containers=["fmp4","mp4"];
+      var stored=vault.read();
+      if (!stored.ok || !stored.credential ||
+          stored.credential.base!==liveCredential.base ||
+          stored.credential.credentialId!==liveCredential.credentialId) {
+        liveStatus("error","Geräteanmeldung prüfen",
+          "Live-TV benötigt die unveränderte sichere Device-Identität.");
+        return;
+      }
+      var credential=stored.credential;
+      var backendId=selectedLiveChannel.backendId;
+      var channelId=selectedLiveChannel.channelId;
+      var token=++livePlayRun;
+      livePlayBusy=true;
+      liveStatus("loading","Live-MediaSession wird angefordert",
+        "POST /api/v1/live-playback-sessions · media.live.play erforderlich.");
+      livePlaybackClient.begin(credential,backendId,channelId,capabilities,function(result){
+        if (token!==livePlayRun || currentView!=="live") {
+          if (result.ok) livePlaybackClient.stop(credential,backendId,result.sessionId,
+            function(){});
+          return;
+        }
+        livePlayBusy=false;
+        if (!result.ok) {
+          liveStatus("error","Live-TV-API v1 abgewiesen",livePlaybackError(result));
+          return;
+        }
+        livePlaybackSession={credential:credential,backendId:backendId,
+          sessionId:result.sessionId};
+        if (livePlayerSurface) livePlayerSurface.hidden=false;
+        if (livePlayerHint) livePlayerHint.textContent=
+          "Public v1: live-progressive-fmp4 · HTML5-MP4 · PLAY/PAUSE · STOP/ZURÜCK beendet";
+        var active=livePlaybackSession;
+        var started=liveHtml5Player.start(result.mediaUrl,function(state,detail){
+          if (livePlaybackSession!==active || currentView!=="live") return;
+          if (state==="playing") {
+            liveStatus("ready","Live-MP4 spielt",
+              "HTML5 onplaying · echte Bildbewegung und hörbaren Ton am TV prüfen.");
+            if (livePlayerHint) livePlayerHint.textContent=
+              "Live-MP4 onplaying · Bild/Ton am Samsung prüfen · STOP beendet und gibt Tuner frei";
+          } else if (state==="buffering" || state==="preparing") {
+            liveStatus("loading","Live-MP4 "+(state==="buffering"?"puffert":"bereitet vor"),
+              "Session bereit · TV-Videoelement wartet auf geschützte Medienbytes.");
+          } else if (state==="error" || state==="unsupported") {
+            var failure=html5PlaybackDiagnosis(detail);
+            liveStatus("loading","Live-MP4-Medienzugriff prüfen",failure);
+            // Read only response HEADERS from this same scoped active session.
+            probeMediaHttpHeaders(window,result.mediaUrl,function(probe){
+              if (livePlaybackSession!==active) return;
+              stopLivePlayback("failure");
+              liveStatus("error","Live-TV konnte nicht gestartet werden",
+                failure+" · "+describeMediaAccessProbe(probe));
+            });
+          } else if (state==="finished") {
+            stopLivePlayback("finished");
+            liveStatus("ready","Live-Stream beendet",
+              "Live-Sitzung freigegeben; Backend-Logs auf unerwartetes Ende prüfen.");
+          }
+        });
+        if (!started && livePlaybackSession===active) stopLivePlayback("failure");
+      });
+    }
+  
+  
+  
+  
+    // S6.23 – common Web search index, separately authorized Public-v1 reads.
+    // EPG and recordings are independent panes (including errors and pagination).
+    function globalSearchMessage(message) {
+      if(globalSearchStatusLabel)globalSearchStatusLabel.textContent=message;
+    }
+    function globalSearchPane(kind) {
+      return {
+        list:document.getElementById("global-search-"+kind),
+        status:document.getElementById("global-search-"+(kind==="recordings"?"recording":"epg")+"-status"),
+        count:document.getElementById("global-search-"+(kind==="recordings"?"recording":"epg")+"-count")
+      };
+    }
+    function clearGlobalSearchRows() {
+      ["recordings","epg"].forEach(function(kind) {
+        globalSearchRows[kind].forEach(function(id){
+          var node=controls[id];delete controls[id];
+          var index=items.indexOf(node);
+          if(index!==-1)items.splice(index,1);
+        });
+        globalSearchRows[kind]=[];
+        globalSearchItems[kind]=[];
+        globalSearchPages[kind]=null;
+        var pane=globalSearchPane(kind);
+        if(pane.list){pane.list.textContent="";pane.list.hidden=true;}
+        if(pane.count)pane.count.textContent="–";
+      });
+      selectedSearchEpg=null;epgTimerReset("search");
+      if(globalSearchDetailTitle)globalSearchDetailTitle.textContent="Noch kein Treffer ausgewählt";
+      if(globalSearchDetailDescription)
+        globalSearchDetailDescription.textContent="OK auf einem Treffer zeigt Details aus API v1.";
+      ++globalSearchDetailRun;
+      globalSearchMetadata.cancel();
+    }
+    function globalSearchDate(value) {
+      var raw=Number(value);
+      var date=(isFinite(raw) && raw>0) ?
+        new Date(raw<100000000000 ? raw*1000 : raw) : new Date(value);
+      return isFinite(date.getTime()) ?
+        date.toLocaleString("de-DE",{day:"2-digit",month:"2-digit",
+          hour:"2-digit",minute:"2-digit"}) : "Zeit unbekannt";
+    }
+    function appendGlobalSearchResults(kind,rows) {
+      var pane=globalSearchPane(kind);
+      if(!pane.list)return;
+      rows.forEach(function(row){
+        var index=globalSearchItems[kind].length;
+        var id="global-search-"+kind+"-row-"+index;
+        var node=document.createElement("li");
+        node.className="global-search-row tv-focusable";
+        node.tabIndex=-1;
+        node.setAttribute("role","button");
+        node.setAttribute("data-focus-id",id);
+        node.setAttribute("data-global-search-kind",kind);
+        node.setAttribute("data-global-search-index",String(index));
+        node.setAttribute("aria-label",row.title);
+        var title=document.createElement("strong");
+        title.textContent=row.title;
+        var info=document.createElement("span");
+        info.textContent=kind==="recordings" ?
+          "Aufnahme"+(row.edited?" · bearbeitet":"") :
+          globalSearchDate(row.startTime)+
+            (row.subtitle?" · "+row.subtitle:"")+
+            " · "+row.channelId;
+        node.appendChild(title);node.appendChild(info);
+        pane.list.appendChild(node);
+        pane.list.hidden=false;
+        controls[id]=node;items.push(node);
+        globalSearchRows[kind].push(id);
+        globalSearchItems[kind].push(row);
+        node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+      });
+    }
+    function globalSearchBackend() {
+      return globalSearchBackends[globalSearchBackendIndex] || null;
+    }
+    function globalSearchPage(kind,offset,run,term) {
+      var backend=globalSearchBackend();
+      if(run!==globalSearchRun || !globalSearchCredential || !backend)return;
+      var pane=globalSearchPane(kind);
+      if(pane.status)pane.status.textContent=
+        (kind==="epg"?"EPG":"Aufnahmen")+" werden durchsucht …";
+      globalSearchClient.request(globalSearchCredential,backend.backendId,term,
+        kind,offset,function(result){
+          if(run!==globalSearchRun || currentView!=="search" ||
+              globalSearchTerm!==term)return;
+          if(!result.ok) {
+            if(pane.status)pane.status.textContent=
+              publicGlobalSearchError(result,kind);
+            if(offset===0 && pane.count)pane.count.textContent="Fehler";
+            return;
+          }
+          if(offset===0) {
+            // Start has already cleared the old rows; leave the other pane alone.
+            globalSearchPages[kind]=null;
+          }
+          var value=result.value;
+          appendGlobalSearchResults(kind,value.items);
+          // Samsung TV: make the first real recording result visible instead of
+          // leaving the focus on the Search button above the result viewport.
+          if(kind==="recordings" && offset===0 && value.items.length &&
+              focusedId==="global-search-go")
+            setFocus(globalSearchRows.recordings[0]);
+          globalSearchPages[kind]=value.page;
+          if(pane.count)pane.count.textContent=value.page.totalCount+" Treffer";
+          if(pane.status)pane.status.textContent=
+            value.page.totalCount===0 ?
+              "Keine passenden "+(kind==="epg"?"Sendungen":"Aufnahmen")+
+                " im Suchindex." :
+            !value.items.length && offset===0 ?
+              "Suchindex meldet "+value.page.totalCount+
+                " Treffer, liefert aber keine sichtbaren Einträge. "+
+                "Server-Suchseite prüfen." :
+              globalSearchItems[kind].length+" von "+value.page.totalCount+
+                " angezeigt · "+(value.page.hasMore?"Weitere Ergebnisse verfügbar":"Ende");
+        });
+    }
+    function performGlobalSearch() {
+      if(currentView!=="search" || globalSearchBusy)return;
+      var term=globalSearchClient.normalizeQuery(globalSearchInput &&
+        globalSearchInput.value);
+      if(!term){
+        globalSearchMessage("Mindestens zwei Zeichen eingeben; keine Suche gestartet.");
+        return;
+      }
+      var read=vault.read();
+      if(!read.ok || !read.credential){
+        globalSearchMessage("Gespeicherte Geräteanmeldung fehlt – Einstellungen prüfen.");
+        return;
+      }
+      var base=serverInput && normalizeSuiteBase(serverInput.value);
+      if(base && base!==read.credential.base){
+        globalSearchMessage("Geräteanmeldung und Serveradresse gehören nicht zusammen.");
+        return;
+      }
+      ++globalSearchRun;
+      globalSearchClient.cancel();
+      globalSearchCatalog.cancel();
+      globalSearchPairing.cancel();
+      clearGlobalSearchRows();
+      globalSearchCredential=read.credential;
+      globalSearchTerm=term;
+      var run=globalSearchRun;
+      globalSearchBusy=true;
+      globalSearchMessage("Prüfe gekoppelte Device-Identität …");
+      globalSearchPairing.verify(read.credential,function(result){
+        if(run!==globalSearchRun || currentView!=="search")return;
+        if(!result.ok){
+          globalSearchBusy=false;
+          globalSearchMessage(deviceVerificationError(result));return;
+        }
+        markDeviceAuthenticated(read.credential);
+        globalSearchCatalog.listBackends(read.credential,function(backends){
+          if(run!==globalSearchRun || currentView!=="search")return;
+          globalSearchBusy=false;
+          if(!backends.ok || !backends.value.items.length){
+            globalSearchMessage(backends.ok?
+              "Keine Backends freigegeben." : channelCatalogError(backends));
+            return;
+          }
+          globalSearchBackends=backends.value.items;
+          if(globalSearchBackendIndex>=globalSearchBackends.length)
+            globalSearchBackendIndex=0;
+          var backend=globalSearchBackend();
+          if(globalSearchBackendLabel)globalSearchBackendLabel.textContent=
+            "Backend: "+backend.name+" · "+backend.backendId;
+          globalSearchMessage("Suchbegriff: "+term+
+            " · EPG und Aufnahmen werden unabhängig geprüft.");
+          globalSearchPage("recordings",0,run,term);
+          globalSearchPage("epg",0,run,term);
+        });
+      });
+    }
+    function globalSearchAction(action) {
+      if(currentView!=="search")return;
+      if(action==="clear"){
+        ++globalSearchRun;globalSearchBusy=false;
+        globalSearchClient.cancel();
+        globalSearchCatalog.cancel();
+        globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+        globalSearchTerm="";
+        if(globalSearchInput)globalSearchInput.value="";
+        globalSearchMessage("Suchbegriff eingeben und Suchen drücken.");
+        return;
+      }
+      if(action==="backend"){
+        if(globalSearchBusy || globalSearchBackends.length<2) {
+          globalSearchMessage("Kein weiteres Backend verfügbar.");return;
+        }
+        globalSearchBackendIndex=(globalSearchBackendIndex+1)%
+          globalSearchBackends.length;
+        ++globalSearchRun;
+        globalSearchClient.cancel();
+        globalSearchCatalog.cancel();
+        globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+        globalSearchMessage("Backend gewechselt · Suche mit Suchen neu starten.");
+        var backend=globalSearchBackend();
+        if(globalSearchBackendLabel)globalSearchBackendLabel.textContent=
+          "Backend: "+backend.name+" · "+backend.backendId;
+        return;
+      }
+      if(action==="go"){performGlobalSearch();return;}
+      if(action!=="recordings-more" && action!=="epg-more")return;
+      var kind=action==="epg-more"?"epg":"recordings";
+      var page=globalSearchPages[kind];
+      if(!page || !page.hasMore || globalSearchItems[kind].length>=300) {
+        globalSearchMessage("Für "+(kind==="epg"?"EPG":"Aufnahmen")+
+          " ist keine weitere Seite verfügbar.");return;
+      }
+      globalSearchPage(kind,globalSearchItems[kind].length,
+        globalSearchRun,globalSearchTerm);
+    }
+    function selectGlobalSearchResult(kind,index) {
+      var row=globalSearchItems[kind][index],backend=globalSearchBackend();
+      if(!row || !backend || row.backendId!==backend.backendId ||
+          !globalSearchCredential)return;
+      epgTimerReset("search");
+      selectedSearchEpg=kind==="epg"?row:null;
+      if(selectedSearchEpg && Number(row.endTime)>Math.floor(Date.now()/1000))
+        epgTimerShow("search");
+      ++globalSearchDetailRun;
+      globalSearchMetadata.cancel();
+      var token=globalSearchDetailRun,run=globalSearchRun;
+      if(globalSearchDetailTitle)globalSearchDetailTitle.textContent=row.title;
+      if(globalSearchDetailDescription)
+        globalSearchDetailDescription.textContent=
+          "Lade "+(kind==="epg"?"EPG-":"Aufnahme-")+"details über API v1 …";
+      function finish(result){
+        if(token!==globalSearchDetailRun || run!==globalSearchRun ||
+            currentView!=="search")return;
+        if(!result.ok){
+          if(globalSearchDetailDescription)
+            globalSearchDetailDescription.textContent=
+              mediaMetadataError(result);
+          return;
+        }
+        var data=result.value;
+        if(globalSearchDetailTitle)globalSearchDetailTitle.textContent=
+          data.title || row.title;
+        if(globalSearchDetailDescription) {
+          var fields=kind==="epg" ?
+            [globalSearchDate(data.startTime)+"–"+
+              globalSearchDate(data.endTime),
+              data.subtitle||"",data.description||""] :
+            [data.recordedAt||"",
+              data.durationKnown?Math.round(data.durationSeconds/60)+" Minuten":"",
+              data.metadata && data.metadata.overview || data.description ||""];
+          globalSearchDetailDescription.textContent=fields.filter(function(x){
+            return !!x;
+          }).join(" · ").slice(0,2100);
+        }
+      }
+      if(kind==="epg")
+        globalSearchMetadata.eventDetail(globalSearchCredential,
+          backend.backendId,row.channelId,row.eventId,finish);
+      else globalSearchMetadata.recordingDetail(globalSearchCredential,
+        backend.backendId,row.recordingId,finish);
+    }
+  
+    // S6.20: independent saved epgsearch rule browser. A rule is neither an
+    // existing native VDR timer nor a Suite TimerAssignment.
+    function searchTimerMessage(message) {
+      if(searchTimerStatusLabel)searchTimerStatusLabel.textContent=message;
+    }
+    function clearSearchTimerPreview() {
+      if(searchTimerPreviewList) {
+        searchTimerPreviewList.textContent="";
+        searchTimerPreviewList.hidden=true;
+      }
+      if(searchTimerPreviewStatus)
+        searchTimerPreviewStatus.textContent=
+          "EPG-Treffer benötigen zusätzlich epg.view; keine Aufnahmeprognose.";
+    }
+    function clearSearchTimerRows() {
+      searchTimerRows.forEach(function(id) {
+        var control=controls[id];
+        delete controls[id];
+        var found=items.indexOf(control);
+        if(found!==-1)items.splice(found,1);
+      });
+      searchTimerRows=[];
+      searchTimerItems=[];
+      searchTimerCursor=null;
+      selectedSearchTimer=null;
+      if(searchTimerList) {
+        searchTimerList.textContent="";
+        searchTimerList.hidden=true;
+      }
+      if(searchTimerDetailTitle)searchTimerDetailTitle.textContent="Noch keine Regel gewählt";
+      if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+        "OK auf eine Regel zeigt ihre aktuellen Details.";
+      clearSearchTimerPreview();
+    }
+    function searchTimerState(rule) {
+      return rule.state==="active"?"AKTIV":
+        rule.state==="inactive"?"INAKTIV":"STATUS UNBEKANNT";
+    }
+    function appendSearchTimerRows(rules) {
+      if(!searchTimerList)return;
+      rules.forEach(function(rule) {
+        var index=searchTimerItems.length,id="searchtimer-row-"+index;
+        var node=document.createElement("li");
+        node.className="native-timer-row tv-focusable";
+        node.tabIndex=-1;
+        node.setAttribute("role","button");
+        node.setAttribute("data-focus-id",id);
+        node.setAttribute("data-searchtimer-index",String(index));
+        node.setAttribute("aria-label",rule.name);
+        var name=document.createElement("strong");
+        name.textContent=rule.name;
+        var info=document.createElement("span");
+        info.textContent="Suchbegriff: "+rule.query+" · "+searchTimerState(rule);
+        node.appendChild(name);
+        node.appendChild(info);
+        controls[id]=node;
+        items.push(node);
+        searchTimerRows.push(id);
+        searchTimerItems.push(rule);
+        searchTimerList.appendChild(node);
+        node.addEventListener("click",function(){if(setFocus(id))activate(node);});
+      });
+      searchTimerList.hidden=searchTimerItems.length===0;
+    }
+    function fetchSearchTimerPage(run,cursor) {
+      if(run!==searchTimerRun || !searchTimerCredential ||
+          !searchTimerBackends.length)return;
+      var backend=searchTimerBackends[searchTimerBackendIndex];
+      searchTimerBusy=true;
+      searchTimerMessage("Lese gespeicherte epgsearch-Suchtimer · "+backend.name+" …");
+      searchTimerCatalog.list(searchTimerCredential,backend.backendId,cursor,
+        function(result) {
+          if(run!==searchTimerRun || currentView!=="timers")return;
+          searchTimerBusy=false;
+          if(!result.ok) {
+            clearSearchTimerRows();
+            searchTimerMessage(searchTimerCatalogError(result,false));
+            return;
+          }
+          if(!cursor)clearSearchTimerRows();
+          var ruleList=result.value.items;
+          if(cursor && searchTimerItems.length && ruleList.length &&
+              ruleList[0].searchTimerId<=
+                searchTimerItems[searchTimerItems.length-1].searchTimerId) {
+            clearSearchTimerRows();
+            searchTimerMessage("Suchtimerreihenfolge geändert – bitte neu laden.");
+            return;
+          }
+          var first=searchTimerRows.length;
+          appendSearchTimerRows(ruleList);
+          searchTimerCursor=result.value.page.hasMore ?
+            result.value.page.nextCursor:null;
+          if(searchTimerBackendLabel)
+            searchTimerBackendLabel.textContent="Backend: "+backend.name+
+              " · "+backend.backendId;
+          searchTimerMessage(searchTimerItems.length ?
+            searchTimerItems.length+" echte Suchtimer geladen · "+
+              (searchTimerCursor?"Weitere Seite verfügbar":"Ende der Liste") :
+            "Keine gespeicherten Suchtimer für dieses Backend.");
+          if(cursor && searchTimerRows[first])setFocus(searchTimerRows[first]);
+        });
+    }
+    function selectSearchTimer(index) {
+      if(searchTimerBusy || !searchTimerCredential ||
+          !searchTimerBackends.length)return;
+      var rule=searchTimerItems[index];
+      if(!rule)return;
+      selectedSearchTimer=rule;
+      ++searchTimerSelectionRun;
+      var ticket=searchTimerSelectionRun;
+      var backend=searchTimerBackends[searchTimerBackendIndex];
+      if(rule.backendId!==backend.backendId)return;
+      clearSearchTimerPreview();
+      if(searchTimerDetailTitle)searchTimerDetailTitle.textContent=rule.name;
+      if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+        "Suchbegriff: "+rule.query+" · "+searchTimerState(rule)+
+        " · Lade aktuellen Regelstand …";
+      searchTimerBusy=true;
+      searchTimerCatalog.detail(searchTimerCredential,backend.backendId,
+        rule.searchTimerId,function(result){
+          if(ticket!==searchTimerSelectionRun || currentView!=="timers" ||
+              selectedSearchTimer!==rule)return;
+          searchTimerBusy=false;
+          if(!result.ok) {
+            if(searchTimerDetailInfo)
+              searchTimerDetailInfo.textContent=searchTimerCatalogError(result,false);
+            if(result.kind==="http" && (result.status===403 || result.status===404))
+              selectedSearchTimer=null;
+            return;
+          }
+          selectedSearchTimer=result.value;
+          if(searchTimerDetailInfo)searchTimerDetailInfo.textContent=
+            "Suche: "+result.value.query+" · "+searchTimerState(result.value)+
+            " · EPG-Treffer über eigene Schaltfläche ansehen.";
+        });
+    }
+    function searchTimerEventTime(value) {
+      if(/^\d{9,11}$/.test(value)) {
+        var date=new Date(Number(value)*1000);
+        if(!isNaN(date.getTime()))return date.toLocaleString("de-DE");
+      }
+      return value;
+    }
+    function loadSearchTimerPreview() {
+      if(searchTimerBusy || !selectedSearchTimer || !searchTimerCredential ||
+          !searchTimerBackends.length) {
+        if(!selectedSearchTimer)
+          searchTimerMessage("Zuerst einen gespeicherten Suchtimer mit OK auswählen.");
+        return;
+      }
+      var rule=selectedSearchTimer;
+      var backend=searchTimerBackends[searchTimerBackendIndex];
+      if(rule.backendId!==backend.backendId)return;
+      ++searchTimerSelectionRun;
+      var ticket=searchTimerSelectionRun;
+      clearSearchTimerPreview();
+      searchTimerBusy=true;
+      if(searchTimerPreviewStatus)searchTimerPreviewStatus.textContent=
+        "Lese EPG-Treffervorschau … searchtimers.view + epg.view";
+      searchTimerCatalog.preview(searchTimerCredential,backend.backendId,
+        rule.searchTimerId,function(result){
+          if(ticket!==searchTimerSelectionRun || currentView!=="timers" ||
+              selectedSearchTimer!==rule)return;
+          searchTimerBusy=false;
+          if(!result.ok) {
+            if(searchTimerPreviewStatus)
+              searchTimerPreviewStatus.textContent=
+                searchTimerCatalogError(result,true);
+            return;
+          }
+          var value=result.value;
+          if(searchTimerPreviewStatus)
+            searchTimerPreviewStatus.textContent=value.totalCount+
+              " EPG-Texttreffer · "+value.items.length+
+              " angezeigt · keine garantierten Aufnahmen";
+          if(!searchTimerPreviewList)return;
+          value.items.forEach(function(event){
+            var node=document.createElement("li");
+            var title=document.createElement("strong");
+            title.textContent=event.title;
+            var details=document.createElement("span");
+            details.textContent=searchTimerEventTime(event.startTime)+"–"+
+              searchTimerEventTime(event.endTime)+" · "+event.channelId+
+              (event.subtitle?" · "+event.subtitle:"");
+            node.appendChild(title);node.appendChild(details);
+            searchTimerPreviewList.appendChild(node);
+          });
+          searchTimerPreviewList.hidden=value.items.length===0;
+        });
+    }
+    function loadSearchTimers(action) {
+      if(searchTimerBusy || currentView!=="timers")return;
+      if(action==="preview"){loadSearchTimerPreview();return;}
+      if(action==="more") {
+        if(!searchTimerCursor || searchTimerItems.length>=300) {
+          searchTimerMessage("Keine weitere Seite in dieser Ansicht.");return;
+        }
+        fetchSearchTimerPage(searchTimerRun,searchTimerCursor);return;
+      }
+      if(action==="backend") {
+        if(!searchTimerCredential || searchTimerBackends.length<2) {
+          searchTimerMessage("Kein zweites Backend geladen.");return;
+        }
+        ++searchTimerRun;
+        ++searchTimerSelectionRun;
+        searchTimerCatalog.cancel();
+        clearSearchTimerRows();
+        searchTimerBackendIndex=(searchTimerBackendIndex+1)%
+          searchTimerBackends.length;
+        fetchSearchTimerPage(searchTimerRun,null);return;
+      }
+      var read=vault.read();
+      if(!read.ok || !read.credential) {
+        searchTimerMessage("Geräteanmeldung nicht verfügbar – unter Einstellungen prüfen.");
+        return;
+      }
+      var base=serverInput && normalizeSuiteBase(serverInput.value);
+      if(base && base!==read.credential.base) {
+        searchTimerMessage("Gespeicherte Anmeldung gehört zu einem anderen Server.");
+        return;
+      }
+      searchTimerCredential=read.credential;
+      searchTimerBackends=[];
+      searchTimerBackendIndex=0;
+      ++searchTimerSelectionRun;
+      clearSearchTimerRows();
+      var run=++searchTimerRun;
+      searchTimerBusy=true;
+      searchTimerMessage("Prüfe vorhandene Geräteanmeldung …");
+      searchTimerPairing.verify(searchTimerCredential,function(result){
+        if(run!==searchTimerRun || currentView!=="timers")return;
+        if(!result.ok){
+          searchTimerBusy=false;
+          searchTimerMessage(deviceVerificationError(result));return;
+        }
+        markDeviceAuthenticated(searchTimerCredential);
+        searchTimerMessage("Lese Public-v1-Backends …");
+        searchTimerBackendCatalog.listBackends(searchTimerCredential,function(found){
+          if(run!==searchTimerRun || currentView!=="timers")return;
+          if(!found.ok || !found.value.items.length) {
+            searchTimerBusy=false;
+            searchTimerMessage(found.ok?"Keine lesbaren Backends.":
+              channelCatalogError(found));return;
+          }
+          searchTimerBackends=found.value.items;
+          fetchSearchTimerPage(run,null);
+        });
+      });
+    }
+  
+    // S6.19: one real native VDR timer inventory (not TimerAssignments).
+    // No POST, no client-side timer construction and no cross-backend fanout.
+    function nativeTimerStatus(state,title,description) {
+      var node=document.getElementById("detail-state-timers");
+      var badge=document.getElementById("detail-state-badge-timers");
+      var headline=document.getElementById("detail-state-title-timers");
+      var info=document.getElementById("detail-state-description-timers");
+      var skeleton=document.getElementById("detail-state-skeleton-timers");
+      if(node) node.setAttribute("data-state",state);
+      if(badge) badge.textContent=state==="ready"?"TIMER" :
+        state==="loading"?"LÄDT" : state==="error"?"FEHLER" :
+        state==="empty"?"LEER":"OFFLINE";
+      if(headline) headline.textContent=title;
+      if(info) info.textContent=description;
+      if(skeleton) skeleton.hidden=state!=="loading";
+    }
+    function clearNativeTimerRows() {
+      nativeTimerRows.forEach(function(id) {
+        var element=controls[id];
+        delete controls[id];
+        var index=items.indexOf(element);
+        if(index!==-1) items.splice(index,1);
+      });
+      nativeTimerRows=[];
+      nativeTimerItems=[];
+      nativeTimerNextOffset=null;
+      if(nativeTimerList) {
+        nativeTimerList.textContent="";
+        nativeTimerList.hidden=true;
+      }
+    }
+    function nativeTimerClock(value) {
+      return /^([01][0-9]|2[0-3])[0-5][0-9]$/.test(value) ?
+        value.slice(0,2)+":"+value.slice(2) : value;
+    }
+    function nativeTimerSchedule(item) {
+      var day=/^[0-9]{8}$/.test(item.day) ?
+        item.day.slice(6,8)+"."+item.day.slice(4,6)+"."+item.day.slice(0,4) :
+        (item.weekdays || "Wiederholung");
+      return day+" · "+nativeTimerClock(item.startTime)+
+        "–"+nativeTimerClock(item.endTime);
+    }
+    function appendNativeTimerRows(rows) {
+      if(!nativeTimerList) return;
+      rows.forEach(function(timer) {
+        var index=nativeTimerItems.length,id="native-timer-row-"+index;
+        var row=document.createElement("li");
+        row.className="native-timer-row tv-focusable";
+        row.tabIndex=-1;
+        row.setAttribute("role","button");
+        row.setAttribute("data-focus-id",id);
+        row.setAttribute("data-native-timer-index",String(index));
+        row.setAttribute("aria-label",timer.title);
+        var name=document.createElement("strong");
+        name.textContent=timer.title || "Timer ohne Titel";
+        var info=document.createElement("span");
+        var status=timer.recording?"AUFNAHME LÄUFT":
+          timer.pending?"ANSTEHEND":timer.enabled?"AKTIV":"DEAKTIVIERT";
+        info.textContent=nativeTimerSchedule(timer)+" · "+
+          (timer.channelName || timer.channelId)+" · "+status;
+        row.appendChild(name);row.appendChild(info);
+        controls[id]=row;items.push(row);nativeTimerRows.push(id);
+        nativeTimerItems.push(timer);
+        nativeTimerList.appendChild(row);
+        row.addEventListener("click",function(){if(setFocus(id))activate(row);});
+      });
+      nativeTimerList.hidden=nativeTimerItems.length===0;
+    }
+    function fetchNativeTimerPage(run,offset) {
+      if(run!==nativeTimerRun || !nativeTimerCredential ||
+          !nativeTimerBackends.length) return;
+      var backend=nativeTimerBackends[nativeTimerBackendIndex];
+      nativeTimerBusy=true;
+      nativeTimerStatus("loading","Lese VDR-Timer",
+        backend.name+" · "+offset+" bis "+(offset+29)+" · nur lesend");
+      nativeTimerCatalog.list(nativeTimerCredential,backend.backendId,offset,function(result){
+        if(run!==nativeTimerRun || currentView!=="timers") return;
+        nativeTimerBusy=false;
+        if(!result.ok) {
+          clearNativeTimerRows();
+          nativeTimerStatus("error","VDR-Timer nicht verfügbar",
+            nativeTimerCatalogError(result));
+          return;
+        }
+        if(offset===0) clearNativeTimerRows();
+        var first=nativeTimerRows.length;
+        appendNativeTimerRows(result.value.items);
+        nativeTimerNextOffset=result.value.page.hasMore ?
+          result.value.page.nextOffset:null;
+        if(nativeTimerBackendName) nativeTimerBackendName.textContent=
+          "Backend: "+backend.name+" · "+backend.backendId;
+        nativeTimerStatus(nativeTimerItems.length?"ready":"empty",
+          nativeTimerItems.length ?
+            nativeTimerItems.length+" echte VDR-Timer" : "Keine VDR-Timer vorhanden",
+          "Nur native Timer · "+(nativeTimerNextOffset===null ?
+            "Ende der Liste" : "Weitere Timer verfügbar")+
+          " · OK zeigt Timerdetails; keine Mutation.");
+        if(offset!==0 && nativeTimerRows[first])setFocus(nativeTimerRows[first]);
+      });
+    }
+    function loadNativeTimers(action) {
+      if(nativeTimerBusy || currentView!=="timers")return;
+      if(action==="more") {
+        if(nativeTimerNextOffset===null || nativeTimerItems.length>=300) {
+          nativeTimerStatus(nativeTimerItems.length?"ready":"empty",
+            "Keine weitere Timerseite","Bis zu 300 Timer pro Ansicht; neu laden für weitere Abfragen.");
+          return;
+        }
+        fetchNativeTimerPage(nativeTimerRun,nativeTimerNextOffset);return;
+      }
+      if(action==="backend") {
+        if(!nativeTimerCredential || nativeTimerBackends.length<2) {
+          nativeTimerStatus("empty","Kein zweites Backend",
+            "Nur ein lesbares Backend bekannt.");return;
+        }
+        nativeTimerBackendIndex=(nativeTimerBackendIndex+1)%nativeTimerBackends.length;
+        nativeTimerCatalog.cancel();
+        clearNativeTimerRows();
+        fetchNativeTimerPage(++nativeTimerRun,0);return;
+      }
+      var saved=vault.read();
+      if(!saved.ok || !saved.credential) {
+        nativeTimerStatus("error","Geräteanmeldung fehlt",
+          "Gekoppelte DEV-App unter Einstellungen prüfen; nicht neu koppeln.");
+        return;
+      }
+      var base=serverInput && normalizeSuiteBase(serverInput.value);
+      if(base && base!==saved.credential.base) {
+        nativeTimerStatus("error","Anderer Server",
+          "Die vorhandene Geräteanmeldung gehört zu einem anderen Server.");
+        return;
+      }
+      nativeTimerCredential=saved.credential;
+      nativeTimerBackends=[];
+      nativeTimerBackendIndex=0;
+      clearNativeTimerRows();
+      nativeTimerCatalog.cancel();
+      var run=++nativeTimerRun;
+      nativeTimerBusy=true;
+      nativeTimerStatus("loading","Prüfe Geräteanmeldung",
+        "Lesender Public-v1-Zugriff; timers.view erforderlich.");
+      pairingClient.verify(nativeTimerCredential,function(result){
+        if(run!==nativeTimerRun || currentView!=="timers")return;
+        if(!result.ok) {
+          nativeTimerBusy=false;
+          nativeTimerStatus("error","Geräteanmeldung abgewiesen",
+            deviceVerificationError(result));
+          return;
+        }
+        markDeviceAuthenticated(nativeTimerCredential);
+        nativeTimerStatus("loading","Suche Backend","Public-v1-Backendliste wird gelesen.");
+        channelCatalog.listBackends(nativeTimerCredential,function(found){
+          if(run!==nativeTimerRun || currentView!=="timers")return;
+          if(!found.ok || !found.value.items.length) {
+            nativeTimerBusy=false;
+            nativeTimerStatus("error","Backendliste nicht verfügbar",
+              found.ok ? "Keine berechtigten Backends gefunden." : channelCatalogError(found));
+            return;
+          }
+          nativeTimerBackends=found.value.items;
+          fetchNativeTimerPage(run,0);
+        });
+      });
+    }
+  
     function clearLiveRows() {
+      if (currentView === "live" && liveFocusIds.indexOf(focusedId) >= 0)
+        setFocus("detail-live-preview");
+      liveFocusIds.forEach(function (id) {
+        var item = controls[id];
+        delete controls[id];
+        var index = items.indexOf(item);
+        if (index !== -1) items.splice(index, 1);
+      });
+      liveFocusIds = [];
+      liveCurrentChannels = [];
+      clearLiveEpg();
       liveRows = 0;
+      // Drop stale dynamic channel-row memories, but preserve the user's last
+      // focus on the static Live action row (e.g. Sender laden).
+      if (rowMemory.live) {
+        var lastAction = rowMemory.live[1];
+        rowMemory.live = {};
+        if (["detail-live-home","detail-live-preview","detail-live-more",
+             "detail-live-backend","detail-live-play","detail-live-epg-now",
+             "detail-live-epg-window","detail-live-epg-more"].indexOf(lastAction) !== -1)
+          rowMemory.live[1] = lastAction;
+      }
       if (liveList) {
         liveList.textContent = "";
         liveList.hidden = true;
@@ -1997,9 +5398,17 @@
     function appendLiveRows(channels) {
       if (!liveList) return;
       channels.forEach(function (ch) {
-        // Untrusted server text is always inserted via textContent, never HTML.
+        // Same single D-Pad focus owner as recordings; no separate key handler.
+        // Untrusted server text is inserted only via textContent.
+        var index = liveCurrentChannels.length;
+        var id = "channel-row-" + String(index);
         var row = document.createElement("li");
-        row.className = "live-channel-row";
+        row.className = "live-channel-row tv-focusable";
+        row.tabIndex = -1;
+        row.setAttribute("role", "button");
+        row.setAttribute("data-focus-id", id);
+        row.setAttribute("data-channel-index", String(index));
+        row.setAttribute("aria-label", String(ch.channelNumber) + " · " + ch.name);
         var name = document.createElement("strong");
         name.textContent = String(ch.channelNumber) + " · " + ch.name;
         var meta = document.createElement("span");
@@ -2012,8 +5421,15 @@
         meta.textContent = details.join(" · ");
         row.appendChild(name);
         row.appendChild(meta);
+        controls[id] = row;
+        items.push(row);
+        liveFocusIds.push(id);
+        liveCurrentChannels.push(ch);
         liveList.appendChild(row);
         liveRows += 1;
+        row.addEventListener("click", function () {
+          if (setFocus(id)) activate(row);
+        });
       });
       liveList.hidden = liveRows === 0;
     }
@@ -2029,6 +5445,8 @@
         if (!result.ok) { showLiveError(result); return; }
         var response = result.value;
         if (!cursor) clearLiveRows();
+        var firstNewRow = liveFocusIds.length;
+        var jumpToNewPage = !!cursor && focusedId === "detail-live-more";
         appendLiveRows(response.items);
         liveCursor = response.page.hasMore ? response.page.nextCursor : null;
         if (liveBackendName) liveBackendName.textContent =
@@ -2039,12 +5457,14 @@
           liveRows ? String(liveRows) + " echte Sender geladen" : "Keine Sender gefunden",
           "Nur freigegebene Senderdaten · " +
           (liveCursor ? "Weitere Seite über „Mehr Sender“" : "Ende der Senderliste") + partial +
-          " · Wiedergabe noch nicht freigeschaltet.");
+          " · Sender mit OK wählen; „Live-TV direkt starten“ öffnet Streamdev mit AVPlay.");
+        if (jumpToNewPage && liveFocusIds[firstNewRow])
+          setFocus(liveFocusIds[firstNewRow]);
       });
     }
   
     function loadLiveChannels(action) {
-      if (liveBusy) return;
+      if (liveBusy || livePlayBusy || livePlaybackSession || liveTeardownBusy) return;
       if (action === "more") {
         if (!liveCursor) {
           liveStatus(liveRows ? "ready" : "empty", "Keine weitere Seite",
@@ -2137,7 +5557,115 @@
       if (skeleton) skeleton.hidden = state !== "loading";
     }
   
+    function clearRecordingPoster() {
+      if (recordingPoster) {
+        recordingPoster.hidden=true;
+        recordingPoster.removeAttribute("src");
+      }
+      if (recordingPosterUrl && window.URL &&
+          typeof window.URL.revokeObjectURL==="function")
+        window.URL.revokeObjectURL(recordingPosterUrl);
+      recordingPosterUrl=null;
+    }
+    function fetchRecordingDetails(recording) {
+      recordingMetadata.cancel();
+      clearRecordingPoster();
+      var token=++recordingDetailRun;
+      var credential=recordingCredential;
+      var backend=recordingBackends[recordingBackendIndex];
+      if (!credential || !backend || !recording || !recording.recordingId) return;
+      var backendId=backend.backendId,recId=recording.recordingId;
+      if (recordingDetailInfo) recordingDetailInfo.textContent =
+        "Aufnahmedetails werden geladen …";
+      function current() {
+        return token===recordingDetailRun && currentView==="recordings" &&
+          recordingSelected && recordingSelected.recordingId===recId &&
+          recordingBackends[recordingBackendIndex] &&
+          recordingBackends[recordingBackendIndex].backendId===backendId;
+      }
+      recordingMetadata.recordingDetail(credential,backendId,recId,function(detail){
+        if (!current()) return;
+        if (!detail.ok) {
+          if (recordingDetailInfo) recordingDetailInfo.textContent =
+            "Aufnahmedetails: "+mediaMetadataError(detail);
+          return;
+        }
+        var item=detail.value,meta=item.metadata,fields=[];
+        fields.push((item.title || recording.title || "Aufnahme").slice(0,180));
+        fields.push(meta.contentKind==="series-episode" ? "Serienepisode" :
+          meta.contentKind==="series" ? "Serie" :
+          meta.contentKind==="movie" ? "Film" : "VDR-Aufnahme");
+        if (meta.providerTitle && meta.providerTitle!==item.title)
+          fields.push("Originaltitel: "+meta.providerTitle.slice(0,180));
+        if (meta.seriesTitle) fields.push("Serie: "+meta.seriesTitle.slice(0,150));
+        if (meta.episodeTitle) fields.push("Episode: "+meta.episodeTitle.slice(0,150));
+        if (meta.subtitle && !meta.episodeTitle)
+          fields.push("Untertitel: "+meta.subtitle.slice(0,150));
+        var episode=[];
+        if (meta.seasonNumber!==undefined) episode.push("Staffel "+meta.seasonNumber);
+        if (meta.episodeNumber!==undefined) episode.push("Folge "+meta.episodeNumber);
+        if (episode.length) fields.push(episode.join(" · "));
+        if (meta.genreText) {
+          var genres=meta.genreText.replace(/^\[|\]$/g,"").split("|").filter(function(x){return !!x;});
+          fields.push("Genre: "+genres.join(" · ").slice(0,180));
+        }
+        if (meta.releaseDate) fields.push("Erscheinung: "+meta.releaseDate.slice(0,64));
+        if (item.recordedAt) {
+          var rawDate=item.recordedAt;
+          var value=/^\d{10}$/.test(rawDate) ? new Date(Number(rawDate)*1000) :
+            /^\d{13}$/.test(rawDate) ? new Date(Number(rawDate)) : new Date(rawDate);
+          var readable=isFinite(value.getTime()) ?
+            value.toLocaleDateString("de-DE",{year:"numeric",month:"2-digit",day:"2-digit"})+
+            " · "+value.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) :
+            rawDate.replace("T"," ").slice(0,32);
+          fields.push("Aufgenommen: "+readable);
+        }
+        if (item.durationKnown) fields.push("Laufzeit: "+Math.round(item.durationSeconds/60)+" Min.");
+        if (meta.tagline) fields.push(meta.tagline.slice(0,220));
+        if (meta.overview) fields.push("Inhalt: "+meta.overview.slice(0,1800));
+        else if (item.description) fields.push("Inhalt: "+item.description.slice(0,1800));
+        if (meta.state==="absent") fields.push("Keine erweiterten Metadaten verfügbar");
+        if (meta.state==="partial") fields.push("Weitere Metadaten nicht vollständig");
+        if (recordingDetailInfo) recordingDetailInfo.textContent=fields.join("\n");
+        recordingMetadata.artworkList(credential,backendId,recId,function(art){
+          if (!current()) return;
+          if (!art.ok) {
+            if (recordingDetailInfo) recordingDetailInfo.textContent +=
+              " · Artwork: "+mediaMetadataError(art);
+            return;
+          }
+          var list=art.value.items;
+          if (!list.length) {
+            if (recordingDetailInfo) recordingDetailInfo.textContent+=" · Kein Artwork";
+            return;
+          }
+          if (recordingDetailInfo)
+            recordingDetailInfo.textContent+=" · "+list.length+" Artwork-Referenz(en)";
+          var poster=list.filter(function(x){return x.kind==="poster";})[0];
+          if (!poster || !recordingPoster || !window.Blob || !window.URL ||
+              typeof window.URL.createObjectURL!=="function") return;
+          recordingMetadata.artworkBytes(credential,backendId,recId,
+            poster.artworkId,function(img){
+              if (!current() || !img.ok) return;
+              // Authenticated image bytes only; never use server-returned URLs.
+              try {
+                var objectUrl=window.URL.createObjectURL(
+                  new window.Blob([img.value.bytes],{type:img.value.contentType}));
+                clearRecordingPoster();
+                recordingPosterUrl=objectUrl;
+                recordingPoster.src=objectUrl;
+                recordingPoster.hidden=false;
+              } catch (_) {clearRecordingPoster();}
+            });
+        });
+      });
+    }
     function clearRecordingRows() {
+      recordingMetadata.cancel();
+      recordingDetailRun += 1;
+      clearRecordingPoster();
+      if (recordingDetailInfo) recordingDetailInfo.textContent =
+        "Aufnahme mit OK auswählen, um Metadaten und Artwork anzufordern.";
       recordingSelected = null;
       if (recordingFocusIds.indexOf(focusedId) >= 0 &&
           currentView === "recordings")
@@ -2209,6 +5737,7 @@
     }
   
     function stopRecordingPlayback(reason) {
+      recordingControlSequence++;
       // The stop request is a SECONDARY cleanup operation. A late timeout may
       // never overwrite an earlier AVPlay/decoder/media-access failure.
       if (recordingTeardownBusy) return;
@@ -2235,10 +5764,15 @@
                 recordingPlaybackError(result) + " · Server-Idle-Timeout kann aufräumen.");
           });
       }
-      if (reason === "user") recordingStatus("ready","Wiedergabe beendet",
-        "Samsung AVPlay lokal gestoppt; Server-Stop angefordert.");
+      if (reason === "user") recordingStatus("ready",
+        session ? "Wiedergabe beendet" : "Wiedergabeversuch abgebrochen",
+        session ? "Player lokal gestoppt; MediaSession-Stop angefordert." :
+          "Player abgebrochen, bevor eine MediaSession bestätigt wurde. Ein unbekanntes Server-Ergebnis wird nicht erneut angefordert.");
     }
     function startSelectedRecording(mode) {
+      recordingControlSequence++;
+      // Explicit manual transport comparison, never automatic fallback.
+      var aacHlsTsTest = mode === "aac-hls";
       mode = mode === "html5" ? "html5" : "avplay";
       if (recordingPlayBusy || recordingPlaybackSession) return;
       if (recordingTeardownBusy) {
@@ -2261,7 +5795,9 @@
           "Browser-Videoelement fehlt; keine neue MediaSession gestartet.");
         return;
       }
-      var caps = conservativeSamsungCapabilities({document:document});
+      var caps = aacHlsTsTest ?
+        samsungAacHlsTsCapabilities({document:document}) :
+        conservativeSamsungCapabilities({document:document});
       if (!caps) {
         recordingStatus("error","Decoderprobe unklar",
           "H.264/AAC-Unterstützung nicht nachgewiesen; keine Fähigkeiten erfinden.");
@@ -2285,7 +5821,8 @@
       var rec = recordingSelected;
       recordingPlayBusy = true;
       recordingStatus("loading","MediaSession wird angefordert",
-        rec.title + " · media.recording.play erforderlich");
+        rec.title + (aacHlsTsTest ? " · HLS-TS/AAC Stereo gezielt angefordert" :
+          " · media.recording.play erforderlich"));
       recordingPlaybackClient.begin(safe.credential,backendId,rec.recordingId,caps,
         function (result) {
           recordingPlayBusy = false;
@@ -2301,6 +5838,15 @@
           recordingPlaybackSession = {
             credential:safe.credential,backendId:backendId,sessionId:result.sessionId
           };
+          // The comparison test must not silently use direct TS/MP4 or fMP4 HLS.
+          // Reject and STOP this owned MediaSession if the server chose otherwise.
+          if (aacHlsTsTest && (result.profile !== "hls-ts" ||
+              !/\/hls\/master\.m3u8$/.test(result.mediaUrl))) {
+            stopRecordingPlayback("failure");
+            recordingStatus("error","HLS-TS/AAC-Profil nicht bereitgestellt",
+              "Serverantwort passt nicht zum expliziten AAC-HLS-TS-Test. Sitzung beendet.");
+            return;
+          }
           if (mode === "html5" &&
               !/\/recording\/stream\.mp4$/.test(result.mediaUrl)) {
             stopRecordingPlayback("failure");
@@ -2316,6 +5862,15 @@
             return;
           }
           recordingPlayerMode = mode;
+          if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+            mode === "avplay" ? "AVPlay · MediaSession bereit · Player wird vorbereitet" :
+              "HTML5 MP4 · Player wird vorbereitet · 12s Startdiagnose";
+          if (recordingAudioHint) recordingAudioHint.textContent =
+            aacHlsTsTest ? "Audio · HLS-TS mit AAC Stereo angefordert; auf AVPlay-Spuren warten" :
+            mode === "avplay" ? "Audio · prüfe native AVPlay-Spuren …" :
+              "Audio · HTML5 ohne AVPlay-Spurdiagnose";
+          if (recordingRemoteHint) recordingRemoteHint.textContent =
+            "Fernbedienung · "+remoteSummary+" · OK/PLAY-PAUSE schaltet um · STOP/ZURÜCK beendet";
           if (recordingAvplayObject) recordingAvplayObject.hidden = mode === "html5";
           if (recordingHtml5Video) recordingHtml5Video.hidden = mode !== "html5";
           if (recordingPlayerSurface) {
@@ -2329,19 +5884,52 @@
           var player = mode === "html5" ? recordingHtml5Player : recordingPlayer;
           var started = player.start(result.mediaUrl,function (state,detail) {
             if (state === "playing") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                mode === "html5" ? "HTML5 · onplaying empfangen · Bild/Ton prüfen" :
+                  "AVPlay · play() ausgeführt · Bild/Ton prüfen";
               recordingStatus("ready",mode === "html5" ? "HTML5-Wiedergabe läuft" : "AVPlay-Play ausgelöst",rec.title +
                 " · Bild/Ton am TV prüfen · PLAY/PAUSE pausieren · STOP oder Zurück beendet.");
+            } else if (state === "progress" && mode === "avplay") {
+              // Samsung timeline callbacks measure the demux clock, not video
+              // frames or audibility; report exactly what the TV observed.
+              if (recordingLifecycleHint && detail &&
+                  typeof detail.seconds==="number") {
+                recordingLifecycleHint.textContent="AVPlay-Zeit " +
+                  Math.floor(detail.seconds/60)+":"+
+                  ("0"+detail.seconds%60).slice(-2)+
+                  " · Fortschritt "+detail.deltaSeconds+"s · Bild/Ton separat prüfen";
+              }
+            } else if (state === "audio" && mode === "avplay") {
+              if (recordingAudioHint) {
+                var mismatch = aacHlsTsTest && detail &&
+                  Array.isArray(detail.tracks) &&
+                  detail.tracks.some(function(t) {return t.codec==="MPEG";});
+                recordingAudioHint.textContent = describeSamsungAudio(detail)+
+                  (mismatch ? " · ACHTUNG: TV meldet MPEG trotz AAC-Anforderung" : "")+
+                  " | "+samsungTvSoundStatus(window);
+              }
             } else if (state === "preparing" || state === "buffering") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                (mode === "html5" ? "HTML5" : "AVPlay") + " · " +
+                (state === "buffering" ? "Pufferung – auf Daten warten" : "Vorbereitung läuft");
               recordingStatus("loading",mode === "html5" ? "HTML5-Video startet" : "Samsung AVPlay startet",rec.title +
                 " · " + transport + " · " + (state === "buffering" ? "Pufferung" : "Vorbereitung"));
+            } else if (state === "ready") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                "AVPlay · Pufferung abgeschlossen · Bild/Ton prüfen";
+              recordingStatus("ready","AVPlay-Pufferung abgeschlossen",
+                rec.title + " · Decoder und Tonausgabe auf dem TV prüfen.");
             } else if (state === "error" || state === "unsupported") {
               // The media gateway permits GET, not HEAD. Probe only the response
               // headers of the very same protected session while still active.
               // This does NOT prove what cookies native AVPlay transmits.
               var failedSession = recordingPlaybackSession;
               var playerFailure = mode === "html5"
-                ? "HTML5-Video " + (detail && detail.code ? "Fehlercode " + detail.code : "nicht abspielbar")
+                ? html5PlaybackDiagnosis(detail)
                 : samsungPlaybackDiagnosis(detail,transport);
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                mode === "html5" ? html5PlaybackDiagnosis(detail) :
+                  "AVPlay · Medienfehler · Zugang wird geprüft";
               recordingStatus("loading","Prüfe Medienzugriff",
                 playerFailure + " · Diagnose ohne Video-Download …");
               probeMediaHttpHeaders(window,result.mediaUrl,function (probe) {
@@ -2351,6 +5939,8 @@
                   playerFailure + " " + describeMediaAccessProbe(probe));
               });
             } else if (state === "finished") {
+              if (recordingLifecycleHint) recordingLifecycleHint.textContent =
+                "Player · Aufnahme regulär beendet";
               stopRecordingPlayback("finished");
               recordingStatus("ready","Aufnahme beendet",rec.title);
             }
@@ -2450,7 +6040,8 @@
   
     function loadRecordings(action) {
       if (recordingBusy || recordingPlayBusy || recordingPlaybackSession) return;
-      if (action === "play" || action === "html5") {startSelectedRecording(action);return;}
+      if (action === "play" || action === "html5" ||
+          action === "aac-hls") {startSelectedRecording(action);return;}
       if (action === "up") {
         if (!recordingFolderUp())
           recordingStatus("ready","Oberstes Verzeichnis","Kein übergeordneter VDR-Ordner.");
@@ -2574,13 +6165,44 @@
   
     function showView(view) {
       if (ROUTES.indexOf(view) < 0) return false;
+      if (currentView === "home" && view !== "home") homeCancelReads();
       if (currentView === "live" && view !== "live") {
+        epgTimerReset("live");
+        if (livePlaybackSession || livePlayBusy) stopLivePlayback("navigate");
+        if (streamdevActive || streamdevPlayer.isBusy()) stopStreamdevLive("navigate");
+        streamdevEditing=false;
+        clearLiveEpg();
         // In-flight responses cannot update a hidden view after navigation.
         liveRun += 1;
         liveBusy = false;
         channelCatalog.cancel();
       }
+      if (currentView === "search" && view !== "search") {
+        epgTimerReset("search");
+        ++globalSearchRun;++globalSearchDetailRun;
+        globalSearchBusy=false;globalSearchEditing=false;
+        globalSearchClient.cancel();globalSearchMetadata.cancel();
+        globalSearchCatalog.cancel();globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+      }
+      if (currentView === "timers" && view !== "timers") {
+        ++searchTimerRun;
+        ++searchTimerSelectionRun;
+        searchTimerBusy=false;
+        searchTimerCatalog.cancel();
+        searchTimerBackendCatalog.cancel();
+        searchTimerPairing.cancel();
+        clearSearchTimerRows();
+        nativeTimerRun++;
+        nativeTimerBusy=false;
+        nativeTimerCatalog.cancel();
+        channelCatalog.cancel();
+        clearNativeTimerRows();
+      }
       if (currentView === "recordings" && view !== "recordings") {
+        recordingMetadata.cancel();
+        recordingDetailRun+=1;
+        clearRecordingPoster();
         if (recordingPlaybackSession || recordingPlayBusy) stopRecordingPlayback();
         recordingRun += 1;
         recordingBusy = false;
@@ -2590,10 +6212,10 @@
       currentView = view;
       if (view !== "settings") resetConfirmationId = null;
       if (view === "live") {
-        // Keep S2.2 DOWN-to-first-detail-button focus behavior.
+        // Remove stale focus registrations before resetting live row memory.
+        clearLiveRows();
         if (!rowMemory.live) rowMemory.live = {};
         rowMemory.live[1] = "detail-live-home";
-        clearLiveRows();
         liveCredential = null;
         liveBackends = [];
         liveBackendIndex = 0;
@@ -2601,9 +6223,10 @@
         liveStatus("offline", "Bereit für echte Sender",
           "„Sender laden“ nutzt deine gespeicherte Geräteanmeldung.");
       } else if (view === "recordings") {
+        clearRecordingRows();
+        // clearRecordingRows resets row memory; restore the first action after it.
         if (!rowMemory.recordings) rowMemory.recordings = {};
         rowMemory.recordings[1] = "detail-recordings-home";
-        clearRecordingRows();
         recordingCredential = null;
         recordingBackends = [];
         recordingBackendIndex = 0;
@@ -2620,6 +6243,48 @@
           recordingBackendName.textContent = "Noch kein Backend geladen";
         recordingStatus("offline", "Bereit für echte Aufnahmen",
           "„Aufnahmen laden“ nutzt die gespeicherte Geräteanmeldung. recordings.view erforderlich.");
+      } else if (view === "timers") {
+        ++searchTimerRun;
+        ++searchTimerSelectionRun;
+        searchTimerBusy=false;
+        searchTimerCatalog.cancel();
+        searchTimerBackendCatalog.cancel();
+        searchTimerPairing.cancel();
+        clearSearchTimerRows();
+        searchTimerCredential=null;
+        searchTimerBackends=[];
+        searchTimerBackendIndex=0;
+        if(searchTimerBackendLabel)
+          searchTimerBackendLabel.textContent="Noch kein Backend geladen";
+        searchTimerMessage("Suchtimer laden benötigt searchtimers.view.");
+        nativeTimerRun++;
+        nativeTimerBusy=false;
+        nativeTimerCatalog.cancel();
+        clearNativeTimerRows();
+        nativeTimerBackends=[];
+        nativeTimerCredential=null;
+        nativeTimerBackendIndex=0;
+        if(nativeTimerBackendName)
+          nativeTimerBackendName.textContent="Noch kein Backend geladen";
+        nativeTimerStatus("offline","Bereit für echte VDR-Timer",
+          "„Timer laden“ liest native Timer über Public API v1 mit timers.view.");
+        if (!rowMemory.timers) rowMemory.timers = {};
+        rowMemory.timers[1]="detail-timers-load";
+      } else if (view === "search") {
+        renderPreview("search","offline");
+        ++globalSearchRun;++globalSearchDetailRun;
+        globalSearchBusy=false;globalSearchEditing=false;
+        globalSearchClient.cancel();globalSearchMetadata.cancel();
+        globalSearchCatalog.cancel();globalSearchPairing.cancel();
+        clearGlobalSearchRows();
+        globalSearchCredential=null;
+        globalSearchBackends=[];globalSearchBackendIndex=0;
+        globalSearchTerm="";
+        if(globalSearchBackendLabel)
+          globalSearchBackendLabel.textContent="Backend noch nicht geladen";
+        globalSearchMessage("Suchbegriff eingeben und „Suchen“ drücken.");
+        if(!rowMemory.search)rowMemory.search={};
+        rowMemory.search[1]="global-search-go";
       } else if (PREVIEW_ROUTES.indexOf(view) >= 0) {
         renderPreview(view, "offline");
         // Preserve S2.2's DOWN-to-first-detail-button behavior.
@@ -2641,8 +6306,9 @@
         else item.removeAttribute("aria-current");
       });
       message.textContent = view === "home"
-        ? "Offline-Designvorschau · Navigation: Pfeile · OK · Zurück"
+        ? "Media Home · Inhalte über Public API v1 · Pfeile · OK · Zurück"
         : "Bereich: " + view + (discoveredBase ? " · Public API v1 erreichbar" : " · Server noch nicht geprüft") + " · Zurück = vorherige Ansicht";
+      if(view==="home" && document.visibilityState==="visible")homeRefresh();
       return true;
     }
   
@@ -2681,6 +6347,13 @@
     }
   
     function goBack() {
+      if (currentView === "live" && (streamdevActive || streamdevPlayer.isBusy())) {
+        stopStreamdevLive("user");return;
+      }
+      if (currentView === "live" && (livePlaybackSession || livePlayBusy)) {
+        stopLivePlayback("user");
+        return;
+      }
       if (currentView === "recordings" && (recordingPlaybackSession || recordingPlayBusy)) {
         stopRecordingPlayback("user");
         return;
@@ -2706,6 +6379,27 @@
   
     function activate(item) {
       if (!item) return;
+      var homeKind=item.getAttribute("data-home-kind");
+      var homeIndex=item.getAttribute("data-home-index");
+      if(currentView==="home" && homeKind && homeIndex!==null) {
+        var selected=homeCardItems[homeKind][Number(homeIndex)];
+        if(homeKind==="epg" && selected && selected.event){
+          homeFeaturePriority=0;
+          homeFeatureShow(Object.assign({},selected.event,{
+            channelId:selected.channel.channelId,
+            description:selected.event.subtitle || selected.channel.name
+          }),"epg",4,
+            globalSearchDate(selected.event.startTime)+" · "+selected.channel.name);
+        } else if(selected)homeSelectRecording(selected,homeKind,true);
+        return;
+      }
+      var homeAction=item.getAttribute("data-home-action");
+      if(currentView==="home" && homeAction) {
+        if(homeAction==="refresh")homeRefresh();
+        else navigateTo(homeFeatureKind==="epg"?"live":"recordings",
+          item.getAttribute("data-focus-id"));
+        return;
+      }
       var pairAction = item.getAttribute("data-pair-action");
       if (pairAction) {
         if (pairAction === "start") pairStart();
@@ -2727,9 +6421,62 @@
         }
         return;
       }
+      var epgTimer=item.getAttribute("data-epg-timer-action");
+      if(epgTimer){epgTimerAction(epgTimer);return;}
+      var epgScroll=item.getAttribute("data-epg-scroll");
+      if (epgScroll!==null && currentView==="live") {
+        if (liveEpgDetail && !liveEpgDetail.hidden) {
+          var direction=epgScroll==="-1" ? -1 : epgScroll==="1" ? 1 : 0;
+          // No focus scroll-out and no extra global key listener.
+          if (direction) liveEpgDetail.scrollTop=Math.max(0,
+            liveEpgDetail.scrollTop+direction*230);
+        }
+        return;
+      }
+      var epgAction = item.getAttribute("data-live-epg-action");
+      if (epgAction) {loadSelectedEpg(epgAction);return;}
+      var epgIndex=item.getAttribute("data-epg-index");
+      if (epgIndex!==null && currentView==="live") {
+        var epgItem=liveEpgRows[Number(epgIndex)];
+        if (epgItem) selectEpgEvent(epgItem,true);
+        return;
+      }
+      var streamdevAction=item.getAttribute("data-streamdev-action");
+      if(streamdevAction && currentView==="live"){
+        if(streamdevAction==="save")saveStreamdevBase();
+        else if(streamdevAction==="start")startStreamdevLive();
+        return;
+      }
+      if(item.getAttribute("data-focus-id")==="live-streamdev-base" && currentView==="live"){
+        streamdevEditing=true;
+        if(streamdevBaseInput && typeof streamdevBaseInput.focus==="function")streamdevBaseInput.focus();
+        return;
+      }
+      if (item.getAttribute("data-live-play")==="start" && currentView==="live") {
+        startSelectedLive();return;
+      }
       var liveAction = item.getAttribute("data-live-action");
       if (liveAction) {
         loadLiveChannels(liveAction);
+        return;
+      }
+      var channelIndex = item.getAttribute("data-channel-index");
+      if (channelIndex !== null && currentView === "live") {
+        var selected = liveCurrentChannels[Number(channelIndex)];
+        if (selected) {
+          liveMetadata.cancel();
+          liveEpgRun+=1;
+          liveWindow=null;
+          selectedLiveChannel={backendId:selected.backendId,channelId:selected.channelId,
+            channelNumber:selected.channelNumber,name:selected.name};
+          clearEpgFocusRows();
+          if (liveEpgList) {liveEpgList.textContent="";liveEpgList.hidden=true;}
+          if (liveEpgStatus) liveEpgStatus.textContent =
+            "Ausgewählt: "+selected.name+" · Jetzt/Nächste oder 24h EPG wählen.";
+          liveStatus("ready", String(selected.channelNumber) + " · " + selected.name,
+            "Sender ausgewählt · Live-Stream wird nicht automatisch gestartet. " +
+            "„Live-TV direkt starten“ spielt Streamdev über AVPlay ab (Heimnetz).");
+        }
         return;
       }
       var folderIndex = item.getAttribute("data-folder-index");
@@ -2742,6 +6489,7 @@
         var chosen = recordingCurrentPageItems[Number(recordingIndex)];
         if (chosen) {
           recordingSelected = chosen;
+          fetchRecordingDetails(chosen);
           recordingStatus("ready", chosen.title || "Aufnahme",
             (chosen.description ? chosen.description.slice(0, 240) :
              "Aufnahme aus dem VDR-Katalog.") +
@@ -2754,6 +6502,45 @@
       if (recordingAction) {
         loadRecordings(recordingAction);
         return;
+      }
+      var searchKind=item.getAttribute("data-global-search-kind");
+      var searchIndex=item.getAttribute("data-global-search-index");
+      if(currentView==="search" && searchKind && searchIndex!==null) {
+        selectGlobalSearchResult(searchKind,Number(searchIndex));return;
+      }
+      var searchAction=item.getAttribute("data-global-search-action");
+      if(currentView==="search" && searchAction) {
+        globalSearchAction(searchAction);return;
+      }
+      if(currentView==="search" &&
+          item.getAttribute("data-focus-id")==="global-search-input"){
+        globalSearchEditing=true;
+        if(globalSearchInput && typeof globalSearchInput.focus==="function")
+          globalSearchInput.focus();
+        return;
+      }
+      var searchTimerIndex=item.getAttribute("data-searchtimer-index");
+      if(searchTimerIndex!==null && currentView==="timers") {
+        selectSearchTimer(Number(searchTimerIndex));return;
+      }
+      var searchTimerAction=item.getAttribute("data-searchtimer-action");
+      if(searchTimerAction && currentView==="timers") {
+        loadSearchTimers(searchTimerAction);return;
+      }
+      var timerIndex=item.getAttribute("data-native-timer-index");
+      if(timerIndex!==null && currentView==="timers") {
+        var timer=nativeTimerItems[Number(timerIndex)];
+        if(timer)nativeTimerStatus("ready",timer.title || "VDR-Timer",
+          nativeTimerSchedule(timer)+" · "+
+          (timer.channelName || timer.channelId)+" · "+
+          (timer.recording?"AUFNAHME LÄUFT":
+            timer.pending?"ANSTEHEND":timer.enabled?"AKTIV":"DEAKTIVIERT")+
+          " · nur lesend");
+        return;
+      }
+      var timerAction=item.getAttribute("data-native-timers-action");
+      if(timerAction && currentView==="timers") {
+        loadNativeTimers(timerAction);return;
       }
       var previewRoute = item.getAttribute("data-preview-route");
       if (previewRoute && previewRoute === currentView) {
@@ -2768,7 +6555,24 @@
     document.getElementById("tizen-status").textContent = caps.tizen ? "vorhanden" : "nicht erkannt";
     document.getElementById("avplay-status").textContent = caps.avplay ? "vorhanden" : "nicht erkannt";
     document.getElementById("remote-status").textContent = caps.tvInputDevice ? "vorhanden" : "nicht erkannt";
-    registerOptionalKeys(window);
+    var optionalRemote = registerOptionalKeys(window);
+    var remoteKeys = ["MediaPlay","MediaPause","MediaStop","ColorF3Blue"];
+    var missingRemote = remoteKeys.filter(function(name) {
+      return optionalRemote.registered.indexOf(name) < 0;
+    });
+    var remoteSummary = missingRemote.length ?
+      "Zusatz-Tasten nicht registriert: "+missingRemote.join(", ") :
+      "PLAY/PAUSE/STOP/BLAU registriert (Empfang am TV noch prüfen)";
+    var extraKeys = ["MediaRewind","MediaFastForward","ChannelUp","ChannelDown",
+      "PreviousChannel","Info","Menu","Tools","Teletext",
+      "0","1","2","3","4","5","6","7","8","9"];
+    var activeExtra = extraKeys.filter(function(name) {
+      return optionalRemote.registered.indexOf(name)>=0;
+    });
+    remoteSummary += " · Weitere "+activeExtra.length+"/"+extraKeys.length+
+      " registriert (Empfang am TV prüfen)";
+    document.getElementById("remote-status").textContent =
+      caps.tvInputDevice ? remoteSummary : "TV-Eingabegerät nicht verfügbar";
     if (serverInput) {
       var savedBase = null;
       try {
@@ -2786,12 +6590,30 @@
       }
       if (restoredBase) serverInput.value = restoredBase;
       serverInput.addEventListener("change", saveServerBase);
+      serverInput.addEventListener("focus", function () {
+        if (currentView === "settings") editingServerAddress = true;
+      });
       serverInput.addEventListener("blur", function () {
         editingServerAddress = false;
         saveServerBase();
       });
     }
   
+  
+    if(streamdevBaseInput){
+      streamdevBaseInput.addEventListener("focus",function(){
+        if(currentView==="live")streamdevEditing=true;
+      });
+      streamdevBaseInput.addEventListener("blur",function(){streamdevEditing=false;});
+    }
+    if(globalSearchInput){
+      globalSearchInput.addEventListener("focus",function(){
+        if(currentView==="search")globalSearchEditing=true;
+      });
+      globalSearchInput.addEventListener("blur",function(){
+        globalSearchEditing=false;
+      });
+    }
   
     var intro = createStartupVideo({
       overlay: document.getElementById("startup-cover"),
@@ -2800,38 +6622,272 @@
       source: "./assets/branding/startvideo.mp4"
     });
   
-    // Exactly one keydown owner. No view adds its own Samsung remote listener.
+    // Exactly one capture-phase keydown owner: catch events from the native
+    // playback surface before focused elements can consume them.
     document.addEventListener("keydown", function (event) {
-      var key = normalizeRemoteKey(event);
-      if (!key) return;
-      if (editingServerAddress && event.target === serverInput) {
-        if (key === "BACK") {
-          event.preventDefault();
+      // Samsung Tizen 5.5 IME owns the keys while the address editor is focused.
+      // Do not preventDefault or navigate for Backspace, arrows, digits or OK,
+      // even if the native keyboard targets document instead of the input node.
+      if (currentView === "settings" && editingServerAddress) {
+        var imeCode = event.keyCode || event.which;
+        if (imeCode === 65376 || imeCode === 65385 || imeCode === 10009) {
+          // Samsung IME Done/Cancel and remote Return close the editor first.
+          // No global BACK route and no forced text mutation.
+          if (serverInput && typeof serverInput.blur === "function") serverInput.blur();
           editingServerAddress = false;
           setFocus("settings-test");
         }
-        return; // Samsung virtual keyboard owns input keys while editing.
+        return;
+      }
+      // Native Samsung IME owns the local Streamdev host editor as well.
+      if(currentView==="live" && streamdevEditing){
+        var code=event.keyCode || event.which;
+        if(code===65376 || code===65385 || code===10009){
+          if(streamdevBaseInput && typeof streamdevBaseInput.blur==="function")streamdevBaseInput.blur();
+          streamdevEditing=false;
+          setFocus("live-streamdev-save");
+        }
+        return;
+      }
+      // Samsung IME owns all text-editor keys, like the proven S6.16 address
+      // editor. Never intercept Backspace, arrows, digits or OK while editing.
+      if(currentView==="search" && globalSearchEditing){
+        var code=event.keyCode || event.which;
+        if(code===65376 || code===65385 || code===10009){
+          if(globalSearchInput && typeof globalSearchInput.blur==="function")
+            globalSearchInput.blur();
+          globalSearchEditing=false;
+          setFocus("global-search-go");
+        }
+        return;
+      }
+      var key = normalizeRemoteKey(event);
+      var playbackKeysActive = (recordingPlaybackSession || recordingPlayBusy) &&
+        currentView === "recordings";
+      var liveKeysActive=(livePlaybackSession || livePlayBusy) && currentView==="live";
+      var streamdevKeysActive=(streamdevActive || streamdevPlayer.isBusy()) && currentView==="live";
+      if (!key) {
+        if (playbackKeysActive && recordingRemoteHint) {
+          // Display only a bounded numeric TV key code. Never display raw event
+          // objects, native media URLs, headers or credentials.
+          var raw = event.keyCode || event.which;
+          recordingRemoteHint.textContent = "Fernbedienung · Unbekannte Taste" +
+            (typeof raw === "number" && isFinite(raw) && raw >= 0 &&
+             raw <= 65535 && Math.floor(raw) === raw ? " · Code " + raw : "");
+        }
+        return;
       }
       event.preventDefault();
       keyStatus.textContent = key;
       if (intro.active()) {
         if (key === "OK" || key === "BACK" || key === "STOP" ||
-            key === "PLAY" || key === "PAUSE") intro.skip();
+            key === "PLAY" || key === "PAUSE" || key === "PLAY_PAUSE") intro.skip();
         return;
       }
-      if ((recordingPlaybackSession || recordingPlayBusy) && currentView === "recordings") {
-        if (key === "STOP" || key === "BACK") {
-          stopRecordingPlayback("user"); return;
-        }
-        if (key === "PLAY" || key === "PAUSE") {
-          var playbackState = (recordingPlayerMode === "html5" ? recordingHtml5Player : recordingPlayer).pauseOrResume();
-          if (playbackState === "paused")
-            recordingStatus("ready","Wiedergabe pausiert","PLAY setzt fort.");
-          else if (playbackState === "playing")
-            recordingStatus("ready","Wiedergabe läuft","STOP oder Zurück beendet.");
+      if(streamdevKeysActive){
+        if(event.repeat)return;
+        if(key==="STOP" || key==="BACK")stopStreamdevLive("user");
+        else if(livePlayerHint)livePlayerHint.textContent=
+          "Streamdev Live-TV · "+key+" · STOP/ZURÜCK beendet";
+        return;
+      }
+      if (liveKeysActive) {
+        var liveAction=playbackRemoteAction(key);
+        if (event.repeat && liveAction) return;
+        if (liveAction==="stop") { stopLivePlayback("user");return; }
+        if (liveAction==="play" || liveAction==="pause" || liveAction==="toggle") {
+          var liveState=liveHtml5Player.pauseOrResume(liveAction);
+          if (livePlayerHint) livePlayerHint.textContent=
+            "Live-MP4 · "+key+" · "+liveState+" · STOP beendet";
           return;
         }
-        return; // do not move focus under the native full-screen player
+        if (livePlayerHint) livePlayerHint.textContent=
+          "Live-TV aktiv · "+key+" · STOP/ZURÜCK beendet; kein automatischer Senderwechsel";
+        return;
+      }
+      if (playbackKeysActive) {
+        if (key==="INFO") {
+          var infoSnapshot=recordingPlayerMode==="avplay" ?
+            recordingPlayer.inspectPlayback() : null;
+          if (recordingRemoteHint) recordingRemoteHint.textContent=
+            "Fernbedienung · INFO (Code "+(event.keyCode || event.which || "?")+")"+
+            (infoSnapshot ? " · AVPlay "+infoSnapshot.state+
+              (infoSnapshot.seconds===null ? "" : " · Zeit "+infoSnapshot.seconds+"s") :
+              " · HTML5-Player");
+          return; // Diagnostic only: never change native playback state.
+        }
+        var action = playbackRemoteAction(key);
+        // A held button must not rapidly toggle pause/resume or repeat STOP.
+        if (event.repeat && action) return;
+        if (action === "stop") {
+          stopRecordingPlayback("user"); return;
+        }
+        if (action === "rewind" || action === "fastforward") {
+          if (recordingRemoteHint) recordingRemoteHint.textContent =
+            "Fernbedienung · "+key+" erkannt · Spulen noch nicht freigeschaltet";
+          return; // No blind seek on a stalled/unverified AVPlay media stream.
+        }
+        if (action === "audio") {
+          if (recordingPlayerMode !== "avplay") {
+            if (recordingAudioHint) recordingAudioHint.textContent =
+              "Audio · Spurauswahl nur bei AVPlay";
+            return;
+          }
+          var sound=recordingPlayer.cycleAudioTrack();
+          if (recordingAudioHint) recordingAudioHint.textContent =
+            describeSamsungAudio(sound)+
+            " | "+samsungTvSoundStatus(window);
+          if (recordingRemoteHint)
+            recordingRemoteHint.textContent="Fernbedienung · BLAU (Code "+
+              (event.keyCode || event.which || "?")+") · Tonspur wechseln";
+          return;
+        }
+        if (action === "play" || action === "pause" || action === "toggle") {
+          var controlTicket=++recordingControlSequence;
+          var controllingSession=recordingPlaybackSession;
+          var beforeCall=Date.now();
+          // Measure the synchronous native operation. Tizen may block JS here;
+          // a status like resume_requested does NOT mean decoded frames resumed.
+          var playbackState = (recordingPlayerMode === "html5" ?
+            recordingHtml5Player : recordingPlayer).pauseOrResume(action);
+          var afterCall=Date.now();
+          var callMs=Math.max(0,Math.min(600000,afterCall-beforeCall));
+          if (recordingRemoteHint) {
+            var beforeSnapshot=Date.now();
+            var evidence=recordingPlayerMode==="avplay" ?
+              recordingPlayer.inspectPlayback() : null;
+            var snapshotMs=Math.max(0,Math.min(600000,Date.now()-beforeSnapshot));
+            recordingRemoteHint.textContent = "Fernbedienung · "+key+
+              " (Code "+(event.keyCode || event.which || "?")+")"+
+              " · Aktion "+playbackState+
+              " · Native-API "+callMs+"ms · Snapshot "+snapshotMs+"ms"+(evidence ?
+                " · AVPlay "+evidence.state+
+                (evidence.seconds===null ? "" : " · Zeit "+evidence.seconds+"s")+
+                " · Delta "+evidence.deltaSeconds+"s" : "");
+            // After one explicit native key command, inspect the CLOCK again.
+            // It is read-only; no guessed seek, audio switch, new session or
+            // "video frames OK" claim. Stop and subsequent keypresses fence it.
+            if (evidence && controllingSession &&
+                typeof window.setTimeout==="function") {
+              var initialSeconds=evidence.seconds;
+              window.setTimeout(function () {
+                if (recordingControlSequence!==controlTicket ||
+                    currentView!=="recordings" ||
+                    recordingPlaybackSession!==controllingSession) return;
+                var later=recordingPlayer.inspectPlayback();
+                var wallSeconds=Math.max(0,Math.min(600,
+                  Math.floor((Date.now()-afterCall)/1000)));
+                var clock=initialSeconds!==null && later.seconds!==null ?
+                  (later.seconds>initialSeconds ? "Uhr vorwärts" :
+                    later.seconds===initialSeconds ? "Uhr unverändert" :
+                      "Uhr rückwärts") : "Uhr nicht lesbar";
+                if (recordingRemoteHint)
+                  recordingRemoteHint.textContent += " · nach "+wallSeconds+
+                    "s: "+later.state+" · "+clock+
+                    (later.seconds===null ? "" : " ("+later.seconds+"s)");
+              },10000);
+            }
+          }
+          if (playbackState === "paused" || playbackState === "already_paused")
+            recordingStatus("ready","Wiedergabe pausiert",
+              "PLAY setzt fort · OK oder PLAY/PAUSE schaltet um · STOP beendet.");
+          else if (playbackState === "already_playing")
+            recordingStatus("ready","Player meldet PLAYING",
+              "PLAY bereits aktiv · Bild/Ton am TV prüfen · PAUSE hält an.");
+          else if (playbackState === "resume_requested")
+            recordingStatus("loading","Fortsetzen angefordert",
+              "AVPlay/HTML5-Play aufgerufen; Bildfortschritt am TV prüfen · STOP beendet.");
+          else if (playbackState === "error")
+            recordingStatus("error","Tastenaktion fehlgeschlagen",
+              "PLAY/PAUSE im aktuellen Player-Zustand fehlgeschlagen.");
+          else
+            recordingStatus("loading","Taste erkannt","Player noch nicht bereit.");
+          return;
+        }
+        if (recordingRemoteHint)
+          recordingRemoteHint.textContent = "Fernbedienung · Taste " + key +
+            " (Code "+(event.keyCode || event.which || "?")+")"+
+            " · keine Wiedergabeaktion";
+        return; // no focus movement under native full-screen player
+      }
+      if (key === "SETTINGS") {
+        navigateTo("settings","nav-settings");
+        return;
+      }
+      if (currentView === "live" && (key === "CHANNEL_UP" || key === "CHANNEL_DOWN")) {
+        if (!liveFocusIds.length) {
+          message.textContent = "CH+/CH− erkannt · zuerst Sender laden"; return;
+        }
+        var cursor = liveFocusIds.indexOf(focusedId);
+        var next = cursor<0 ? (key==="CHANNEL_UP" ? liveFocusIds.length-1 : 0) :
+          Math.max(0,Math.min(liveFocusIds.length-1,
+            cursor+(key==="CHANNEL_UP" ? -1 : 1)));
+        setFocus(liveFocusIds[next]);
+        return; // Only visible catalog entries; never auto-tune.
+      }
+      if (currentView === "live" && /^DIGIT_[0-9]$/.test(key)) {
+        var now = Date.now();
+        if (now-remoteLastDigitAt>1800) remoteChannelDigits="";
+        remoteChannelDigits=(remoteChannelDigits+key.slice(6)).slice(-5);
+        remoteLastDigitAt=now;
+        var matched=-1;
+        for (var ci=0;ci<liveCurrentChannels.length;ci++) {
+          if (String(liveCurrentChannels[ci].channelNumber)===
+              String(Number(remoteChannelDigits))) { matched=ci; break; }
+        }
+        if (matched>=0 && liveFocusIds[matched]) setFocus(liveFocusIds[matched]);
+        message.textContent="Sendernummer "+remoteChannelDigits+
+          (matched>=0 ? " · Sender fokussiert (OK zeigt EPG)" :
+            " · nur bereits geladene Katalogseite");
+        return;
+      }
+      if (key==="INFO") {
+        // INFO reuses the existing authenticated detail handlers: no new API.
+        if (currentView==="live") {
+          var infoTarget=controls[focusedId];
+          var epgIndex=infoTarget && infoTarget.getAttribute("data-epg-index");
+          if (epgIndex!==null && epgIndex!==undefined) {
+            activate(infoTarget);
+            message.textContent="INFO · Sendungsdetails geöffnet";
+            return;
+          }
+          var channelIndex=infoTarget && infoTarget.getAttribute("data-channel-index");
+          if (channelIndex!==null && channelIndex!==undefined) activate(infoTarget);
+          if (selectedLiveChannel) {
+            loadSelectedEpg("now");
+            message.textContent="INFO · Jetzt/Nächste für gewählten Sender";
+          } else {
+            if (liveEpgStatus) liveEpgStatus.textContent=
+              "INFO erkannt · zuerst einen Sender laden und auswählen.";
+            message.textContent="INFO · noch kein Sender ausgewählt";
+          }
+          return;
+        }
+        if (currentView==="recordings") {
+          var infoRecord=controls[focusedId];
+          if (infoRecord && infoRecord.getAttribute("data-recording-index")!==null) {
+            activate(infoRecord);
+            message.textContent="INFO · Aufnahmedetails geöffnet";
+            return;
+          }
+        }
+        message.textContent="INFO erkannt · Details unter Live-TV/Aufnahmen";
+        return;
+      }
+      if (key==="PREVIOUS_CHANNEL" || key==="TELETEXT" || key==="TOOLS") {
+        message.textContent=key+" erkannt · Funktion noch nicht implementiert"; return;
+      }
+      if (currentView==="live" && liveEpgScrollActions &&
+          !liveEpgScrollActions.hidden && liveEpgFocusIds.length) {
+        // The last EPG item must lead directly to the nearby detail-scroll
+        // controls, not down through every row of the unrelated sender list.
+        if (key==="DOWN" &&
+            focusedId===liveEpgFocusIds[liveEpgFocusIds.length-1] &&
+            setFocus("live-epg-scroll-down")) return;
+        if (key==="UP" &&
+            (focusedId==="live-epg-scroll-up" ||
+             focusedId==="live-epg-scroll-down") &&
+            setFocus(liveEpgFocusIds[liveEpgFocusIds.length-1])) return;
       }
       if (key === "UP" || key === "DOWN" || key === "LEFT" || key === "RIGHT") {
         setFocus(nextFocusId(focusedId, key, focusRows(), rowMemory[currentView]));
@@ -2840,7 +6896,7 @@
       } else if (key === "BACK") {
         goBack();
       }
-    });
+    }, true);
   
     // Mouse/keyboard focus can also occur on desktop/emulator; synchronize it
     // without registering another key handler or moving into a hidden panel.
@@ -2858,6 +6914,11 @@
       });
     });
   
+    document.addEventListener("visibilitychange",function(){
+      if(document.visibilityState==="visible" && currentView==="home")homeRefresh();
+      else if(document.visibilityState==="hidden" && currentView==="home")
+        homeCancelReads();
+    });
     storedStatus();
     showView("home");
     setFocus("nav-home");

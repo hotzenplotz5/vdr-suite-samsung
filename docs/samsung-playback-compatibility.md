@@ -197,3 +197,73 @@ Bild/Ton bei MP4/TS/HLS wiedergibt. Die 2020er Codec-Grenzen sind eigenständig.
 Quellen:
 - [Samsung AVPlay COOKIE](https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html)
 - [VDR-Suite allgemeiner Device-Medienvertrag](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-device-recording-playback.md)
+
+
+## S6.1 – Native Audiotracks auf Tizen 5.5 (Source)
+
+Samsung AVPlay bietet getTotalTrackInfo(), getCurrentStreamInfo() und setSelectTrack("AUDIO", index). Die Samsung-FAQ beschreibt fehlenden Ton bei Streams mit mehreren Audiospuren und fordert die Auswahl einer Tonspur während PLAYING. getTotalTrackInfo() kann in verschiedenen AVPlay-Zuständen zulässig sein, der Audio-Track-Wechsel aber regulär erst in PLAYING (READY nur bei Smooth Streaming).
+
+- https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html
+- https://developer.samsung.com/smarttv/develop/faq/multimedia.html
+
+Der Samsung-Adapter wählt ausschließlich echte AVPlay-AUDIO-Indices. Metadaten werden begrenzt und nicht roh ausgegeben. Nur AAC mit bekannter, höchstens zweikanaliger Tonspur ist Kandidat für automatische Auswahl bei mehreren Tracks. Keine vermeintliche Erfolgsmeldung, bevor echte Audioausgabe am Samsung gehört wurde.
+
+
+## S6.2 – Player-Zustände und HTML5-MP4-Negativdiagnose
+
+Der Samsung-Client prüft den tatsächlichen HDMI-/Decoder-Erfolg nicht indirekt aus `AVPlay.play()`, sondern betrachtet dessen Rückmeldung ausdrücklich nur als *Play-Aufruf*. HTML5 gilt erst mit `onplaying` als gestartete Videowiedergabe; auch das beweist allein noch keine hörbare Tonausgabe.
+
+Bei der freiwilligen progressiven HTML5-MP4-Probe verhindern zwei begrenzte Watchdogs ein endloses schwarzes Bild ohne Fehlermeldung: 12 Sekunden für den Videostart und 20 Sekunden für eine spätere festhängende Pufferung. Video-`MediaError`-Codes, Ablehnung von `play()` und fehlende Ereignisse werden unterschiedlich erklärt, ohne eine unbewiesene Codec-Ursache zu behaupten. `stop()` entkräftet alte Callback-Generationen und Timer; es gibt weder automatischen Protokoll-/Player-Fallback noch Credential-/Cookie-Logging. Später Session-Stop-Timeout bleibt eine *sekundäre Cleanup-Diagnose*, niemals Ersatz für den primären Videofehler.
+
+**Real TV:** Für S6.0, S6.1 und S6.2 weiterhin offen. Keine Backend-Medienprofil-/Codecänderung ohne tatsächliche Audio- und Playerbefunde.
+
+
+## S6.5 – Reale TV-Befunde: Stummes AVPlay und einfrierendes Fortsetzen (26.10.2026)
+
+Nutzerbeobachtung auf Samsung Tizen 5.5: AVPlay zeigt echte Aufnahmen und kann
+Audiospuren erkennen, **aber kein hörbarer Ton**. OK konnte gelegentlich
+pausieren; nach weiterem OK blieb das Bild eingefroren. Hardware **FAIL**,
+auch nach den ersten S6.0–S6.2-Quellverbesserungen.
+
+Quellfehler behoben: `MediaPlay` (415) und `MediaPause` (19) wurden wie
+`MediaPlayPause` (10252) und OK als umschaltende Aktion behandelt. Jetzt
+setzt PLAY ausschließlich fort, PAUSE hält ausschließlich an, OK und die
+kombinierte Taste schalten um, STOP/BACK schließen den Player und die
+vorhandene MediaSession. Eine `play()`-Rückkehr heißt
+**„Fortsetzen angefordert“** und beweist noch keine Videofortsetzung.
+Kein automatischer Restart/Session-Neuaufbau nach Stillstand.
+
+Samsungs AVPlay-API erlaubt AUDIO-Trackwahl im Zustand PLAYING. Zusätzlich
+zur vorhandenen sicheren AAC-Stereo-Vorauswahl wird bei einer einzigen
+AAC-Stereo-Spur ohne bestätigte Auswahl deren tatsächlicher Index gesetzt.
+Während nativer Wiedergabe kann der Nutzer **BLAU** verwenden, um
+ausschließlich zwischen real gemeldeten AUDIO-Indizes mit bekanntem
+AAC/AC3/EAC3/MPEG-Codec und 1–6 Kanälen umzuschalten. Das ist
+**manuelle Diagnose**, kein Ton-PASS und kein Transcode-Versprechen.
+Unbekannte Spuren und rohe Metadaten/URLs/Cookies bleiben gesperrt.
+Bei HTML5 meldet BLAU ausschließlich, dass die Funktion AVPlay erfordert.
+
+**Erneutes Real-TV-Gate:** dieselbe Aufnahme, Bild/Ton, Tonspurdiagnose
+vor/nach BLAU, einzelne PLAY/PAUSE-Tasten, OK/PlayPause, STOP/BACK,
+insbesondere Filmfortschritt nach Resume. Pausieren kann bei abgelaufenen
+MediaSessions/AVPlay-Decoder- oder Netzwerkproblemen weiterhin blockieren;
+erst konkrete TV-/Serverbeobachtungen unterscheiden das. Bestehende
+DEV-Kopplung und Produktionsapp unverändert, kein Backend-Update auf Verdacht.
+
+
+**Zusätzliche Source-Absicherung gegen festhängende OK-Taste:** Der AVPlay-
+Adapter merkt sich eine erfolgreich angeforderte Pause. Falls Tizen direkt
+danach bei `getState()` noch kurz `PLAYING` meldet, fordert der nächste
+OK- oder PLAY-Druck ausdrücklich `play()` statt einer zweiten Pause an.
+Ein separater PAUSE-Druck bleibt idempotent. Die Absicht wird bei STOP,
+neuer Session und Fortsetzungsanforderung zurückgesetzt. Dies ist kein
+Beweis, dass Decoder, Stream oder MediaSession danach Fortschritt liefern.
+
+
+## S6.17 – Expliziter HLS-TS/AAC-Vergleich statt blindem Codecwechsel
+
+Die bisherige breite Samsung-AVPlay-Fähigkeitsmeldung lässt Public v1 unter `hls` und `progressive` sowie `mpeg-ts`, `mp4`, `fmp4` wählen, aber die reale VDR-Aufnahme zeigte `MPEG`-Audio ohne Ton und eine teilweise stehende AVPlay-Uhr. `MPEG` ist ohne unabhängiges `ffprobe`-Ergebnis nicht präzise MP2/MP3; Samsungs 2020er Liste führt nur MPEG (MP3) explizit.
+
+Als **manueller Vergleich**, nicht als globaler Codec-/Player-Fallback, begrenzt `HLS-TS + AAC-Ton testen` die beim Session-CREATE angegebenen Fähigkeiten auf HLS/MPEG-TS/H.264/AAC und zwei Audiokanäle. Die existierende VDR-Suite-Medienprofilauswahl `MediaPresentationSelector` kann diese Ausgabe mit transkodierter inkompatibler Tonspur planen und bei kompatiblem Video `-c:v copy` lassen. Ob der installierte Backend-Worker den konkreten Stream korrekt liefert, ist nicht bewiesen; HLS-Playlist-/PTS-Probleme können fortbestehen. `presentationProfileId` muss exakt `hls-ts` sein, sonst wird die zuvor autorisierte eigene MediaSession gestoppt. Keine beliebige Medien-URL und kein Ersetzen von Session-Credentials, keine zweite Sitzung, keine automatische Session-Neuvergabe. Native AVPlay verwendet wie bisher den gekapselten Session-Cookie.
+
+**Hardwarebeleg 27.10.2026 – AUDIO PASS für den separaten S6.17-Test:** Nutzer meldet, dass der neue Button `HLS-TS + AAC-Ton testen` auf seinem Samsung sichtbar ist **und tatsächlich Ton hörbar wird**. Das ist erstmals positiver Real-TV-Nachweis für den neuen Audio-Wiedergabeweg, mehr als ein `AAC`-Metadatenwert oder grüner Quelltest. Der neue Weg ist dennoch **nicht** als globaler Standard aktiviert; die vom Player gemeldete Codec-Spur, genaue Server-Audioaktion (Copy/Transcode), AVPlay-Uhr, kontinuierliches Bild, PAUSE/Resume, STOP und Verhalten mit anderen Aufnahmen bleiben getrennte offene Messpunkte. Der alte stumme Befund beschreibt den vorherigen Teststand, nicht das Ergebnis von S6.17. Bereits gekoppelte DEV-App und PROD schützen.

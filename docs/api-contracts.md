@@ -78,3 +78,105 @@ Antwort: `items` aus sicheren öffentlichen `rec_...`-Identitäten, Titel, Zeit,
 HTTP 401 (Credential), 403 (fehlendes `recordings.view`), 409 (veralteter/falscher Cursor), 503 (Backend/Katalog) sowie Netz-/TLS- und Schemafehler erscheinen ausdrücklich. Bei navigationsbedingtem Abbruch darf eine alte Antwort keine andere Ansicht überschreiben. Recording-Metadaten enthalten **keine** Wiedergabe-URL. `media.recording.play` ist ein anderer, gesonderter Grant; S4.1 startet weder Session noch Player. Ordnernavigation, Detail-Metadata, Artwork, Genres, Wiedergabe und P1-Resume folgen in S4.2/S4.3/S5 und benötigen eigene Tests.
 
 Der Serververtrag ist [Recording browse](https://github.com/hotzenplotz5/vdr-suite/blob/main/api/recording-browse-epg.md); die einzige serverseitige API-v1-Hardware-Matrix liegt [hier](https://github.com/hotzenplotz5/vdr-suite/blob/main/docs/development/public-v1-final-hardware-acceptance.md). Die S4.1-Samsung-Hardwareprobe (insbesondere eigener `recordings.view`-Grant und Fernbedienungsfokus auf mehr als einer Seite) ist noch **NOT_VERIFIED**.
+
+
+## S6.3 – Numeric Channel collection und Grenzen des Live-Playback (26.10.2026)
+
+Der Samsung-Client fordert die opt-in-Variante `GET /api/v1/channels?backendId=...&limit=20&sort=backendId,channelNumber,channelId&order=asc` an. Die öffentliche ID ist weiterhin `(backendId,channelId)`; `channelNumber` ist die änderbare numerische VDR-Position. `page.nextCursor` wird opak belassen. Fehler: unsupported sort = 400 sichtbar, fremder Grant = 403, ungültiges Device = 401, geänderter Scope = 409. Die Quellimplementierung in VDR-Suite-main ist kein Nachweis des tatsächlich installierten Daemons.
+
+Zur zukünftigen echten Live-TV-Wiedergabe ist ausschließlich der getrennte Public-v1-Device-Vertrag `POST /api/v1/live-playback-sessions` mit `resourceKind=live-channel` und `media.live.play@backend` erlaubt. Die aktuelle Samsung-S6.3-Senderzeile führt deshalb keine automatische Wiedergabe und keinen schreibenden MediaSession-POST aus: Live-/fMP4-Medienzugang sowie STOP/Tunerfreigabe müssen erst anhand des installiert geprüften Vertrags und eines späteren Hardwaretests implementiert werden. Keine Browser-private MediaSession.
+
+
+## S6.4 – EPG-Fenster, Aufnahme-Metadaten und geschütztes Artwork (2026-10-26)
+
+**Nur nach expliziter Auswahl, rein lesend:** `GET /api/v1/epg/now-next?backendId=...&channelId=...&fromTime=<Unix-seconds>&limit=2` verlangt `epg.view@backend`; Zeitangaben in Antworten sind Sekunden-Strings und keine JavaScript-Millisekunden. Optional folgt `GET /api/v1/epg/window?backendId=...&channelId=...&fromTime=...&untilTime=...&limit=24` mit dem tatsächlich vom Server zurückgegebenen opaken `ew1_`-Cursor bei identischem Backend/Sender/Zeitfenster. Ein nicht installiertes EPG-Window gibt eine sichtbare Fehlerdiagnose, nie einen Wechsel zu Browser-privaten Routen.
+
+**Aufnahme:** Ein zuvor aus freigegebener Collection ausgewähltes `rec_` erhält ausschließlich `GET /api/v1/recordings/{recordingId}?backendId=...` mit `recordings.view@backend`, danach eine bounded `GET .../artwork`-Liste. Die Antwort `metadata.state/source/contentKind` wird mit bekannten Feldern und gekürzten Texten angezeigt. Bei vorhandenem Poster erfolgt Bildabruf über einen **eigenen Device-authentifizierten** `XMLHttpRequest` als ArrayBuffer vom aus den geprüften IDs konstruierten Public-v1-Pfad; sichere MIME-Allowlist JPG/PNG/WebP, Größenlimit, Blob-URL mit Widerruf bei Neuabruf/Tabwechsel. Auf keinen Fall die vom Backend übermittelte artwork-URL oder ein direktes, headerloses `img.src` verwenden.
+
+**Abnahmestand:** EPG Now/Next, E1 Window, M1 Detail und M2 Artwork sind Quellverträge im Suite-main; ob der zurzeit **installierte** yaVDR-Commit alle Erweiterungen enthält, wurde nicht bestätigt. 401/403/404/400/503 und Netzwerk-/Cachefehler zeigen eine eindeutige nichtdestruktive Rückmeldung. Kein Playback- oder Timer-Grant darf die fehlende EPG-/Recording-Berechtigung ersetzen. Keine zusätzlichen Backend-Arbeiten oder App-Installation in diesem Slice.
+
+
+## S6.18 – Public-v1 Device Live-TV Session als bewusster Hardwaretest (27.10.2026)
+
+**Upstream explizit gelesen:** `hotzenplotz5/vdr-suite` `api/device-live-tv-playback.md`, `api/rest/src/LiveMediaSessionRequestParser.cpp` und `api/rest/src/LiveMediaSessionController.cpp` (`main`). Nur der vorhandene Public-v1-Vertrag, **keine Browser-private `/api/media/sessions`-Route**. `channels.view` für den Senderkatalog erlaubt noch kein Playback. Für den ausdrücklich angeforderten Live-POST braucht die gekoppelte DEV-Device-Identität das zusätzliche, backendgebundene `media.live.play`. `epg.view` ist wiederum separat.
+
+- CREATE: `POST /api/v1/live-playback-sessions`, Device-Authorization, HTTPS, `withCredentials` für HttpOnly-Cookie, `{resourceKind:"live-channel",backendId,channelId,capabilities:{protocols:["progressive"],containers:["fmp4","mp4"],videoCodecs:["h264"],audioCodecs:["aac"],supportsByteRanges:true,maxVideoWidth:1920,maxVideoHeight:1080,maxAudioChannels:2}}`.
+- CREATE-Antwort: 201 mit eigener `mediaSession.id`, exakt passenden Backend-/Channel-IDs, `state:"ready"`, `presentationProfileId:"live-progressive-fmp4"`, einzig akzeptierter geschützter Pfad `/api/v1/media/sessions/{ms_id}/live/stream.mp4` unter demselben HTTPS-Serverpräfix.
+- STOP: `POST /api/v1/live-playback-sessions/{ms_id}/stop`, `{resourceKind:"live-channel",backendId,sessionId,operation:"stop"}`, dasselbe Device/Grant/Owner-Gate. Bei erfolgreicher CREATE-Antwort nach Nutzerabbruch wird genau diese Session sofort beendet. Kein `replacesSessionId`, kein Cross-Device-Replace, keine URL-Tokens, kein implizites Re-Pairing.
+- **Grenze des realen Hardwaretests:** Live-v1 dokumentiert bisher **keine** `nativeMediaAccess`-Projektion für Samsung AVPlay. Der Client testet daher zuerst die real vorhandene HTML5-MP4/HttpOnly-Cookie-Strecke; ob Tizen-`file://` den Secure/SameSite-Cookie auf Medien-GETs mitsendet, muss der Samsung zeigen. Ein 401 beim geschützten Media-GET ist **kein** Beweis, dass H.264/AAC defekt ist. Kein Browser-Privat- oder freier VDR/Streamdev-Pfad als Ersatz. Der Recording-S6.17-AVPlay/AAC-Hardware-PASS ist ein anderer Vertrag.
+
+
+### S6.18-Abnahmefehler: Native-Medienauthentifizierung bei Live (27.10.2026)
+
+**Nachgewiesen:** Realer Samsung meldet beim HTML5-Live-Test einen aus dem Media-GET-Header-Probe stammenden **HTTP 401**. Das ist **kein** Dekodernachweis. Der Live-Controller in `hotzenplotz5/vdr-suite` erstellt seine Session mit `Set-Cookie` und `live-progressive-fmp4`, zeigt aber im JSON **kein** `nativeMediaAccess`-Feld. Die Recording-Device-Antwort ermöglicht dagegen bei explizitem `nativeMediaAccess:true` die Ausgabe des **bereits erteilten, kurzlebigen Session-Cookies** zur Weitergabe an native Player. Genau diese Recording-Technik hat auf dem echten Samsung mit AVPlay/HLS-TS/AAC **hörbaren Ton geliefert**.
+
+**Konkrete Vertragslücke für Live:** Der Backend-Device-Live-CREATE benötigt einen analog begrenzten ausdrücklichen Native-Access-Opt-in mit derselben MediaSession-Owner-/Grant-/Cookie-Policy (keine Device-Langzeit-Credentials im Stream, keine Tokens als URL-Query). Der Client darf AVPlay erst nach verifiziertem opt-in-Cookie nutzen; danach Live-Profil/Transcoding für Tizen 5.5 wirklich testen. Einzelne Ursache des 401 (Cookie nicht akzeptiert vs. Proxy-/Cookie-Pfad) ohne Gateway-/TV-Befunde **ungeklärt**. Kein stilles Wiederversuchen des bekannten HTML5-Fehlers; Backend-Repo nicht automatisch geändert.
+
+
+## S6.19 – Erstes echtes lesendes Timer-UI gegen native VDR-Timer (27.10.2026)
+
+Quellbelege in `hotzenplotz5/vdr-suite` `main`: `api/rest/src/PublicApiRuntime.cpp::tryHandleNativeTimerReadGet`, `api/rest/include/PublicApiRuntime.h::PublicNativeTimerItem`, `api/rest/tests/test_public_epg_now_next.cpp` sowie `SecurityHttpGate.h`. **Keine Spekulation über installierten Serverstand**.
+
+`GET /api/v1/native-timers?backendId={backend}&offset={0..100000}&limit=30`; Serverantwort `{backendId,items:[{timerId,channelId,channelName,title,day,weekdays,startTime,endTime,enabled,recording,pending}],page:{limit:30,offset,hasMore,nextOffset},meta:{partial:false}}`. `timers.view@backend` ist unabhängig von `channels.view`, `epg.view` und `media.live.play`. `day` und `weekdays` sind native VDR-Planungsselektoren, `startTime`/`endTime` native HHMM; keine EPG-Event-ID, TimerAssignment-Revision oder Mutationserlaubnis ableitbar. Bei ungültiger/fehlender Providerantwort 503, nicht automatisch `items:[]`; Rechte-/Backendfehler getrennt ausweisen.
+
+Samsung S6.19 verwendet nur Device-authentifizierte HTTPS-GETs (inkl. erstem Device-Proof und Backend-Discovery) und niemals `/api/vdr/timers`, `/api/vdr/timers/live`, `/api/v1/timer-assignments` als native Liste oder einen Timer-Mutationsendpunkt. Der neue UI-Schritt ist **getrennt** von S6.18-Live-Playback; dessen **HTML5-Medienabruf HTTP 401** erfordert später einen eigenen Backend-Native-Access-/AVPlay-Vertrag. Hier keine Änderung am Server.
+
+
+## S6.20 – epgsearch-SearchTimers getrennt von nativen Aufnahmetimern (27.10.2026)
+
+**Quellvertrag gelesen:** `hotzenplotz5/vdr-suite` `main`, `api/search-timers.md` sowie `api/rest/src/PublicApiRuntime.cpp` (Collection `publicSearchTimerCollectionResponse`, Detail- und Preview-GET). VDR-SearchTimers haben die servereigene stabile opake `st_[0-9a-f]{32}`-Identität und sind **keine** NativeTimer-`timerId` und **keine** `timerAssignmentId`. Die öffentliche API v1 verwendet ausschließlich verifiziertes Device-HTTPS mit `Authorization: VDR-Suite-Device …`, niemals Browser-Cookies oder RESTfulAPI-Provider-Rohdaten.
+
+- Liste: `GET /api/v1/search-timers?backend=<scope>&limit=30[&cursor=<st1_...>]` verlangt `searchtimers.view@scope`, liefert `items[{searchTimerId,backendId,name,query,state}]`, `page{limit,nextCursor,hasMore}`, `meta{partial:false}`. Cursor ist opak, strikt backendgebunden. Bei 503 keine falsche `items:[]`.
+- Detail: `GET /api/v1/search-timers/{id}?backend=<scope>` verlangt `searchtimers.view@scope`, liefert Regelname, Query und Aktivzustand plus `meta.partial=false`, keine native ID/Optionspayload/Revision. 404 bei retirierter/fehlender ID.
+- Vorschau: `GET /api/v1/search-timers/{id}/preview?backend=<scope>&limit=30` verlangt **`searchtimers.view` UND `epg.view`** für genau dieses Backend. Antwort `{backendId,searchTimerId,totalCount,items:[{title,subtitle,channelId,startTime,endTime}],meta:{partial:false,epgInput:"ready"}}`. Treffer beziehen sich auf EPG-Texte, **nicht** auf sämtliche epgsearch-Einschränkungen oder garantiert programmierte Aufnahmen.
+- UI & State: Nur benutzerausgelöste List-/Detail-/Preview-GETs. Sichere Seitengrenzen, nur `textContent` für Fremdtexte, Cancel/Generationsprüfung bei Navigation und Backendwechsel, Fehlermeldungen für 401/403/404/503. Getrennte Berechtigungen `timers.view` (native Timer), `searchtimers.view` (gespeicherte epgsearch-Regeln) und `epg.view` (Vorschau).
+
+**Noch nicht Teil des S6.20-Codes:** Neue Regel per `draft-preview` und `searchtimers.create` zunächst inaktiv anlegen; `UPDATE/ACTIVATE/DEACTIVATE/DELETE` erfordern separaten Backend-nativen Generation/CAS-Vertrag. Kein Schreibrecht wird aus einer Lesefreigabe abgeleitet. Source/CI ist kein installierter Backend-/Samsung-Hardware-PASS.
+
+
+## S6.23 – Globale Aufnahmen-/EPG-Suche, gemeinsamer Web-Suchindex (27.10.2026)
+
+Backend-Quellen `hotzenplotz5/vdr-suite` `main` geprüft: `api/public-v1-generic-search.md`, `docs/development/public-v1-search-parity.md` und `PublicApiRuntime.cpp::tryHandleBrowseReadGet`. Das Samsung-Frontend verwendet **nicht** die Browser-Route `/api/search`, sondern die vom selben `GlobalSearchService` gespeisten verifizierten **Device Public-v1 GETs**.
+
+- Aufnahme: `GET /api/v1/search/recordings?backendId=<id>&query=<encoded>&limit=30&offset=<n>` mit `recordings.view@backendId`. Antwort `items:[{kind:"recording",backendId,recordingId:"rec_<32hex>",title,edited}]`.
+- EPG: `GET /api/v1/search/epg?backendId=<id>&query=<encoded>&limit=30&offset=<n>` mit `epg.view@backendId`. Antwort `items:[{kind:"epg",backendId,channelId,eventId,title,subtitle,startTime,endTime}]`.
+- Beide: `page:{offset,limit,totalCount,hasMore}`, maximal 30 Ergebnisse, Offset bis 1.000.000, Suchbegriff mindestens 2/maximal 240 UTF-8-Bytes (URL/Query-Limits des Servers beachten). Nur Device-Authorization/HTTPS und jeweils ein explizites Backend; `cache: no-store`. Unterschiedliche Berechtigungsfehler erscheinen unabhängig. Aufnahmen-Details über `GET /api/v1/recordings/{rec_id}?backendId=...`; EPG-Details über `GET /api/v1/epg/event?backendId=...&channelId=...&eventId=...`. Ein Treffer allein berechtigt weder Wiedergabe noch Timer-Mutation.
+- Gleiche Match-Normalisierung, gleiche Web-Index-Daten und Ranking/Reihenfolge; keine auf TV neu implementierte Matching-Engine und keine Suchfilterung kompletter Recording-Listen. Das Server-EPG-Fenster reicht ca. 6h zurück / 14 Tage voraus. Gültiger Nulltreffer ist 200+0; nicht verfügbarer Index/Backend ist Fehler (oft 503), niemals Nulltreffer.
+- Aktuelle **Public-v1-Projektion hat keine vollständige Personen-/Artwork-/Match-Reason-Projektion** des Webfrontends: bewusst nicht erfinden oder geheime Provider-URLs von Browser-Endpunkten verwenden. Erweiterung dieses UI-Paritätsumfangs würde erst eine ausdrücklich dokumentierte Public-v1-Erweiterung erfordern.
+
+Samsung-Hardware-Gate OPEN: WITs-Übertragung wirklich bestätigen und gegen Webresultate desselben Backends testen. Bestehende `app/AGENTS.md` beachten.
+
+
+## S8.1 – Media Home über vorhandene öffentliche API v1
+
+Alle Home-Reads verwenden dieselbe gespeicherte, verifizierte Device-Anmeldung und genau ein zugängliches Backend pro Zyklus. Fehler und Grants bleiben unabhängig, alle Calls sind GET:
+
+| Inhalt | Public-v1-Endpunkt | Grant |
+| --- | --- | --- |
+| Backend | /api/v1/backends | Device-gebundene Sichtbarkeit |
+| Continue Watching | /api/v1/recording-playback-sessions/continue-watching?backendId=… | media.recording.play |
+| Erste Aufnahmeseite | /api/v1/recordings?backendId=…&limit=100&sort=recordingId&order=asc | recordings.view |
+| Aufnahmedetails | /api/v1/recordings/{recordingId}?backendId=… | recordings.view |
+| Aufnahmebilder | /api/v1/recordings/{recordingId}/artwork und /artwork/{artworkId} mit Backend-Scope | recordings.view, Device-autorisierter Binärabruf |
+| Sender | /api/v1/channels?backendId=… | channels.view |
+| Aktuelles EPG | /api/v1/epg/now-next?backendId=…&channelId=…&fromTime=…&limit=2 | epg.view |
+| EPG-Bild | /api/v1/epg/preferred-artwork?backendId=…&channelId=…&eventId=… | epg.view, bestätigte Event-ID |
+| Native Timer | /api/v1/native-timers?backendId=…&offset=0&limit=30 | timers.view |
+
+Continue Watching verwendet ausschließlich positive serverseitige Positionen und optional verifizierte Dauer, kein lokales Ersatz-Resume. Die Existenz eines serverseitigen Checkpoints beweist keine erfolgreiche Samsung-Seek-/Resume-Wiedergabe. Aufnahmen werden nur nach Recording-ID sortiert; die EPG-Reihe zeigt aktuell laufende echte Events der ersten bis zu drei TV-Sender. Bilder werden MIME-/Größen-validiert, nur über Blob-URLs eingebunden und bei Abbruch widerrufen. Kein privater Browser-Endpunkt, kein Autoplay, kein zusätzlicher Metadaten-Owner, keine Mutation.
+
+Referenzen: VDR-Suite api/device-recording-playback.md (P1), ADR-0058 sowie die bestehenden Samsung-Clients recording-catalog.js, home-continue.js, media-metadata.js und native-timers.js. REAL-TV OPEN.
+
+
+## S8.2 EPG-Timer aus Live-EPG und Suche – bestätigte Public-v1-Schreiboperation
+
+Quellvertrag VDR-Suite: api/epg-timer-intents.md, api/operation-status.md. Es werden keine privaten VDR-Routen oder nativen Timer-Spezifikationen benutzt.
+
+1. Ausgewählte zukünftige Sendung mit belegter Channel/Event-ID: Device-authentifizierter GET /api/v1/epg/event?backendId=...&channelId=...&eventId=...; starker ETag aus dem HTTP-Header und Titel/Start/Ende mit Treffer vergleichen. Ohne ETag oder bei abweichenden Daten keine Freigabe.
+2. Erste OK-Aktion zeigt die konkret gewählte Sendung und ihren Zeitraum und verlangt ausdrücklich eine zweite Bestätigung. Erst danach POST /api/v1/epg/timer-intents mit JSON {backendId,channelId,eventId} ohne Querystring, If-Match mit originalem ETag und einem kryptografisch generierten einmaligen Idempotency-Key.
+3. Backend und Device prüfen unabhängig epg.view und timers.create sowie die Backend-Schreibpolicy. Ein 202 bedeutet nur durable Operation admission; danach nur per expliziter Taste GET /api/v1/operations/{operationId}. succeeded ist von accepted/queued/outcome_unknown zu trennen. Kein automatischer Retry bei Netzwerkfehler/Timeout und keine erneute POST-Auslösung derselben Event-ID innerhalb der laufenden App.
+4. Source-/CI-Gate ist keine Bestätigung, dass die derzeit installierte Backend-/Agent-/SuiteBridge-Kombination CREATE unterstützt. Echte Timeränderung nur auf ausdrückliche Auswahl einer zukünftigen Sendung.
+
+## Live-TV – nicht auf AVPlay umstellbar ohne Backend-Public-v1-Native-Freigabe
+
+Der vorhandene Device-v1-Live-POST liefert den HTTPS-Pfad /api/v1/media/sessions/{sessionId}/live/stream.mp4 mit Secure/HttpOnly/SameSite-Cookie für browsergebundenes live-progressive-fmp4. Der echte Samsung-Tizen-5.5-HTML5-Pfad meldete HTTP 401. Die Device-API projiziert anders als die Aufnahme-MediaSession keinen für AVPlay ausdrücklich freigegebenen nativen Media-Cookie. Backendvertrag, Berechtigung und Session-Teardown müssen in eigenem Slice erweitert und verifiziert werden. Ein reiner Tausch von HTML5 nach AVPlay, geheime Cookies in Querystrings oder ein privater /api/...-Fallback sind nicht geeignet. Live-TV-Hardware FAIL/OPEN bleibt offen.

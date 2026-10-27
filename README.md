@@ -2,7 +2,7 @@
 
 Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsung Tizen TV; erstes Testgerät: **Samsung GU43TU6979U (2020 / Tizen-Generation 5.5)**.
 
-> **Status 2026-10-25:** S1-Hardwaretest teilweise erfolgreich: signiertes `.wgt` installiert; Startvideo und Logo am Samsung Tizen 5.5 sichtbar; Tizen/AVPlay/Tasten-API erkannt; D-Pad/OK-Menünavigation bestätigt. Back/Exit/Restart und Medien-/API-Zugriff noch offen.
+> **Stand 27.10.2026 – erster Audio-Hardware-PASS:** Auf dem realen Samsung Tizen 5.5 ist die isolierte DEV-App gekoppelt, der neue S6.17-Button **„HLS-TS + AAC-Ton testen“** sichtbar und der Nutzer bestätigt **tatsächlich hörbaren Ton** bei der getesteten Aufnahme. Das ist kein pauschaler PASS für sämtliche Medien, Standard-AVPlay/Seek/Stop oder den produktiven Updateweg. Frühere S1-Abschnitte dokumentieren den historischen Erststand.
 
 ## Projektgrenzen
 
@@ -19,7 +19,8 @@ Eigenständiger Samsung-Smart-TV-Client für **VDR-Suite**. Zielplattform: Samsu
 3. [docs/api-contracts.md](docs/api-contracts.md) – geprüfte öffentliche Schnittstellen.
 4. [docs/development-setup.md](docs/development-setup.md) – Windows/Tizen/TV-Verbindung.
 5. [docs/hardware-acceptance.md](docs/hardware-acceptance.md) – Abnahme am realen Samsung.
-6. **[docs/windows-update-workflow.md](docs/windows-update-workflow.md)** – verbindlicher Windows-/VS-Code-/Tizen-Updateweg; verhindert wiederkehrende Git-Pull-Abbrüche und schützt lokale Entwicklerdateien.
+6. **[docs/windows-update-workflow.md](docs/windows-update-workflow.md)** – Windows-/Git-Pull-/Build-Reihenfolge und Schutz lokaler Entwicklerdateien.
+7. **[docs/wits-isolated-development.md](docs/wits-isolated-development.md)** – **verbindlicher DEV-TV-Live-Updateweg: genau ein `npm.cmd run tv:watch`**, keine Neuinstallation.
 
 ## Verbindlicher Windows-/Tizen-Updateweg (25.10.2026)
 
@@ -144,13 +145,29 @@ Quellenänderungen erfordern npm run build:tv und danach npm run check. Tests la
 
 **Wichtig:** `Run Project` ist kein datenbewahrendes Update: Eine Tizen-Studio-Testinstallation kann vorher deinstallieren und damit KeyManager-Daten löschen. Der neue **rein lokale** WGT-Preflight liest ein fertig signiertes Paket und vergleicht die Original-App-/Paketkennung, aktuelle Quellen, höhere Version und das Autor-Zertifikat mit einem **nachweislich bereits installierten alten WGT**. Kein TV-Zugriff, keine automatische Installation, keine Credential-Migration. Ohne alte Paket-/Signaturidentität oder belegte datenbewahrende Installationsmethode ist eine TV-Aktualisierung nicht freigegeben. Vollständiger Ablauf: [S7.2 Produktions-Update](docs/production-update-s7-2.md). Hardware-PASS bleibt offen.
 
-## WITs-Updates nur als isolierte DEV-App (S7.1 — Source, Hardware offen)
+## WITs-Updates nur als isolierte DEV-App (S7.1 — S6.17 auf realem TV sichtbar, Ton PASS)
 
 **Kritische Korrektur 2026-10-25:** WITs hängt `WITs` an die Tizen-Application-ID an, **ändert aber nicht zuverlässig die Paket-ID**. `wits --start` im normalen `app/`-Projekt könnte daher `VDRSuiteTV` (bestehende Geräteanmeldung!) treffen. **Dort niemals WITs Start ausführen.** Das bisherige `tv:watch` wurde auf eine vollständig getrennte lokale Entwicklungskopie `.tizen-wits-dev/` umgestellt.
 
-Normal: `VDRSuiteTV.VDRSuite` / Paket `VDRSuiteTV`. Isolierter WITs-Host: `VDRSuitDev.VDRSuiteWITs` / Paket `VDRSuitDev`. Erst offline `npm.cmd run tv:dev:identity` und `npm.cmd run tv:dev:prepare`, dann nur in der isolierten Kopie `wits --init`; eine mögliche einmalige `wits --start`-Installation ist **nicht autorisiert** und erfordert gesonderte Prüfung. Nach bewusster Installation: `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:dev:prepare`, `npm.cmd run tv:watch` — Watch installiert/deinstalliert nichts. Alle Details und Pflichtprüfungen: [docs/wits-isolated-development.md](docs/wits-isolated-development.md).
+Normal: `VDRSuiteTV.VDRSuite` / Paket `VDRSuiteTV`. Isolierter WITs-Host: `VDRSuitDev.VDRSuiteWITs` / Paket `VDRSuitDev`. Erstmaliges `wits --init`/`--start` sind **keine Routineupdates**; Start kann DEV-Daten/Kopplung verlieren. **Für die bereits installierte DEV-App** nach nötigem Build und erfolgreichem `npm.cmd run check` einmal `npm.cmd run tv:dev:prepare` ausführen. **Nur wenn noch kein Watch läuft** im Repo-Hauptverzeichnis `npm.cmd run tv:watch` starten; bei bereits laufendem Watch **keinen zweiten starten** (Port 4050, `EADDRINUSE`). Live-Sync und Funktion auf dem TV bestätigen; `--smoke` ist nur optional und keine Voraussetzung. **S6.17: neuer Knopf am TV sichtbar, Ton hörbar bestätigt.** Alle Details: [docs/wits-isolated-development.md](docs/wits-isolated-development.md).
 
 **Einschränkung:** Die DEV-App hat eigene Tizen-KeyManager-Daten. Die reale Persistenz der DEV-Kopplung über Watch/Restart ist noch **nicht nachgewiesen**; Datenbewahrung für produktive Updates bleibt separat offen. Keine automatische Neu-Kopplung, Credential-Exports oder Grants.
+
+## S6.23 – Allgemeine Suche wie im Webfrontend: Aufnahmen und EPG (27.10.2026)
+
+Der Bereich **Suche** arbeitet jetzt mit dem **gemeinsamen GlobalSearchService/SQLite-Index des Webfrontends**. Ein Suchfeld über die Samsung-Tizen-Bildschirmtastatur, explizites `Suchen`, Backendwahl und zwei unabhängige Ergebnisgruppen **Aufnahmen** und **EPG** mit Trefferzahl und eigener `Mehr`-Pagination. OK auf Treffer lädt autorisierte Aufnahme- bzw. EPG-Details; keine Wiedergabe oder Timer-Mutation ohne eigene Aktion. Die Device-Endpunkte `GET /api/v1/search/recordings` und `GET /api/v1/search/epg` verlangen `recordings.view` bzw. `epg.view` pro Backend; beide liefern nur die öffentliche, beschränkte Projektion des Webindex. Kein Abholen und Filtern kompletter Kataloge im Samsung-Client. Der Web-Frontend-Matcher bleibt maßgeblich, inklusive Suche in EPG-Untertiteln und manuellen Aufnahmetiteln. Personen-/Poster-/Match-Reason-Daten liefert die Device-API noch nicht, daher sind sie nicht Teil des Samsung-Slice. **Echter TV-Hardwaretest und WITs-Dateiübertragung separat offen.** [Roadmap](ROADMAP.md) · [API-Vertrag](docs/api-contracts.md) · [Hardware-Abnahme](docs/hardware-acceptance.md).
+
+## S6.20 – epgsearch-Suchtimer und Treffer auf dem Samsung (27.10.2026)
+
+Im **Timer-Tab**, getrennt von den nativen VDR-Timern, gibt es jetzt **„Suchtimer (epgsearch)“**. `Suchtimer laden` ruft nur echte Public-v1-SearchTimer-Regeln (`GET /api/v1/search-timers?backend=...&limit=30`) ab; `Weitere Suchtimer` paginiert, `Backend wechseln` hält die Daten sauber getrennt. OK auf einer Regel liest ihren aktuellen Zustand über `GET /api/v1/search-timers/{id}`, und **`EPG-Treffer anzeigen`** ruft separat bis zu 30 EPG-Texttreffer und die Gesamtzahl über `/preview` ab. `searchtimers.view` ist für Liste/Details notwendig, `epg.view` **zusätzlich** für die Treffervorschau; `timers.view` der nativen Timer ist separat. **S6.20 ist ausschließlich lesend, keine Suchregel wird angelegt, geändert oder aktiviert.** Source/CI 218/218, Hardware-Test und echte WITs-Übertragung noch offen. Die späteren S6.21/S6.22-Slices sind in der [Roadmap](ROADMAP.md) eingeplant.
+
+## S6.19 – Echte VDR-Timer lesen (27.10.2026)
+
+Im Samsung-DEV-Tab **Timer** lässt sich die echte native VDR-Timerliste über die öffentliche API v1 laden. **`Timer laden`** ruft `GET /api/v1/native-timers?backendId=...&offset=0&limit=30` auf, **`Weitere Timer`** paginiert und **`Backend wechseln`** wechselt zwischen autorisierten Backends. D-Pad/OK zeigen Titel, VDR-Uhrzeit und Aufnahmezustand. Benötigt `timers.view` für das gewünschte Backend – unabhängig von `epg.view` und `media.live.play`. Alles **rein lesend**, kein Timer wird erstellt, gelöscht oder geändert. Samsung-Hardwareprüfung noch offen. Siehe [Roadmap](ROADMAP.md), [API-Vertrag](docs/api-contracts.md) und [Hardware-Abnahme](docs/hardware-acceptance.md). DEV-Übertragung nach Build/Staging **nur** mit dem dokumentierten einmaligen WITs-Watch und sichtbarem TV-Push; kein `wits --start`, kein Pairing-Reset.
+
+## S6.18 – Erster Live-TV-Praxistest über API v1 (27.10.2026)
+
+Neue manuelle Schaltfläche **`Live-TV testen`** nach Auswahl eines echten Senders mit OK. Die gekoppelte DEV-App erstellt eine autorisierte `live-channel`-Session über `POST /api/v1/live-playback-sessions` mit gesondertem `media.live.play`-Grant und prüft den geschützten `live/stream.mp4`-Pfad mit HTML5-MP4. STOP/ZURÜCK und Ansichtswechsel lösen Server-Session-STOP aus; kein automatisches Zappen und keine ungeschützten Media-URLs. **Source/CI PASS, realer Samsung-Live-Test noch offen**; kein AVPlay-Cookie im veröffentlichten Live-Device-Vertrag. Siehe [API-Vertragskarte](docs/api-contracts.md), [Hardware-Abnahme](docs/hardware-acceptance.md) und [DEV-Updateweg](docs/wits-isolated-development.md).
 
 ## Phase S4.1 – echte Aufnahmen im Samsung-Client (Source-Kandidat, 2026-10-25)
 
@@ -161,3 +178,17 @@ Die Mediathek ist **nicht auf 20 oder 100 Aufnahmen insgesamt begrenzt**. Es wer
 **Status:** Code/Tests zunächst source-only; die TV-Installation und der reale Grant-/Mehrseiten-Test müssen separat bestätigt werden. Nach einer VS-Code-`Run Project`-Neuinstallation kann das lokale Device-Credential verlorengehen; dadurch entsteht auf dem Server **kein** automatisch wiederverwendbares Device. Bestehende Geräte nicht blind löschen oder erneut koppeln. Die VDR-`channels.conf`-Senderreihenfolge bleibt unabhängig davon eine offene API-v1-Serverfrage.
 
 **Lokaler Samsung-Workflow:** Für DEV-Watch nach explizitem separatem Bootstrap **nur** `npm.cmd run build:tv`, `npm.cmd run check`, `npm.cmd run tv:dev:prepare`, `npm.cmd run tv:watch` verwenden. `Build Project → Run Project` kann die Device-Anmeldung löschen; [sicheren Watch-Pfad oben](#entwicklungs-updates-ohne-erneutes-geräte-pairing--samsung-wits-watch-2026-10-25) beachten.
+
+
+## S8.1 – Samsung Media Home (27.10.2026)
+
+Das neue Premium-Home nutzt vorhandene Navigationspunkte, eine dezente Verbindungsmeldung am Logo und zeigt echte Inhalte statt doppelter Funktionskacheln. Hero, Weitersehen mit serverseitigem Continue-Watching, Aus deiner Mediathek, Jetzt im TV und der kompakte native Aufnahmeplaner lesen vorhandene öffentliche API v1. Aufnahme- und EPG-Bilder werden nur als Device-autorisierte Binärdaten geladen; bei fehlendem Artwork bleibt das dunkelblaue Fallback. Metadaten und Fortschritte werden nicht erfunden.
+
+Bei sichtbarem Home-Eintritt werden Device, Backend und getrennte Lesedomänen automatisch abgefragt. Fehlende einzelne Grants blockieren nicht die ganze Seite. Die Katalogliste ist nach Recording-ID sortiert, nicht nach Aufnahmedatum. Home startet keine Wiedergabe. Source-/CI- und TV-Abnahme bleiben getrennt: der neue Stand ist auf dem Samsung erst nach tatsächlichem WITs-Push sichtbar. Siehe ROADMAP.md, docs/api-contracts.md, docs/hardware-acceptance.md und docs/wits-isolated-development.md. PR #33 bleibt Draft; Produktiv-App unverändert.
+
+
+## S8.3 – Streamdev Direkt-Live-TV (Samsung DEV, Hardware OPEN)
+
+Erster TV-Versuch ohne Browser-Cookie-Umweg: Auf **Live-TV** die lokal erreichbare Streamdev-Serveradresse des VDR eingeben, z. B. `http://192.168.178.20:3000`, mit „Streamdev speichern“ sichern, danach „Sender laden“, Sender per OK auswählen und „Live-TV direkt starten“. Der Stream läuft als roher VDR MPEG-TS `/TS/<VDR-channelId>` in Samsung **AVPlay**, ohne VDR-OSD im Videobild. Back/STOP beendet den AVPlay-Stream und gibt den Decoder wieder frei. TV-Bild/Ton/Haltbarkeit und die Erreichbarkeit des Plugins müssen auf realer Hardware geprüft werden.
+
+Die eingegebene LAN-Adresse liegt nur im lokalen TV-Speicher, nicht im Repository. Damit ist **kein** VDR-Suite-Public-v1-MediaSession-POST verbunden. Der Legacy-HTML5-Test bleibt getrennt. Ein Streamdev-HTTP-Port darf nur im eigenen Heimnetz erreichbar sein, nicht im Internet freigegeben werden. Es werden weder Backend-Einstellungen noch Tizen-Installation oder Kopplung geändert.

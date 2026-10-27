@@ -24,7 +24,10 @@
     <header class="topbar">
       <div class="brand">
         <img src="assets/branding/vdr-suite-icon-v4.png" class="brand-icon" alt="">
-        <strong>VDR-Suite</strong>
+        <div class="brand-label"><strong>VDR-Suite</strong>
+          <span class="brand-connection"><span class="status-dot"></span>
+            <span id="topbar-server-status">Offline</span></span>
+        </div>
       </div>
       <nav class="menu" aria-label="Hauptnavigation">
         <button type="button" class="menu-item tv-focusable is-focused" data-focus-id="nav-home" data-route="home">Home</button>
@@ -34,99 +37,135 @@
         <button type="button" class="menu-item tv-focusable" data-focus-id="nav-timers" data-route="timers">Timer</button>
         <button type="button" class="menu-item tv-focusable" data-focus-id="nav-settings" data-route="settings">Einstellungen</button>
       </nav>
-      <div class="topbar-status"><span class="status-dot"></span> <span id="topbar-server-status">Offline</span> <span class="status-separator">|</span> Samsung TV</div>
     </header>
 
     <main class="main">
-      <section class="page home-page" data-panel="home" aria-label="Media Home">
-        <div class="section-lead"><span class="lead-icon">▣</span><strong>Live-TV</strong><span class="lead-divider"></span><span>Dein Media Home</span><span class="preview-tag">DESIGNVORSCHAU · KEINE LIVE-DATEN</span></div>
-        <div class="stage" aria-label="Media-Home-Kacheln">
-          <button type="button" class="stage-card card-left tv-focusable" data-focus-id="stage-favorites" data-target-view="live">
-            <span class="stage-kicker">SENDER</span><span class="stage-ornament ornament-orbit"></span>
-            <strong>Favoriten</strong><small>Deine Sender auf einen Blick</small>
-          </button>
-          <button type="button" class="stage-card hero-card tv-focusable" data-focus-id="stage-hero" data-target-view="live">
-            <span class="hero-art" aria-hidden="true"><span class="hero-planet"></span><span class="hero-horizon"></span></span>
-            <span class="hero-copy">
-              <span class="hero-eyebrow">VDR-SUITE <span class="eyebrow-muted">/ SAMSUNG</span></span>
-              <span class="hero-caption">DEIN FERNSEHEN. DEIN ZUHAUSE.</span>
-              <strong>Fernsehen neu erleben.</strong>
-              <span class="hero-description">Live-TV, Aufnahmen und deine Mediathek. Eine Oberfläche, alles im Blick.</span>
-              <span class="hero-progress"><span></span></span>
-            </span>
-            <span class="hero-corner">S2</span>
-          </button>
-          <button type="button" class="stage-card card-right tv-focusable" data-focus-id="stage-recordings" data-target-view="recordings">
-            <span class="stage-kicker">MEDIATHEK</span><span class="stage-ornament ornament-rings"></span>
-            <strong>Aufnahmen</strong><small>Entdecken &amp; fortsetzen</small>
-          </button>
+      <section class="page home-page" data-panel="home" aria-label="VDR-Suite Media Home">
+        <div class="home-heading">
+          <div><span class="home-kicker">VDR-SUITE · MEDIA HOME</span>
+            <h1>Dein Fernsehen.</h1></div>
+          <div class="home-heading-actions">
+            <span id="home-content-status" role="status" aria-live="polite">Verbinde deine Mediathek über API v1.</span>
+            <button type="button" class="action-button tv-focusable" data-focus-id="home-refresh"
+                    data-home-action="refresh">Inhalte aktualisieren</button>
+          </div>
         </div>
-        <div class="stage-pagination" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i><i></i></div>
-
-        <section class="actionbar" aria-label="Schnellzugriff">
-          <div class="action-summary">
-            <img src="assets/branding/vdr-suite-icon-v4.png" alt="" class="action-icon">
-            <div><strong>VDR-Suite</strong><span>Bereit für deinen Server</span></div>
+        <div class="home-feature-layout">
+          <button type="button" class="home-feature tv-focusable" data-focus-id="home-feature"
+                  data-home-action="recordings" aria-label="Ausgewählte Aufnahme – Aufnahmen öffnen">
+            <span class="home-feature-glow" aria-hidden="true"></span>
+            <img id="home-feature-poster" class="home-feature-poster" alt="" hidden>
+            <span class="home-feature-copy">
+              <span id="home-feature-kicker" class="home-feature-kicker">DEINE MEDIATHEK</span>
+              <strong id="home-feature-title">Fernsehen neu erleben.</strong>
+              <span id="home-feature-description">Echte Sendungen, Aufnahmen und dein persönlicher Wiedergabeverlauf. Direkt von VDR-Suite.</span>
+              <span id="home-feature-meta" class="home-feature-meta">Inhalte laden, um deine Mediathek zu entdecken.</span>
+            </span>
+          </button>
+          <div class="home-plan-card">
+            <span class="home-card-kicker">AUFNAHMEPLANER</span>
+            <strong>Alles im Blick.</strong>
+            <p id="home-timer-summary">Timerstatus nach Freigabe von timers.view anzeigen.</p>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="home-timer-open" data-target-view="timers">Timerplan ansehen</button>
           </div>
-          <div class="action-detail"><span>Verbindungsstatus</span><strong id="home-server-state">Noch nicht verbunden</strong></div>
-          <button type="button" class="action-button primary tv-focusable" data-focus-id="action-live" data-target-view="live">▸ &nbsp; Live-TV</button>
-          <button type="button" class="action-button tv-focusable" data-focus-id="action-recordings" data-target-view="recordings">▣ &nbsp; Aufnahmen</button>
-          <button type="button" class="action-button tv-focusable" data-focus-id="action-settings" data-target-view="settings">⚙ &nbsp; Einstellungen</button>
-        </section>
-
-        <section class="collection" aria-label="Deine Bereiche">
-          <div class="collection-heading"><strong>Deine Mediathek</strong><span>Entdecken, organisieren, weiterschauen</span></div>
-          <div class="rail">
-            <button type="button" class="rail-card rail-continue tv-focusable" data-focus-id="rail-recordings" data-target-view="recordings">
-              <span class="rail-art rail-art-recordings" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Weiterschauen</strong><small>Fortsetzen, wo du warst</small></span>
-            </button>
-            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-live" data-target-view="live">
-              <span class="rail-art rail-art-live" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Live-TV</strong><small>Kanäle &amp; Favoriten</small></span>
-            </button>
-            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-search" data-target-view="search">
-              <span class="rail-art rail-art-search" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Entdecken</strong><small>Filme &amp; Serien finden</small></span>
-            </button>
-            <button type="button" class="rail-card tv-focusable" data-focus-id="rail-timers" data-target-view="timers">
-              <span class="rail-art rail-art-timers" aria-hidden="true"></span>
-              <span class="rail-copy"><strong>Aufnahmeplaner</strong><small>Timer im Überblick</small></span>
-            </button>
-          </div>
-        </section>
-      </section>
-
-      <section class="page detail-page" data-panel="live" hidden>
-        <span class="detail-eyebrow">LIVE-TV · ECHTE SENDER</span>
-        <h1>Deine Sender.</h1>
-        <p>Senderdaten aus deinem freigegebenen VDR-Backend. Wiedergabe folgt später.</p>
-        <div class="detail-grid">
-          <div class="detail-art detail-art-live" aria-hidden="true">
-            <span class="detail-art-kicker">IMMER ALLES IM BLICK</span>
-            <span class="detail-art-motif">◉</span>
-            <strong>Sender & Programm</strong>
-            <span>VDR-Suite Samsung</span>
-          </div>
-          <section class="detail-status-card" id="detail-state-live" data-state="offline" aria-label="Bereichsstatus">
-            <span class="detail-status-label" id="detail-state-badge-live">OFFLINE</span>
-            <strong id="detail-state-title-live">Noch keine Serververbindung</strong>
-            <p id="detail-state-description-live">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
-            <div class="detail-skeleton" id="detail-state-skeleton-live" hidden aria-hidden="true">
-              <i></i><i></i><i></i>
+        </div>
+        <div class="home-content-rails">
+          <section class="home-section" aria-label="Weitersehen">
+            <div class="home-section-heading">
+              <strong>Weitersehen</strong>
+              <span id="home-continue-status">Noch kein Wiedergabeverlauf geladen</span>
             </div>
-            <span class="detail-status-hint">Kein automatischer Abruf · keine Wiedergabe</span>
+            <div class="home-cards" id="home-continue-list"></div>
+          </section>
+          <section class="home-section" aria-label="Mediathek">
+            <div class="home-section-heading">
+              <strong>Aus deiner Mediathek</strong>
+              <span id="home-recordings-status">Noch keine Aufnahmen geladen</span>
+            </div>
+            <div class="home-cards" id="home-recordings-list"></div>
+          </section>
+          <section class="home-section" aria-label="Jetzt im TV">
+            <div class="home-section-heading">
+              <strong>Jetzt im TV</strong>
+              <span id="home-epg-status">Noch kein EPG geladen</span>
+            </div>
+            <div class="home-cards" id="home-epg-list"></div>
           </section>
         </div>
-        <div class="detail-actions">
+      </section>
+
+      <section class="page detail-page live-tv-page" data-panel="live" hidden>
+        <span class="detail-eyebrow">LIVE-TV · ECHTE SENDER</span>
+        <h1>Deine Sender.</h1>
+        <p>VDR-Senderreihenfolge links · aktuelles Programm und 24-Stunden-EPG rechts.</p>
+        <div class="detail-actions live-actions">
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-home" data-target-view="home">Zurück zu Home</button>
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-preview" data-live-action="load">Sender laden</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-more" data-live-action="more">Mehr Sender</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-backend" data-live-action="backend">Backend wechseln</button>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-streamdev" data-streamdev-action="start">Live-TV direkt starten</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-play" data-live-play="start">HTML5-MP4 (alter Test)</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-now" data-live-epg-action="now">Jetzt / Nächste</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-window" data-live-epg-action="window">Programm 24h</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-more" data-live-epg-action="more">Weitere Sendungen</button>
         </div>
-        <div class="live-catalog" aria-label="Echte Senderliste">
-          <p class="live-backend-name" id="live-backend-name">Noch kein Backend geladen</p>
-          <ul class="live-channel-list" id="live-channel-list" hidden></ul>
+        <div class="live-streamdev-config">
+          <label for="live-streamdev-base">Streamdev auf deinem VDR (einmalig eingeben)</label>
+          <input id="live-streamdev-base" type="url" class="tv-focusable"
+                 data-focus-id="live-streamdev-base" inputmode="url" autocomplete="off"
+                 placeholder="http://192.168.178.20:3000">
+          <button type="button" class="action-button tv-focusable"
+                  data-focus-id="live-streamdev-save" data-streamdev-action="save">Streamdev speichern</button>
+          <span id="live-streamdev-status" aria-live="polite">Nur im Heimnetz · direkter MPEG-TS-Stream ohne VDR-OSD</span>
+        </div>
+        <div class="live-workspace">
+          <section class="live-catalog" aria-label="Echte Senderliste in VDR-Reihenfolge">
+            <p class="live-backend-name" id="live-backend-name">Noch kein Backend geladen</p>
+            <ul class="live-channel-list" id="live-channel-list" hidden></ul>
+          </section>
+          <section class="live-epg-panel detail-status-card" id="detail-state-live"
+                   data-state="offline" aria-label="Ausgewählter Sender und großes TV-Programm">
+            <span class="detail-status-label" id="detail-state-badge-live">OFFLINE</span>
+            <strong id="detail-state-title-live">Noch keine Serververbindung</strong>
+            <p id="detail-state-description-live">Sender auswählen und EPG anfordern.</p>
+            <div class="detail-skeleton" id="detail-state-skeleton-live" hidden aria-hidden="true"><i></i><i></i><i></i></div>
+            <section class="live-epg" aria-label="EPG des ausgewählten Senders">
+              <p id="live-epg-status" aria-live="polite">EPG: Sender per OK auswählen. epg.view ist erforderlich.</p>
+              <ul id="live-epg-list" class="live-epg-events" hidden></ul>
+              <section id="live-epg-detail" class="live-epg-detail" aria-label="Ausgewählte Sendung" hidden>
+                <span id="live-epg-detail-time" class="live-epg-detail-time"></span>
+                <div class="live-epg-detail-content">
+                  <img id="live-epg-detail-poster" class="live-epg-detail-poster" alt="Sendungsbild" hidden>
+                  <div class="live-epg-detail-copy">
+                    <h2 id="live-epg-detail-title"></h2>
+                    <p id="live-epg-detail-subtitle" class="live-epg-detail-subtitle" hidden></p>
+                    <p id="live-epg-detail-description" class="live-epg-detail-description"></p>
+                    <p id="live-epg-artwork-status" class="live-epg-artwork-status" aria-live="polite"></p>
+                    <div class="epg-timer-actions">
+                      <button type="button" class="action-button tv-focusable"
+                              data-focus-id="live-epg-record" data-epg-timer-action="prepare" hidden>Sendung aufnehmen</button>
+                      <button type="button" class="action-button tv-focusable"
+                              data-focus-id="live-epg-operation" data-epg-timer-action="status" hidden>Timerstatus prüfen</button>
+                    </div>
+                    <p id="live-epg-timer-status" class="epg-timer-status" aria-live="polite">Sendung auswählen und Timer ausdrücklich bestätigen.</p>
+                  </div>
+                </div>
+              </section>
+              <div id="live-epg-scroll-actions" class="live-epg-scroll-actions" hidden>
+                <span class="live-epg-scroll-label">Sendungsdetails · längere Texte</span>
+                <button type="button" class="tv-focusable action-button"
+                        data-focus-id="live-epg-scroll-up" data-epg-scroll="-1">Text ▲</button>
+                <button type="button" class="tv-focusable action-button"
+                        data-focus-id="live-epg-scroll-down" data-epg-scroll="1">Text ▼</button>
+              </div>
+            </section>
+          </section>
+        </div>
+        <div id="live-player-surface" class="live-player-surface" hidden
+             aria-label="Public API v1 geschützter Live-MP4-Test">
+          <video id="live-html5-video" playsinline preload="none" tabindex="-1"></video>
+          <p id="live-player-hint" aria-live="polite">Live-MP4 · HTML5-Test · STOP/ZURÜCK beendet · PLAY/PAUSE schaltet um</p>
         </div>
       </section>
       <section class="page detail-page" data-panel="recordings" hidden>
@@ -134,11 +173,12 @@
         <h1>Deine Mediathek.</h1>
         <p>Deine echten VDR-Aufnahmen aus dem freigegebenen Backend. Ordner und Wiedergabe folgen in S4.2 und S5.</p>
         <div class="detail-grid">
-          <div class="detail-art detail-art-recordings" aria-hidden="true">
-            <span class="detail-art-kicker">DEINE GESCHICHTEN</span>
-            <span class="detail-art-motif">▣</span>
-            <strong>Deine Aufnahmen</strong>
-            <span>VDR-Suite Samsung</span>
+          <div class="detail-art detail-art-recordings" aria-label="Ausgewählte Aufnahme und Metadaten">
+            <span class="detail-art-kicker">AUFNAHME · METADATEN & POSTER</span>
+          <section class="recording-detail" aria-label="Geschützte Aufnahmedetails">
+            <p id="recording-detail-info" aria-live="polite">Aufnahme mit OK auswählen, um Metadaten und Artwork anzufordern.</p>
+            <img id="recording-detail-poster" alt="Aufnahme-Poster (authentifizierter Abruf)" hidden>
+          </section>
           </div>
           <section class="detail-status-card" id="detail-state-recordings" data-state="offline" aria-label="Bereichsstatus">
             <span class="detail-status-label" id="detail-state-badge-recordings">OFFLINE</span>
@@ -158,6 +198,7 @@
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-all" data-recordings-action="all">Alle Aufnahmen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-play" data-recordings-action="play">Wiedergabe testen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-html5" data-recordings-action="html5">HTML5 MP4 testen</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-aac-hls" data-recordings-action="aac-hls">HLS-TS + AAC-Ton testen</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-previous" data-recordings-action="previous">Vorherige Seite</button>
         </div>
         <div class="recording-catalog" aria-label="Echte Aufnahmen, in Seiten von bis zu 100 pro Serveranfrage">
@@ -167,41 +208,81 @@
                aria-label="Samsung AVPlay Wiedergabetest">
             <object id="recording-avplay-object" type="application/avplayer" width="100%" height="100%"></object>
             <video id="recording-html5-video" class="recording-html5-video" playsinline preload="none" tabindex="-1" hidden></video>
-            <p class="recording-player-hint">Samsung AVPlay · Zurück oder STOP beendet · PLAY/PAUSE pausiert</p>
+            <p id="recording-remote-hint" class="recording-player-hint" aria-live="polite">Samsung AVPlay · PLAY fortsetzen · PAUSE anhalten · OK umschalten · STOP beenden · BLAU Tonspur</p>
+            <p id="recording-audio-hint" class="recording-audio-hint" aria-live="polite">Audio · noch nicht geprüft</p>
+            <p id="recording-lifecycle-hint" class="recording-lifecycle-hint" aria-live="polite">Player · noch nicht gestartet</p>
           </div>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-recordings-next" data-recordings-action="next">Weitere Aufnahmen</button>
         </div>
       </section>
-      <section class="page detail-page" data-panel="search" hidden>
-        <span class="detail-eyebrow">SUCHE · DESIGNVORSCHAU</span>
+      <section class="page detail-page general-search-page" data-panel="search" hidden>
+        <span class="detail-eyebrow">SUCHE · WEB-SUCHINDEX · PUBLIC API V1</span>
         <h1>Alles finden.</h1>
-        <p>Durchsuche später Sender, Filme und Aufnahmen.</p>
-        <div class="detail-grid">
-          <div class="detail-art detail-art-search" aria-hidden="true">
-            <span class="detail-art-kicker">MEHR ENTDECKEN</span>
-            <span class="detail-art-motif">⌕</span>
-            <strong>Suche & Filter</strong>
-            <span>VDR-Suite Samsung</span>
+        <p>Wie im Webfrontend: Eine Suche für Sendungen im EPG und deine Aufnahmen. Beide Bereiche verwenden den gemeinsamen VDR-Suite-Suchindex.</p>
+        <div class="general-search-bar">
+          <label for="global-search-input">Film, Sendung oder Titel</label>
+          <div class="general-search-entry">
+            <input id="global-search-input" type="search" class="tv-focusable"
+                   data-focus-id="global-search-input" maxlength="240"
+                   autocomplete="off" autocapitalize="none"
+                   placeholder="Suchbegriff mit TV-Tastatur eingeben" />
+            <button type="button" class="action-button primary tv-focusable"
+                    data-focus-id="global-search-go" data-global-search-action="go">Suchen</button>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-clear" data-global-search-action="clear">Leeren</button>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-backend" data-global-search-action="backend">Backend wechseln</button>
           </div>
-          <section class="detail-status-card" id="detail-state-search" data-state="offline" aria-label="Bereichsstatus">
-            <span class="detail-status-label" id="detail-state-badge-search">OFFLINE</span>
-            <strong id="detail-state-title-search">Noch keine Serververbindung</strong>
-            <p id="detail-state-description-search">Die Inhalte werden erst nach autorisierter API-Anbindung geladen.</p>
-            <div class="detail-skeleton" id="detail-state-skeleton-search" hidden aria-hidden="true">
-              <i></i><i></i><i></i>
-            </div>
-            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+          <p id="global-search-backend-name">Backend noch nicht geladen</p>
+          <p id="global-search-status" role="status" aria-live="polite">Suchbegriff eingeben und „Suchen“ drücken.</p>
+        </div>
+        <div class="general-search-grid">
+          <section class="general-search-group" aria-label="Suchergebnisse Aufnahmen">
+            <header><h2>Aufnahmen</h2><span id="global-search-recording-count">–</span></header>
+            <p id="global-search-recording-status">Noch keine Suche gestartet · recordings.view</p>
+            <ul id="global-search-recordings" class="global-search-results" hidden></ul>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-recording-more"
+                    data-global-search-action="recordings-more">Mehr Aufnahmen</button>
+          </section>
+          <section class="general-search-group" aria-label="Suchergebnisse EPG">
+            <header><h2>EPG</h2><span id="global-search-epg-count">–</span></header>
+            <p id="global-search-epg-status">Noch keine Suche gestartet · epg.view</p>
+            <ul id="global-search-epg" class="global-search-results" hidden></ul>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="global-search-epg-more"
+                    data-global-search-action="epg-more">Mehr EPG-Treffer</button>
           </section>
         </div>
+        <section class="general-search-detail" aria-label="Ausgewählter Suchtreffer">
+          <strong id="global-search-detail-title">Noch kein Treffer ausgewählt</strong>
+          <p id="global-search-detail-description">OK auf einem Treffer zeigt die Details aus API v1.</p>
+          <div class="epg-timer-actions">
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="search-epg-record" data-epg-timer-action="prepare" hidden>EPG-Sendung aufnehmen</button>
+            <button type="button" class="action-button tv-focusable"
+                    data-focus-id="search-epg-operation" data-epg-timer-action="status" hidden>Timerstatus prüfen</button>
+          </div>
+          <p id="search-epg-timer-status" class="epg-timer-status" aria-live="polite"></p>
+        </section>
         <div class="detail-actions">
-          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
-          <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-search-preview" data-preview-route="search">Zustände ansehen</button>
+          <button type="button" class="action-button primary tv-focusable"
+                  data-focus-id="detail-search-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button detail-preview-button tv-focusable"
+                  data-focus-id="detail-search-preview" data-preview-route="search">Statusvorschau</button>
         </div>
+        <section class="detail-status-card" id="detail-state-search" data-state="offline"
+                 aria-label="Suchstatus" hidden>
+          <span class="detail-status-label" id="detail-state-badge-search">OFFLINE</span>
+          <strong id="detail-state-title-search">Noch keine Serververbindung</strong>
+          <p id="detail-state-description-search">Die Suche beginnt erst nach einer bestätigten Aktion.</p>
+          <div class="detail-skeleton" id="detail-state-skeleton-search" hidden aria-hidden="true"><i></i><i></i><i></i></div>
+        </section>
       </section>
       <section class="page detail-page" data-panel="timers" hidden>
-        <span class="detail-eyebrow">TIMER · DESIGNVORSCHAU</span>
+        <span class="detail-eyebrow">TIMER · ECHTE VDR-TIMER · PUBLIC API V1</span>
         <h1>Alles im Plan.</h1>
-        <p>Behalte geplante Sendungen und Aufnahmetimer im Blick.</p>
+        <p>Deine echten VDR-Aufnahmetimer – nur ansehen, ohne Änderungen.</p>
         <div class="detail-grid">
           <div class="detail-art detail-art-timers" aria-hidden="true">
             <span class="detail-art-kicker">NICHTS VERPASSEN</span>
@@ -216,13 +297,39 @@
             <div class="detail-skeleton" id="detail-state-skeleton-timers" hidden aria-hidden="true">
               <i></i><i></i><i></i>
             </div>
-            <span class="detail-status-hint">Statusvorschau – keine echten Serverdaten</span>
+            <span class="detail-status-hint">Public API v1 · timers.view erforderlich · nur lesend</span>
           </section>
         </div>
+        <p id="native-timer-backend-name" class="native-timer-backend">Noch kein Backend geladen</p>
+        <ul id="native-timer-list" class="native-timer-list" aria-label="Echte VDR-Timer" hidden></ul>
         <div class="detail-actions">
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-home" data-target-view="home">Zurück zu Home</button>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-timers-load" data-native-timers-action="load">Timer laden</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-timers-more" data-native-timers-action="more">Weitere Timer</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-timers-backend" data-native-timers-action="backend">Backend wechseln</button>
           <button type="button" class="action-button detail-preview-button tv-focusable" data-focus-id="detail-timers-preview" data-preview-route="timers">Zustände ansehen</button>
         </div>
+        <section class="searchtimer-area" aria-label="Gespeicherte Suchtimer">
+          <div class="searchtimer-heading">
+            <h2>Suchtimer (epgsearch)</h2>
+            <p>Gespeicherte Suchregeln und EPG-Treffer – eigenständig von normalen VDR-Timern.</p>
+          </div>
+          <p id="searchtimer-backend" class="native-timer-backend">Noch kein Backend geladen</p>
+          <div class="searchtimer-actions">
+            <button type="button" class="action-button primary tv-focusable" data-focus-id="searchtimer-load" data-searchtimer-action="load">Suchtimer laden</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="searchtimer-more" data-searchtimer-action="more">Weitere Suchtimer</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="searchtimer-backend-change" data-searchtimer-action="backend">Backend wechseln</button>
+            <button type="button" class="action-button tv-focusable" data-focus-id="searchtimer-preview" data-searchtimer-action="preview">EPG-Treffer anzeigen</button>
+          </div>
+          <p id="searchtimer-status" class="searchtimer-status" aria-live="polite">Suchtimer laden benötigt searchtimers.view.</p>
+          <ul id="searchtimer-list" class="native-timer-list" aria-label="Gespeicherte Suchtimer" hidden></ul>
+          <section class="searchtimer-results" aria-label="Suchtimer-Details und Vorschau">
+            <strong id="searchtimer-detail-title">Noch keine Regel gewählt</strong>
+            <p id="searchtimer-detail-info">OK auf eine Regel zeigt ihre aktuellen Details.</p>
+            <p id="searchtimer-preview-status" class="searchtimer-status">Für EPG-Treffer zusätzlich epg.view erforderlich.</p>
+            <ul id="searchtimer-preview-list" class="searchtimer-preview-list" hidden></ul>
+          </section>
+        </section>
       </section>
       <section class="page detail-page" data-panel="settings" hidden>
         <span class="detail-eyebrow">EINSTELLUNGEN</span><h1>Dein Samsung-TV.</h1>

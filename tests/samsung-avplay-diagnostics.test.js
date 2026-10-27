@@ -72,3 +72,157 @@ test("S5.3: probe happens before MediaSession STOP and cannot overwrite a differ
  assert.match(main,/if \(recordingPlaybackSession !== failedSession \|\| !failedSession\) return;/);
  assert.match(main,/stopRecordingPlayback\("failure"\);\s+recordingStatus\("error",mode === "html5"/);
 });
+
+test("S6.1: multi-track audio selects only a known AAC stereo track while PLAYING",()=>{
+  let prepared,selected=-1;const switches=[];
+  const tracks=[
+    {type:"AUDIO",index:2,extra_info:'{"fourCC":"AC3","channels":"6","language":"deu"}'},
+    {type:"AUDIO",index:5,extra_info:'{"fourCC":"AACL","channels":"2","language":"eng"}'}
+  ];
+  const api={open(){},close(){},stop(){},play(){},
+    prepareAsync(ok){prepared=ok;},getState(){return "PLAYING";},
+    getTotalTrackInfo(){return tracks;},
+    getCurrentStreamInfo(){return selected<0?[]:[tracks.find(t=>t.index===selected)];},
+    setSelectTrack(type,index){switches.push([type,index]);selected=index;}
+  };
+  const events=[],p=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  assert.equal(p.start(url,(state,detail)=>events.push({state,detail})),true);
+  assert.equal(switches.length,0,"No audio selection during IDLE/READY");
+  prepared();
+  assert.deepEqual(switches,[["AUDIO",5]]);
+  const sound=events.filter(x=>x.state==="audio")[0].detail;
+  assert.equal(sound.status,"selected_confirmed");
+  assert.equal(sound.total,2);
+  assert.equal(sound.currentIndex,5);
+  assert.equal(sound.tracks[1].codec,"AAC");
+  assert.equal(sound.tracks[1].channels,2);
+  assert.equal(sound.tracks[1].language,"eng");
+});
+
+test("S6.1: preserve selected AAC; explicitly select an unselected single AAC track",()=>{
+  for(const single of [false,true]){
+    let prepared,calls=0;const a={type:"AUDIO",index:3,extra_info:'{"fourCC":"AACL","channels":"2"}'};
+    const api={open(){},close(){},stop(){},play(){},getState(){return "PLAYING";},
+      prepareAsync(fn){prepared=fn;},
+      getTotalTrackInfo(){return single?[a]:[a,{type:"AUDIO",index:4,extra_info:'{"fourCC":"AC3","channels":"6"}'}];},
+      getCurrentStreamInfo(){return single?[]:[a];},
+      setSelectTrack(){calls++;}
+    };
+    let report;const p=createSamsungRecordingPlayer({webapis:{avplay:api}});
+    p.start(url,(state,detail)=>{if(state==="audio")report=detail;});
+    prepared();assert.equal(calls,single?1:0);
+    assert.equal(report.status,single?"selection_requested":"active_compatible");
+  }
+});
+
+test("S6.1: unsafe metadata and unsupported interfaces never leak details or break video",()=>{
+  let prepared,switches=0;const secret="SECRET-CREDENTIAL-123";
+  const tracks=[
+    {type:"VIDEO",index:1,extra_info:JSON.stringify({url:"https://private.invalid"})},
+    {type:"AUDIO",index:7,extra_info:JSON.stringify({fourCC:secret,language:secret,channels:0,url:"https://private.invalid"})},
+    {type:"AUDIO",index:8,extra_info:'{"fourCC":"AACL","channels":"8"}'},
+    {type:"AUDIO",index:-1,extra_info:"bad data"}
+  ];
+  const api={open(){},close(){},stop(){},play(){},getState(){return "PLAYING";},
+    prepareAsync(fn){prepared=fn;},getTotalTrackInfo(){return tracks;},
+    getCurrentStreamInfo(){return [];},setSelectTrack(){switches++;}};
+  const reports=[],p=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  p.start(url,(state,detail)=>{if(state==="audio")reports.push(detail);});
+  prepared();assert.equal(switches,0);
+  assert.equal(reports[0].status,"no_safe_switch");
+  assert.equal(reports[0].total,2);
+  assert.doesNotMatch(JSON.stringify(reports),/SECRET|private\.invalid|VIDEO/);
+  const limited={open(){},stop(){},close(){},play(){},getState(){return "PLAYING";},
+    prepareAsync(fn){prepared=fn;},getTotalTrackInfo(){throw Error(secret);}};
+  const events=[],q=createSamsungRecordingPlayer({webapis:{avplay:limited}});
+  q.start(url,(state,detail)=>events.push({state,detail}));prepared();
+  assert.ok(events.some(x=>x.state==="playing"));
+  assert.equal(events.find(x=>x.state==="audio").detail.status,"unavailable");
+  assert.equal(events.filter(x=>x.state==="error").length,0);
+  assert.doesNotMatch(JSON.stringify(events),/SECRET/);
+});
+
+test("S6.1: state gate and denied audio selection do not turn video into failure",()=>{
+  let ready,prepared;const track=i=>({type:"AUDIO",index:i,extra_info:'{"fourCC":"AACL","channels":"2"}'});
+  const api={open(){},close(){},stop(){},play(){},getState(){return "READY";},
+    prepareAsync(fn){ready=fn;},getTotalTrackInfo(){throw Error("not playing");}};
+  const events=[],p=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  p.start(url,(state,detail)=>events.push({state,detail}));ready();
+  assert.equal(events.find(x=>x.state==="audio").detail.status,"not_playing");
+  const obj={open(){},close(){},stop(){},play(){},getState(){return "PLAYING";},
+    prepareAsync(fn){prepared=fn;},getTotalTrackInfo(){return [track(1),track(2)];},
+    getCurrentStreamInfo(){return [];},setSelectTrack(){throw Error("authorization secret");}};
+  const feedback=[],q=createSamsungRecordingPlayer({webapis:{avplay:obj}});
+  q.start(url,(state,detail)=>feedback.push({state,detail}));prepared();
+  assert.equal(feedback.find(x=>x.state==="audio").detail.status,"selection_failed");
+  assert.ok(feedback.some(x=>x.state==="playing"));
+  assert.doesNotMatch(JSON.stringify(feedback),/authorization secret/);
+});
+
+
+test("S6.5: distinct Samsung transport keys honor native AVPlay state",()=>{
+  let ready;const commands=[];let state="NONE";
+  const api={
+    open(){state="IDLE";},close(){state="NONE";},stop(){state="IDLE";},
+    prepareAsync(fn){ready=fn;},getState(){return state;},
+    play(){commands.push("play");state="PLAYING";},
+    pause(){commands.push("pause");state="PAUSED";}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  player.start(url,()=>{});state="READY";ready();
+  assert.equal(player.pauseOrResume("play"),"already_playing");
+  assert.equal(player.pauseOrResume("pause"),"paused");
+  assert.equal(player.pauseOrResume("pause"),"already_paused");
+  assert.equal(player.pauseOrResume("play"),"resume_requested");
+  assert.equal(player.pauseOrResume("toggle"),"paused");
+  assert.equal(player.pauseOrResume("toggle"),"resume_requested");
+  assert.deepEqual(commands,["play","pause","play","pause","play"]);
+  player.stop();
+  assert.equal(player.pauseOrResume("play"),"unavailable");
+});
+
+test("S6.5: explicit BLUE-key audio switch uses only AVPlay-reported safe track IDs",()=>{
+  let ready,selection=4,state="IDLE";const calls=[];
+  const tracks=[
+    {type:"AUDIO",index:4,extra_info:'{"fourCC":"AACL","channels":"2","language":"deu"}'},
+    {type:"AUDIO",index:8,extra_info:'{"fourCC":"AC3","channels":"6","language":"eng"}'},
+    {type:"AUDIO",index:10,extra_info:'{"fourCC":"SECRET_TOKEN","channels":"2","url":"SECRET_HOST"}'}
+  ];
+  const api={
+    open(){},close(){},stop(){},prepareAsync(fn){ready=fn;},
+    play(){state="PLAYING";},getState(){return state;},
+    getTotalTrackInfo(){return tracks;},
+    getCurrentStreamInfo(){return tracks.filter(t=>t.index===selection);},
+    setSelectTrack(type,index){calls.push([type,index]);selection=index;}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  player.start(url,()=>{});ready();
+  assert.equal(player.cycleAudioTrack().status,"manual_confirmed");
+  assert.deepEqual(calls,[["AUDIO",8]]);
+  assert.equal(player.cycleAudioTrack().status,"manual_confirmed");
+  assert.deepEqual(calls,[["AUDIO",8],["AUDIO",4]]);
+  state="PAUSED";
+  assert.equal(player.cycleAudioTrack().status,"not_playing");
+  assert.equal(calls.length,2);
+  player.stop();
+  assert.equal(player.cycleAudioTrack().status,"not_playing");
+});
+
+
+test("S6.5: a lagging PLAYING state after pause does not freeze second OK",()=>{
+  let ready,state="IDLE";const requests=[];
+  const api={open(){},close(){},stop(){},prepareAsync(fn){ready=fn;},
+    play(){requests.push("play");},pause(){requests.push("pause");},
+    getState(){return state;}};
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  player.start(url,()=>{});state="PLAYING";ready();
+  // Simulate Tizen reporting stale PLAYING after pause() returned.
+  assert.equal(player.pauseOrResume("toggle"),"paused");
+  assert.equal(player.pauseOrResume("pause"),"already_paused");
+  assert.equal(player.pauseOrResume("toggle"),"resume_requested");
+  assert.deepEqual(requests,["play","pause","play"]);
+  // It must now act on fresh PLAYING, not retain the old pause intention.
+  assert.equal(player.pauseOrResume("play"),"already_playing");
+  player.stop();
+  assert.equal(player.pauseOrResume("toggle"),"unavailable");
+});

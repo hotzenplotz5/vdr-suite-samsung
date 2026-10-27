@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
+import { createSamsungRecordingPlayer, describeSamsungAudio, samsungTvSoundStatus } from "../app/src/platform/recording-player.js";
 
 const html = readFileSync("app/index.html", "utf8");
 const runtime = readFileSync("app/tv-runtime.js", "utf8");
@@ -11,7 +12,10 @@ test("Samsung S2.1 loads a classic offline runtime and renders premium home", ()
   assert.match(html, /<script src="tv-runtime\.js"><\/script>/);
   assert.doesNotMatch(html, /type="module"/);
   assert.match(html, /Fernsehen neu erleben/);
-  assert.match(html, /DESIGNVORSCHAU · KEINE LIVE-DATEN/);
+  assert.match(html, /data-home-action="refresh"/);
+  assert.match(html, /home-continue-list/);
+  assert.match(html, /home-feature-poster/);
+  assert.doesNotMatch(html, /DESIGNVORSCHAU · KEINE LIVE-DATEN/);
   for (const route of ["home","live","recordings","search","timers","settings"]) {
     assert.match(html, new RegExp('data-panel="' + route + '"'));
   }
@@ -24,12 +28,12 @@ function simulate(options = {}) {
   const focusIds = [...html.matchAll(/<(?:button|input)\b[^>]*data-focus-id="([^"]+)"[^>]*>/g)];
   const buttons = focusIds.map(match => {
     const attrs = { "data-focus-id": match[1] };
-    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-recordings-action"]) {
+    for (const key of ["data-target-view", "data-route", "data-preview-route", "data-server-test", "data-pair-action", "data-live-action", "data-live-play", "data-live-epg-action", "data-epg-scroll", "data-recordings-action", "data-native-timers-action", "data-searchtimer-action", "data-global-search-action", "data-home-action", "data-epg-timer-action", "data-streamdev-action"]) {
       const parsed = match[0].match(new RegExp(key + '="([^"]+)"'));
       if (parsed) attrs[key] = parsed[1];
     }
     const node = {
-      isFocused: false, tabIndex: -1,
+      isFocused: false, tabIndex: -1, hidden: /\bhidden\b/.test(match[0]),
       classList: { toggle(name, enabled) {
         if (name === "is-focused") node.isFocused = enabled;
       }},
@@ -53,6 +57,88 @@ function simulate(options = {}) {
     appendChild(child) { this.children.push(child); }
   };
   const liveBackendName = {textContent:""};
+  const homeNodes={};
+  for (const id of ["home-continue-list","home-recordings-list","home-epg-list"]) {
+    homeNodes[id]={
+      children:[],_text:"",
+      set textContent(v){this._text=v;if(v==="")this.children=[];},
+      get textContent(){return this._text;},
+      appendChild(n){this.children.push(n);}
+    };
+  }
+  for (const id of ["home-content-status","home-feature-kicker",
+      "home-feature-title","home-feature-description","home-feature-meta",
+      "home-timer-summary","home-continue-status","home-recordings-status",
+      "home-epg-status"])homeNodes[id]={textContent:""};
+  homeNodes["home-feature-poster"]={
+    hidden:true,src:"",onerror:null,onload:null,
+    removeAttribute(k){if(k==="src")this.src="";}
+  };
+  const nativeTimerList = {
+    hidden:true,children:[],_text:"",
+    set textContent(value){this._text=value;if(value==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(child){this.children.push(child);}
+  };
+  const nativeTimerBackendName={textContent:""};
+  const searchTimerList={
+    hidden:true,children:[],_text:"",
+    set textContent(v){this._text=v;if(v==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(item){this.children.push(item);}
+  };
+  const searchTimerPreviewList={
+    hidden:true,children:[],_text:"",
+    set textContent(v){this._text=v;if(v==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(item){this.children.push(item);}
+  };
+  const globalSearchNodes={};
+  for(const kind of ["epg","recordings"]) {
+    const list={
+      hidden:true,children:[],_text:"",
+      set textContent(v){this._text=v;if(v==="")this.children=[];},
+      get textContent(){return this._text;},
+      appendChild(node){this.children.push(node);}
+    };
+    globalSearchNodes["global-search-"+kind]=list;
+  }
+  for(const id of ["global-search-backend-name","global-search-status",
+      "global-search-recording-count","global-search-epg-count",
+      "global-search-recording-status","global-search-epg-status",
+      "global-search-detail-title","global-search-detail-description",
+      "search-epg-timer-status"])
+    globalSearchNodes[id]={textContent:""};
+  const searchTimerNodes={
+    "searchtimer-list":searchTimerList,
+    "searchtimer-preview-list":searchTimerPreviewList,
+    "searchtimer-backend":{textContent:""},
+    "searchtimer-status":{textContent:""},
+    "searchtimer-detail-title":{textContent:""},
+    "searchtimer-detail-info":{textContent:""},
+    "searchtimer-preview-status":{textContent:""}
+  };
+  const liveEpgStatus = {textContent:""};
+  const liveEpgList = {
+    hidden:true,children:[],_text:"",
+    set textContent(value){this._text=value;if(value==="")this.children=[];},
+    get textContent(){return this._text;},
+    appendChild(node){this.children.push(node);}
+  };
+  const epgScrollActions={hidden:true};
+  const epgDetailNodes = {
+    "live-epg-detail":{hidden:true,scrollTop:0},
+    "live-epg-detail-time":{textContent:""},
+    "live-epg-detail-title":{textContent:""},
+    "live-epg-detail-subtitle":{textContent:"",hidden:true},
+    "live-epg-detail-description":{textContent:""},
+    "live-epg-artwork-status":{textContent:""},
+    "live-epg-timer-status":{textContent:""},
+    "live-epg-detail-poster":{
+      hidden:true,src:"",onload:null,onerror:null,
+      removeAttribute(name){if(name==="src")this.src="";}
+    }
+  };
   const recordingList = {
     hidden:true, children:[], scrollTop:0, _text:"",
     set textContent(value) {this._text=value;if(value==="") this.children=[];},
@@ -60,6 +146,11 @@ function simulate(options = {}) {
     appendChild(child) {this.children.push(child);}
   };
   const recordingBackendName = {textContent:""};
+  const recordingDetailInfo = {textContent:""};
+  const recordingPoster = {
+    hidden:true,src:"",alt:"Poster",
+    removeAttribute(name){if(name==="src")this.src="";}
+  };
   const textNodes = Object.fromEntries([
     "message", "key-status", "tizen-status", "avplay-status", "remote-status"
   ].map(key => [key,{ textContent: "wird geprüft" }]));
@@ -82,6 +173,17 @@ function simulate(options = {}) {
     getAttribute(name){return this.attributes[name] ?? null;}};
   const pairCode = {textContent:""};
   const playerSurface = {hidden:true};
+  const livePlayerSurface = {hidden:true};
+  const livePlayerHint = {textContent:""};
+  const streamdevStatus={textContent:""};
+  const liveHtml5Video = {
+    paused:true,src:"",error:null,onplaying:null,oncanplay:null,onerror:null,
+    play(){this.paused=false;return Promise.resolve();},
+    pause(){this.paused=true;},load(){},removeAttribute(name){if(name==="src")this.src="";}
+  };
+  const remoteHint = {textContent:""};
+  const audioHint = {textContent:""};
+  const lifecycleHint = {textContent:""};
   const nativeAvplayObject = {hidden:false};
   const recordingHtml5Video = {
     hidden:true,paused:true,src:"",error:null,
@@ -100,8 +202,11 @@ function simulate(options = {}) {
   };
   const listeners = {};
   const document = {
+    visibilityState: options.visibleHome ? "visible" : "hidden",
     readyState: "complete",
+    documentElement: {classList: {add(){},remove(){}}},
     getElementById(id) {
+      if (nodes[id]) return nodes[id];
       if (id === "startup-cover") return overlay;
       if (id === "startup-video") return video;
       if (stateNodes[id]) return stateNodes[id];
@@ -110,27 +215,49 @@ function simulate(options = {}) {
       if (id === "suite-connection-result") return serverStatus;
       if (id === "home-server-state") return textNodes["message"];
       if (id === "topbar-server-status") return textNodes["message"];
+      if (homeNodes[id]) return homeNodes[id];
       if (id === "app-build-version") return versionFooter;
       if (id === "settings-app-build-version") return versionSettings;
       if (id === "pairing-result") return pairResult;
       if (id === "pairing-user-code") return pairCode;
       if (id === "live-channel-list") return liveList;
       if (id === "live-backend-name") return liveBackendName;
+      if (id === "native-timer-list") return nativeTimerList;
+      if (id === "native-timer-backend-name") return nativeTimerBackendName;
+      if (searchTimerNodes[id]) return searchTimerNodes[id];
+      if (globalSearchNodes[id]) return globalSearchNodes[id];
+      if (id === "global-search-input") return nodes["global-search-input"];
+      if (id === "live-epg-status") return liveEpgStatus;
+      if (id === "live-epg-list") return liveEpgList;
+      if (id === "live-epg-scroll-actions") return epgScrollActions;
+      if (epgDetailNodes[id]) return epgDetailNodes[id];
       if (id === "recording-list") return recordingList;
+      if (id === "live-player-surface") return livePlayerSurface;
+      if (id === "live-player-hint") return livePlayerHint;
+      if (id === "live-streamdev-status") return streamdevStatus;
+      if (id === "live-html5-video") return liveHtml5Video;
       if (id === "recording-player-surface") return playerSurface;
+      if (id === "recording-remote-hint") return remoteHint;
+      if (id === "recording-audio-hint") return audioHint;
+      if (id === "recording-lifecycle-hint") return lifecycleHint;
       if (id === "recording-html5-video") return recordingHtml5Video;
       if (id === "recording-avplay-object") return nativeAvplayObject;
       if (id === "recording-backend-name") return recordingBackendName;
+      if (id === "recording-detail-info") return recordingDetailInfo;
+      if (id === "recording-detail-poster") return recordingPoster;
       if (!textNodes[id]) throw Error("Missing test node " + id);
       return textNodes[id];
     },
     createElement(tag) {
+      if (tag==="video" && options.mediaCanPlayType)
+        return {canPlayType(){return options.mediaCanPlayType;}};
       const attrs={};
       const node={
-        tagName:tag.toUpperCase(),children:[],textContent:"",tabIndex:-1,isFocused:false,
+        tagName:tag.toUpperCase(),children:[],textContent:"",style:{},tabIndex:-1,isFocused:false,
         classList:{toggle(name,enabled){if(name==="is-focused")node.isFocused=enabled;}},
         appendChild(child){this.children.push(child);},
         setAttribute(name,value){attrs[name]=value;},
+        removeAttribute(name){delete attrs[name];},
         getAttribute(name){return attrs[name] === undefined ? null : attrs[name];},
         focus(){},scrollIntoView(){},
         addEventListener(name,fn){if(name==="click")this.click=fn;}
@@ -147,15 +274,22 @@ function simulate(options = {}) {
   };
   const exits = { count: 0 };
   const window = {
-    tizen: { tvinputdevice: { registerKey() {} }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
-    webapis: { avplay: {} }, setTimeout() { return 1; }, clearTimeout() {}
+    tizen: { tvinputdevice: { registerKey(name) {
+      if (options.blockMediaKeys && /^(Media|Color)/.test(name)) throw Error("SecurityError");
+    } }, application: { getCurrentApplication() { return { exit() { exits.count++; } }; } } },
+    webapis: { avplay: options.avplay || {} }, setTimeout() { return 1; }, clearTimeout() {}
   };
   if (options.keymanager) window.tizen.keymanager = options.keymanager;
   if (options.localBase !== undefined) window.VDR_SUITE_SERVER_BASE = options.localBase;
   if (options.localStorage !== undefined) window.localStorage = options.localStorage;
   if (options.XMLHttpRequest !== undefined) window.XMLHttpRequest = options.XMLHttpRequest;
+  if (options.artworkApi) {
+    window.URL=options.artworkApi;
+    window.Blob=function(data,opts){this.data=data;this.type=opts.type;};
+  }
+  if(options.crypto)window.crypto=options.crypto;
   runInNewContext(runtime, { document, window, URL });
-  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, liveList, liveBackendName, recordingList, recordingBackendName, playerSurface, versionFooter, versionSettings };
+  return { nodes, panels, textNodes, video, listeners, overlay, exits, stateNodes, serverStatus, serverInput, pairResult, pairCode, nativeTimerList, nativeTimerBackendName, searchTimerList, searchTimerPreviewList, searchTimerNodes, globalSearchNodes, homeNodes, liveList, liveBackendName, liveEpgStatus, liveEpgList, epgDetailNodes, epgScrollActions, recordingList, recordingBackendName, recordingDetailInfo, recordingPoster, playerSurface, livePlayerSurface, livePlayerHint, liveHtml5Video, streamdevStatus, remoteHint, audioHint, lifecycleHint, versionFooter, versionSettings };
 }
 
 test("Installed Samsung runtime shows actual deterministic build identity immediately", () => {
@@ -166,7 +300,7 @@ test("Installed Samsung runtime shows actual deterministic build identity immedi
   const manifest = readFileSync("app/config.xml","utf8");
   assert.equal(info.version, pkg.version);
   assert.match(manifest, new RegExp('version="' + info.version.replace(/\./g,"\\.") + '"'));
-  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S5\.1 · b[0-9a-f]{12}$/);
+  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S8\.3 · b[0-9a-f]{12}$/);
   assert(!runtime.includes("VDR-Suite Samsung · S3.3"));
   const sim = simulate();
   assert.equal(sim.versionFooter.textContent, info.label);
@@ -178,7 +312,7 @@ test("S2.1 runtime boots original intro, capability probes and D-pad navigation"
   const sim = simulate();
   assert.equal(sim.textNodes["tizen-status"].textContent, "vorhanden");
   assert.equal(sim.textNodes["avplay-status"].textContent, "vorhanden");
-  assert.equal(sim.textNodes["remote-status"].textContent, "vorhanden");
+  assert.match(sim.textNodes["remote-status"].textContent,/PLAY\/PAUSE\/STOP\/BLAU registriert/);
   assert.equal(sim.video.src, "./assets/branding/startvideo.mp4");
   assert.equal(sim.overlay.hidden, false);
   // Finish splash and exercise remote on HOME, other views and back.
@@ -186,15 +320,16 @@ test("S2.1 runtime boots original intro, capability probes and D-pad navigation"
   function key(keyCode) {
     sim.listeners.keydown({ keyCode, preventDefault() {} });
   }
-  key(40); // down: home nav -> stage
-  key(39); // right: hero
-  assert.equal(sim.nodes["stage-hero"].isFocused, true);
-  key(13); // OK -> live view
-  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
-  assert.equal(sim.nodes["nav-live"].isFocused, true);
-  key(10009); // BACK -> home with exact previous card focused
+  key(40); // Home refresh: explicit action, no network by navigation
+  assert.equal(sim.nodes["home-refresh"].isFocused, true);
+  key(40); // editorial hero
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
+  key(13); // open canonical Recordings view
+  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  assert.equal(sim.nodes["nav-recordings"].isFocused, true);
+  key(10009); // BACK restores editorial Home feature
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
 });
 
 
@@ -202,59 +337,57 @@ test("S2.2 D-Pad remembers the selected tile and Back restores Home focus", () =
   const sim = simulate();
   sim.video.finish();
   const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
-  key(40); // from Home menu to first stage card
-  key(39); // hero card
-  key(40); // middle action button
-  key(40); // middle rail card
-  key(39); // search rail card
-  assert.equal(sim.nodes["rail-search"].isFocused, true);
-  key(38); // previous action row
-  assert.equal(sim.nodes["action-recordings"].isFocused, true);
-  key(40); // return to remembered rail card, not default column
-  assert.equal(sim.nodes["rail-search"].isFocused, true);
-  key(13); // open search
-  assert.equal(sim.panels.find(p => p.route === "search").hidden, false);
-  assert.equal(sim.nodes["nav-search"].isFocused, true);
-  assert.equal(sim.nodes["rail-search"].isFocused, false); // never focus a hidden tile
-  sim.listeners.focusin({ target: sim.nodes["rail-live"] }); // hidden panel can't hijack focus
-  assert.equal(sim.nodes["nav-search"].isFocused, true);
-  key(10009); // return to the exact Home card
-  assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["rail-search"].isFocused, true);
-  key(10009); // Back from Home calls Tizen application exit
-  assert.equal(sim.exits.count, 1);
+  key(40); // refresh
+  key(40); // feature
+  key(39); // Timer summary
+  assert.equal(sim.nodes["home-timer-open"].isFocused,true);
+  key(38); // action row
+  assert.equal(sim.nodes["home-refresh"].isFocused,true);
+  key(40); // remembered Timer summary
+  assert.equal(sim.nodes["home-timer-open"].isFocused,true);
+  key(13); // canonical Timer route
+  assert.equal(sim.panels.find(p => p.route === "timers").hidden,false);
+  assert.equal(sim.nodes["nav-timers"].isFocused,true);
+  sim.listeners.focusin({target:sim.nodes["home-feature"]});
+  assert.equal(sim.nodes["nav-timers"].isFocused,true);
+  key(10009);
+  assert.equal(sim.panels.find(p => p.route === "home").hidden,false);
+  assert.equal(sim.nodes["home-timer-open"].isFocused,true);
+  key(10009);
+  assert.equal(sim.exits.count,1);
 });
 
 test("S2.2 Back traverses detail history without losing the original Home tile", () => {
   const sim = simulate();
   sim.video.finish();
   const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
-  key(40); // stage-favorites
-  key(39); // stage-hero
-  key(13); // live
-  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
-  key(39); // nav-recordings
-  key(13); // recordings from live
+  key(40); // Home refresh
+  key(40); // Hero
+  key(13); // Recordings
   assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  key(39); // nav-search
+  key(13); // open Search from Recordings
+  assert.equal(sim.panels.find(p => p.route === "search").hidden, false);
   key(10009);
-  assert.equal(sim.panels.find(p => p.route === "live").hidden, false);
-  assert.equal(sim.nodes["nav-recordings"].isFocused, true);
+  assert.equal(sim.panels.find(p => p.route === "recordings").hidden, false);
+  assert.equal(sim.nodes["nav-search"].isFocused, true);
   key(10009);
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["stage-hero"].isFocused, true);
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
 });
 
 test("S2.2 explicit Home clears history and restores origin from detail Home button", () => {
   const sim = simulate();
   sim.video.finish();
   const key = keyCode => sim.listeners.keydown({ keyCode, preventDefault() {} });
-  key(40); // stage-favorites
-  key(13); // live
-  key(40); // focus detail-live-home
-  assert.equal(sim.nodes["detail-live-home"].isFocused, true);
-  key(13); // explicit back to Home
+  key(40); // refresh
+  key(40); // Hero
+  key(13); // Recordings
+  key(40); // detail-recordings-home
+  assert.equal(sim.nodes["detail-recordings-home"].isFocused, true);
+  key(13); // explicit Home
   assert.equal(sim.panels.find(p => p.route === "home").hidden, false);
-  assert.equal(sim.nodes["stage-favorites"].isFocused, true);
+  assert.equal(sim.nodes["home-feature"].isFocused, true);
   key(10009);
   assert.equal(sim.exits.count, 1); // no stale detail history
 });
@@ -279,11 +412,20 @@ test("S2.3 all media detail routes cycle purely local preview states", () => {
     sim.nodes["nav-" + route].click();
     assert.equal(sim.panels.find(p => p.route === route).hidden, false);
     assert.equal(sim.stateNodes["detail-state-" + route].dataState, "offline");
-    assert.equal(sim.stateNodes["detail-state-title-" + route].textContent, "Noch keine Serververbindung");
-    key(40); // down to detail Home button
-    key(39); // right to local state preview
+    assert.equal(sim.stateNodes["detail-state-title-" + route].textContent,
+      route === "timers" ? "Bereit für echte VDR-Timer" : "Noch keine Serververbindung");
+    // The Search and Timer routes now have real controls; the old standalone
+    // presentation preview remains an explicitly selected, LOCAL-only test.
+    sim.nodes["detail-" + route + "-preview"].click();
     assert.equal(sim.nodes["detail-" + route + "-preview"].isFocused, true);
-    for (const [mode, skeleton] of [["loading",false],["empty",true],["error",true],["offline",true]]) {
+    // The search preview initializes its local sequence; the Timer route's
+    // live status is independent of the original local preview sequence.
+    assert.equal(sim.stateNodes["detail-state-" + route].dataState,
+      route==="search" ? "loading" : "offline");
+    const sequence=route==="search" ?
+      [["empty",true],["error",true],["offline",true],["loading",false]] :
+      [["loading",false],["empty",true],["error",true],["offline",true]];
+    for (const [mode,skeleton] of sequence) {
       key(13);
       assert.equal(sim.stateNodes["detail-state-" + route].dataState, mode);
       assert.equal(sim.stateNodes["detail-state-skeleton-" + route].hidden, skeleton);
@@ -297,7 +439,8 @@ test("S2.3 no backend requests, external images or media playback in view code",
   const views = readFileSync("app/src/views/view-state.js", "utf8");
   const app = readFileSync("app/src/main.js", "utf8");
   assert.doesNotMatch(views + app, /fetch\(|XMLHttpRequest|http:\/\//);
-  assert.match(html, /Statusvorschau – keine echten Serverdaten/);
+  assert.match(html, /data-global-search-action="go"/);
+  assert.match(html, /data-global-search-action="epg-more"/);
   assert.match(html, /data-live-action="load"/);
   assert.match(html, /data-recordings-action="load"/);
   assert.doesNotMatch(html, /data-preview-route="recordings"/);
@@ -327,9 +470,9 @@ test("S3.1 settings offers a TV-focusable HTTPS input and explicit probe", () =>
   sim.nodes["nav-settings"].click();
   press(40); // first settings control: Back Home
   assert.equal(sim.nodes["detail-settings-home"].isFocused,true);
-  press(39); // address input
+  press(39); // address input; focusing opens native Samsung IME
   assert.equal(sim.nodes["settings-base-input"].isFocused,true);
-  press(39); // explicit test button
+  press(65376); // IME Done, then return to normal remote focus navigation
   assert.equal(sim.nodes["settings-test"].isFocused,true);
   press(13); // no address: fail closed before XHR
   assert.match(sim.serverStatus.textContent,/HTTPS/i);
@@ -337,6 +480,50 @@ test("S3.1 settings offers a TV-focusable HTTPS input and explicit probe", () =>
   press(10009); // restore Settings origin
   assert.equal(sim.panels.find(p=>p.route==="home").hidden,false);
 });
+
+test("S6.16 Samsung native IME exclusively owns Backspace, arrows and editing keys",()=>{
+  const sim=simulate();
+  sim.video.finish();
+  sim.nodes["nav-settings"].click();
+  const press=(keyCode,target=sim.serverInput)=>{
+    let prevented=false;
+    sim.listeners.keydown({keyCode,target,preventDefault(){prevented=true;}});
+    return prevented;
+  };
+  press(40,{});
+  press(39,{});
+  assert.equal(sim.serverInput.isFocused,true);
+  // A Samsung virtual keyboard can dispatch events at document level.
+  // All edit/navigation keys must bypass the global capture handler.
+  for(const key of [8,37,38,39,40,13,49,50]){
+    assert.equal(press(key,{}),false,"IME key "+key+" must keep browser default");
+    assert.equal(sim.serverInput.isFocused,true,"IME key "+key+" must keep input focused");
+    assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  }
+  // Remote Return closes the keyboard first, not the whole Settings route.
+  assert.equal(press(10009,{}),false);
+  assert.equal(sim.nodes["settings-test"].isFocused,true);
+  assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  // Once editing is closed, the shared remote owner must work normally.
+  assert.equal(press(10009,{}),true);
+  assert.equal(sim.panels.find(p=>p.route==="home").hidden,false);
+});
+
+test("S6.16 Samsung IME Cancel leaves Settings and saved server address intact",()=>{
+  const store={writes:0,getItem(){return null;},setItem(){this.writes++;}};
+  const sim=simulate({localStorage:store});
+  sim.video.finish();
+  sim.nodes["nav-settings"].click();
+  sim.nodes["settings-base-input"].click();
+  assert.equal(sim.serverInput.isFocused,true);
+  let prevented=false;
+  sim.listeners.keydown({keyCode:65385,target:{},preventDefault(){prevented=true;}});
+  assert.equal(prevented,false);
+  assert.equal(sim.nodes["settings-test"].isFocused,true);
+  assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  assert.equal(store.writes,0,"no invalid or empty server must be persisted");
+});
+
 test("S3.2 pairing is reachable by D-pad but refuses unverified server/unsafe vault", () => {
   const sim = simulate();
   sim.video.finish();
@@ -434,8 +621,13 @@ function liveTransport() {
   XHR.prototype.setRequestHeader=function(name,value){this.headers[name]=value;};
   XHR.prototype.send=function(body){this.body=body;};
   XHR.prototype.abort=function(){this.aborted=true;};
-  function reply(i,status,value) {
+  XHR.prototype.getResponseHeader=function(name){
+    return name==="ETag" ? (this.etag || null) :
+      name==="Content-Type" ? (this.mime || null) : null;
+  };
+  function reply(i,status,value,etag) {
     calls[i].status=status;calls[i].responseURL=calls[i].url;
+    calls[i].etag=etag || null;
     calls[i].responseText=JSON.stringify(value);
     calls[i].onload();
   }
@@ -502,13 +694,13 @@ test("S3.3 restart reads KeyManager, explicit Live click verifies and displays r
   assert.match(h.calls[1].url,/\/api\/v1\/backends\?/);
   h.reply(1,200,backendPage);
   assert.match(h.calls[2].url,/\/api\/v1\/channels\?backendId=home/);
-  h.reply(2,200,channelPage("ch1_more"));
+  h.reply(2,200,channelPage("ch2_more"));
   assert.equal(sim.liveList.children.length,1);
   assert.equal(sim.liveList.children[0].children[0].textContent,"1 · Das Erste");
   assert.match(sim.liveBackendName.textContent,/Wohnzimmer/);
   assert.equal(sim.stateNodes["detail-state-live"].dataState,"ready");
   sim.nodes["detail-live-more"].click();
-  assert.match(h.calls[3].url,/cursor=ch1_more/);
+  assert.match(h.calls[3].url,/cursor=ch2_more/);
   h.reply(3,200,channelPage());
   assert.equal(sim.liveList.children.length,2);
   assert.equal(sim.pairResult.getAttribute("data-pair-state"),"authenticated");
@@ -670,4 +862,1222 @@ test("S4.2 real VDR folders open and BACK returns to parent, with legacy flat li
     meta:{partial:false}});
   assert.equal(sim.recordingList.children.length,1);
   assert.equal(sim.recordingList.children[0].children[0].textContent,"Ein Film");
+});
+
+test("S6.3 real channel rows enter the single D-pad focus graph; OK shows metadata only",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first=channelPage().items[0];
+  const second={...first,channelId:"second-channel",channelNumber:17,name:"ZDF"};
+  const third={...first,channelId:"third-channel",channelNumber:230,name:"WDR"};
+  h.reply(2,200,{...channelPage(),items:[first,second,third]});
+  assert.equal(sim.liveList.children.length,3);
+  assert.equal(sim.liveList.children[0].getAttribute("role"),"button");
+  assert.equal(sim.liveList.children[0].getAttribute("data-focus-id"),"channel-row-0");
+  assert.equal(sim.liveList.children[1].getAttribute("aria-label"),"17 · ZDF");
+  const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(40);
+  assert.equal(sim.liveList.children[0].isFocused,true,"DOWN from Sender laden reaches first row");
+  key(40);
+  assert.equal(sim.liveList.children[1].isFocused,true,"DOWN reaches next sender");
+  key(13);
+  assert.match(sim.stateNodes["detail-state-title-live"].textContent,/17 · ZDF/);
+  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/Streamdev über AVPlay/);
+  assert.equal(h.calls.length,3,"OK on sender performs no hidden playback or HTTP request");
+  key(38);
+  assert.equal(sim.liveList.children[0].isFocused,true);
+  key(38);
+  assert.equal(sim.nodes["detail-live-preview"].isFocused,true,"UP leaves channel list");
+  sim.liveList.children[2].click();
+  assert.equal(sim.liveList.children[2].isFocused,true,"Mouse/OK shares the focus owner");
+  key(10009);
+  assert.equal(sim.panels.find(p=>p.route==="home").hidden,false);
+});
+test("S6.3 more channels focuses first appended sender; reload removes stale focus nodes",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,channelPage("ch2_second"));
+  const old=sim.liveList.children[0];
+  sim.nodes["detail-live-more"].click();
+  assert.match(h.calls[3].url,/cursor=ch2_second/);
+  const next={...channelPage().items[0],channelNumber:2,name:"ZDF",channelId:"zdf"};
+  h.reply(3,200,{...channelPage(),items:[next]});
+  assert.equal(sim.liveList.children.length,2);
+  assert.equal(sim.liveList.children[1].isFocused,true,
+    "new page focuses first appended sender");
+  const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(38);
+  assert.equal(old.isFocused,true,"UP returns to previous page's last row");
+  sim.nodes["detail-live-preview"].click();
+  h.reply(4,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(5,200,backendPage);
+  h.reply(6,200,channelPage());
+  assert.equal(sim.liveList.children.length,1,"refresh discards previous list");
+  assert.equal(sim.liveList.children[0].getAttribute("data-focus-id"),"channel-row-0");
+  key(40);
+  assert.equal(sim.liveList.children[0].isFocused,true);
+  assert.ok(h.calls.every(req=>req.method==="GET"));
+});
+
+test("S6.4 live channel EPG is explicitly requested and never starts playback",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const selected=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  assert.equal(h.calls.length,3,"OK on channel selects metadata only");
+  sim.nodes["detail-live-epg-now"].click();
+  assert.match(h.calls[3].url,/\/api\/v1\/epg\/now-next\?/);
+  assert.match(h.calls[3].url,/backendId=home&channelId=/);
+  assert.equal(h.calls[3].method,"GET");
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:selected.channelId,
+    items:[{channelId:selected.channelId,title:"Heute",subtitle:"Kurz",
+      startTime:from,endTime:String(Number(from)+3600),durationSeconds:3600}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.liveEpgList.children.length,1);
+  assert.match(sim.liveEpgList.children[0].textContent,/Jetzt.*Heute/);
+  sim.nodes["detail-live-epg-window"].click();
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/window\?/);
+  const query=new URL(h.calls[4].url).searchParams;
+  assert.equal(query.get("limit"),"24");
+  assert.equal(Number(query.get("untilTime"))-Number(query.get("fromTime")),86400);
+  h.reply(4,403,{code:"forbidden"});
+  assert.match(sim.liveEpgStatus.textContent,/epg.view/);
+  assert.equal(h.calls.every(req=>req.method==="GET"),true);
+});
+
+test("S6.4 selected VDR recording reads metadata/artwork only with Device header",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={kind:"recording",backendId:"home",
+    recordingId:"rec_00000000000000000000000000000001",title:"Ein Film",
+    description:"Beschreibung",recordedAt:"2026-10-25T08:00:00Z",
+    durationSeconds:3600,durationKnown:true,sizeMb:200};
+  h.reply(2,200,{items:[rec],page:{limit:100,offset:0,totalCount:1,hasMore:false},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  assert.equal(h.calls[3].method,"GET");
+  assert.match(h.calls[3].url,/\/api\/v1\/recordings\/rec_0{31}1\?backendId=home$/);
+  assert.match(h.calls[3].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(3,200,{...rec,metadata:{state:"available",
+    source:"restfulapi-scraper-bridge",contentKind:"movie",genreText:"Drama",
+    overview:"Ein echter Film"}});
+  assert.match(sim.recordingDetailInfo.textContent,/Drama/);
+  assert.match(sim.recordingDetailInfo.textContent,/Ein Film/);
+  assert.match(sim.recordingDetailInfo.textContent,/Laufzeit: 60 Min/);
+  assert.match(sim.recordingDetailInfo.textContent,/Inhalt: Ein echter Film/);
+  assert.match(h.calls[4].url,/\/artwork\?backendId=home$/);
+  h.reply(4,200,{backendId:"home",recordingId:rec.recordingId,items:[]});
+  assert.match(sim.recordingDetailInfo.textContent,/Kein Artwork/);
+  assert.equal(h.calls.every(req=>req.method==="GET"),true);
+  sim.nodes["nav-live"].click();
+  assert.equal(sim.recordingPoster.hidden,true);
+});
+
+test("S6.4 late recording detail response cannot revive an earlier selection",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first={kind:"recording",backendId:"home",recordingId:"rec_00000000000000000000000000000001",
+    title:"Erster Film",description:"1",recordedAt:"2026-10-25T08:00:00Z",
+    durationSeconds:60,durationKnown:true,sizeMb:1};
+  const second={...first,recordingId:"rec_00000000000000000000000000000002",title:"Zweiter Film"};
+  h.reply(2,200,{items:[first,second],
+    page:{limit:100,offset:0,totalCount:2,hasMore:false},meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  assert.equal(h.calls.length,4);
+  sim.recordingList.children[1].click();
+  assert.equal(h.calls[3].aborted,true);
+  assert.equal(h.calls.length,5);
+  h.reply(3,200,{...first,metadata:{state:"available",source:"none",contentKind:"movie"}});
+  assert.doesNotMatch(sim.recordingDetailInfo.textContent,/Erster Film/);
+  h.reply(4,404,{code:"not_found"});
+  assert.match(sim.recordingDetailInfo.textContent,/nicht vorhanden/);
+});
+
+test("S6.4 24h programme has full-height two-pane layout and D-pad rows",()=>{
+  const live=html.slice(html.indexOf('data-panel="live"'),html.indexOf('data-panel="recordings"'));
+  const css=readFileSync("app/styles.css","utf8");
+  assert.match(live,/class="live-workspace"/);
+  assert.ok(live.indexOf('class="live-catalog"')<live.indexOf('class="live-epg-panel'));
+  assert.match(css,/\.live-workspace\s*\{[^}]*grid-template-columns:45% minmax\(0,1fr\)/);
+  assert.match(css,/#detail-state-live\.live-epg-panel \.live-epg-events\s*\{[^}]*max-height:none/);
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish(); sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[{channelId:channel.channelId,title:"Jetzt läuft",startTime:from,
+      endTime:String(Number(from)+3600),durationSeconds:3600},
+      {channelId:channel.channelId,title:"Danach läuft",
+      startTime:String(Number(from)+3600),endTime:String(Number(from)+7200),
+      durationSeconds:3600}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.liveEpgList.children.length,2);
+  const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(40); // Move from the EPG action into the first sender without selecting it again.
+  key(39); // Cross from left sender column to first right-side EPG row.
+  assert.equal(sim.liveEpgList.children[0].isFocused,true,"RIGHT from channel focuses EPG");
+  key(40);
+  assert.equal(sim.liveEpgList.children[1].isFocused,true,"DOWN moves within EPG");
+  assert.equal(h.calls.length,4,"navigating programmes is read-only, no playback");
+});
+
+test("S6.4 recording metadata normalizes VDR epoch dates and pipe genres",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={kind:"recording",backendId:"home",
+    recordingId:"rec_00000000000000000000000000000001",title:"Ein Western",
+    description:"Beschreibung",recordedAt:"1790837880",
+    durationSeconds:6900,durationKnown:true,sizeMb:201};
+  h.reply(2,200,{items:[rec],page:{limit:100,offset:0,totalCount:1,hasMore:false},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  h.reply(3,200,{...rec,metadata:{state:"available",source:"restfulapi-scraper-bridge",
+    contentKind:"movie",genreText:"[Western|Drama]",overview:"Eine Geschichte"}});
+  assert.match(sim.recordingDetailInfo.textContent,/Genre: Western · Drama/);
+  assert.match(sim.recordingDetailInfo.textContent,/Aufgenommen: \d{2}\.\d{2}\.\d{4}/);
+  assert.doesNotMatch(sim.recordingDetailInfo.textContent,/1790837880|\[Western\|Drama\]/);
+});
+
+
+test("S6.6 EPG row OK opens a readable detail, never silently ignores key",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const first={channelId:channel.channelId,eventId:"81234",
+    title:"Die Rosenheim-Cops",subtitle:"Frostiger Tod",startTime:from,
+    endTime:String(Number(from)+3600),durationSeconds:3600};
+  const second={channelId:channel.channelId,title:"heute",
+    startTime:String(Number(from)+3600),endTime:String(Number(from)+4200),
+    durationSeconds:600};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[first,second],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const detail=sim.epgDetailNodes;
+  assert.equal(detail["live-epg-detail"].hidden,false);
+  assert.match(detail["live-epg-detail-title"].textContent,/Rosenheim-Cops/);
+  assert.equal(h.calls.length,4,"preview uses existing metadata, not network");
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/event\?/);
+  assert.equal(h.calls[4].method,"GET");
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"81234",title:"Die Rosenheim-Cops",subtitle:"Frostiger Tod",
+    description:"Ausführlicher Inhalt",startTime:first.startTime,
+    endTime:first.endTime,durationSeconds:3600});
+  assert.equal(detail["live-epg-detail-description"].textContent,"Ausführlicher Inhalt");
+  key(40);key(13);
+  assert.equal(h.calls.length,7,"detail response starts image GET before next EPG window");
+  assert.match(h.calls[6].url,/\/api\/v1\/epg\/window\?/);
+  const params=new URL(h.calls[6].url).searchParams;
+  assert.equal(params.get("fromTime"),second.startTime);
+  assert.equal(params.get("untilTime"),second.endTime);
+  assert.match(detail["live-epg-detail-title"].textContent,/heute/);
+  h.reply(6,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...second,eventId:"13739"}],
+    page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+  assert.equal(h.calls.length,8,"verified ID triggers native detail GET");
+  assert.match(h.calls[7].url,/\/api\/v1\/epg\/event\?/);
+  assert.equal(new URL(h.calls[7].url).searchParams.get("eventId"),"13739");
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"13739",title:"heute",subtitle:"",
+    description:"Nachrichten und Wetter",startTime:second.startTime,
+    endTime:second.endTime,durationSeconds:600});
+  assert.match(detail["live-epg-detail-description"].textContent,/Nachrichten und Wetter/);
+  sim.nodes["nav-recordings"].click();
+  assert.equal(detail["live-epg-detail"].hidden,true);
+});
+
+test("S6.7 missing or ambiguous native EPG IDs never cause guessed detail requests",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const entry={channelId:channel.channelId,title:"Tagesschau",
+    startTime:from,endTime:String(Number(from)+900),durationSeconds:900};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[entry],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/window\?/);
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    items:[entry],page:{limit:24,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  assert.equal(h.calls.length,5);
+  assert.match(sim.epgDetailNodes["live-epg-detail-description"].textContent,
+    /keine eindeutig belegte native Event-ID/);
+  key(13);
+  h.reply(5,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...entry,eventId:"81234"},{...entry,eventId:"81235"}],
+    page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+  assert.equal(h.calls.length,6,"duplicate matching rows are ambiguous");
+  key(13);
+  h.reply(6,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...entry,eventId:"81234"}],
+    page:{limit:24,hasMore:true,nextCursor:"ew1_more"},meta:{partial:false}});
+  assert.equal(h.calls.length,7,"not all rows received; do not assume uniqueness");
+  key(13);
+  assert.equal(h.calls.length,8);
+  sim.nodes["nav-recordings"].click();
+  const aborted=h.calls[7];
+  assert.equal(aborted.aborted,true,"leaving page cancels pending window request");
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
+    items:[{...entry,eventId:"81234"}],
+    page:{limit:24,hasMore:false,nextCursor:null},meta:{partial:false}});
+  assert.equal(h.calls.length,8,"stale callback must not start detail after navigation");
+});
+
+test("S6.8 authorized EPG preferred poster is shown and freed when leaving Live-TV",()=>{
+  const h=liveTransport(),urls=[],revoked=[];
+  const api={
+    createObjectURL(blob) {
+      assert.equal(blob.type,"image/jpeg");
+      const url="blob:epg-"+(urls.length+1);urls.push(url);return url;
+    },
+    revokeObjectURL(url){revoked.push(url);}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,artworkApi:api});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const evt={channelId:channel.channelId,eventId:"13739",title:"Tagesschau",
+    subtitle:"Nachrichten",startTime:from,endTime:String(Number(from)+900),durationSeconds:900};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[evt],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  assert.match(h.calls[4].url,/\/api\/v1\/epg\/event\?/);
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"13739",title:"Tagesschau",subtitle:"Nachrichten",
+    description:"Nachrichten",startTime:evt.startTime,
+    endTime:evt.endTime,durationSeconds:900});
+  assert.match(h.calls[5].url,/\/api\/v1\/epg\/preferred-artwork\?/);
+  assert.equal(h.calls[5].responseType,"arraybuffer");
+  assert.match(h.calls[5].headers.Authorization,/^VDR-Suite-Device /);
+  h.calls[5].status=200;h.calls[5].response=new Uint8Array([1,2,3]).buffer;
+  h.calls[5].mime="image/jpeg";h.calls[5].responseURL=h.calls[5].url;h.calls[5].onload();
+  const img=sim.epgDetailNodes["live-epg-detail-poster"];
+  assert.equal(img.hidden,false);assert.equal(img.src,"blob:epg-1");
+  sim.nodes["nav-recordings"].click();
+  assert.equal(img.hidden,true);assert.equal(img.src,"");
+  assert.deepEqual(revoked,["blob:epg-1"]);
+});
+
+test("S6.8 EPG 404 preferred falls back to direct and stale images cannot appear",()=>{
+  const h=liveTransport(),urls=[];
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    artworkApi:{createObjectURL(){urls.push("blob:stale");return "blob:stale";},
+      revokeObjectURL(){}}});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  const evt={channelId:channel.channelId,eventId:"9",title:"Film",subtitle:"",
+    startTime:from,endTime:String(Number(from)+900),durationSeconds:900};
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[evt],page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(13);
+  h.reply(4,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"9",title:"Film",subtitle:"",description:"Beschreibung",
+    startTime:evt.startTime,endTime:evt.endTime,durationSeconds:900});
+  h.reply(5,404,{code:"not_found"});
+  assert.match(h.calls[6].url,/\/api\/v1\/epg\/artwork\?/);
+  h.reply(6,404,{code:"not_found"});
+  assert.match(sim.epgDetailNodes["live-epg-artwork-status"].textContent,/Kein Sendungsbild/);
+  assert.equal(urls.length,0);
+  key(13); // fetch again, then navigate away before its preferred response.
+  h.reply(7,200,{backendId:"home",channelId:channel.channelId,
+    eventId:"9",title:"Film",subtitle:"",description:"Beschreibung",
+    startTime:evt.startTime,endTime:evt.endTime,durationSeconds:900});
+  sim.nodes["nav-recordings"].click();
+  assert.equal(h.calls[8].aborted,true);
+  h.calls[8].status=200;h.calls[8].response=new Uint8Array([1]).buffer;
+  h.calls[8].mime="image/jpeg";h.calls[8].responseURL=h.calls[8].url;h.calls[8].onload();
+  assert.equal(urls.length,0,"stale response never creates poster URL");
+  assert.equal(sim.epgDetailNodes["live-epg-detail-poster"].hidden,true);
+});
+
+test("S6.10 native AVPlay clock diagnosis is bounded and invalidated on stop",()=>{
+  const evidence=[],mock={
+    state:"IDLE",time:0,listener:null,
+    open(){this.state="IDLE";},
+    setListener(handler){this.listener=handler;},
+    prepareAsync(success){this.state="READY";success();},
+    play(){this.state="PLAYING";},
+    pause(){this.state="PAUSED";},
+    stop(){this.state="IDLE";},
+    close(){this.state="NONE";},
+    getState(){return this.state;},
+    getCurrentTime(){return this.time;},
+    getTotalTrackInfo(){return [];},
+    getCurrentStreamInfo(){return [];}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:mock}});
+  assert.equal(player.start("https://tv.example.test/stream.ts",
+    (state,detail)=>evidence.push({state,detail})),true);
+  mock.listener.oncurrentplaytime(1000);
+  mock.listener.oncurrentplaytime(1500);
+  mock.listener.oncurrentplaytime(2100);
+  mock.listener.oncurrentplaytime(3900);
+  mock.time=3900;
+  assert.equal(player.inspectPlayback().state,"PLAYING");
+  assert.equal(player.inspectPlayback().seconds,3);
+  assert.equal(player.inspectPlayback().deltaSeconds,2);
+  assert.ok(evidence.some(x=>x.state==="progress"&&x.detail.advanced));
+  assert.equal(player.pauseOrResume("pause"),"paused");
+  assert.equal(player.inspectPlayback().state,"PAUSED");
+  assert.equal(player.pauseOrResume("play"),"resume_requested");
+  assert.equal(player.inspectPlayback().state,"PLAYING");
+  const previous=evidence.length,callback=mock.listener.oncurrentplaytime;
+  callback(-10);callback(Infinity);callback("secret");
+  assert.equal(evidence.length,previous,"bad callback data is dropped");
+  player.stop();callback(9999000);
+  assert.equal(player.inspectPlayback().state,"unavailable");
+  assert.equal(player.inspectPlayback().deltaSeconds,0);
+  assert.equal(evidence.length,previous,"stale callbacks cannot update UI");
+  assert.doesNotMatch(JSON.stringify(evidence),/https:|Cookie|secret/);
+});
+
+test("S6.10 EPG long synopsis can be scrolled with focusable D-pad actions",()=>{
+  assert.match(html,/data-focus-id="live-epg-scroll-down"/);
+  assert.match(html,/data-epg-scroll="1"/);
+  assert.match(html,/data-epg-scroll="-1"/);
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const channel=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:channel.channelId,
+    items:[{channelId:channel.channelId,title:"SOKO Potsdam",subtitle:"Running Dinner",
+      startTime:from,endTime:String(Number(from)+3000),durationSeconds:3000}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.epgScrollActions.hidden,false);
+  sim.nodes["live-epg-scroll-down"].click();
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,230);
+  sim.nodes["live-epg-scroll-down"].click();
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,460);
+  sim.nodes["live-epg-scroll-up"].click();
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,230);
+  sim.nodes["nav-recordings"].click();
+  assert.equal(sim.epgScrollActions.hidden,true);
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].hidden,true);
+});
+
+test("S6.12 registered remote keys require explicit TV privilege",()=>{
+  const config=readFileSync("app/config.xml","utf8");
+  assert.match(config,/<tizen:privilege name="http:\/\/tizen.org\/privilege\/tv.inputdevice"\/>/);
+  const registered=simulate();
+  assert.match(registered.textNodes["remote-status"].textContent,
+    /PLAY\/PAUSE\/STOP\/BLAU registriert/);
+  const blocked=simulate({blockMediaKeys:true});
+  assert.match(blocked.textNodes["remote-status"].textContent,
+    /nicht registriert: MediaPlay, MediaPause, MediaStop, ColorF3Blue/);
+  assert.equal(blocked.panels.find(p=>p.route==="home").hidden,false);
+});
+
+test("S6.12 EPG DOWN from last programme focuses its scroll action immediately",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const selected=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-epg-now"].click();
+  const from=new URL(h.calls[3].url).searchParams.get("fromTime");
+  h.reply(3,200,{backendId:"home",channelId:selected.channelId,
+    items:[{channelId:selected.channelId,title:"Jetzt",subtitle:"",
+      startTime:from,endTime:String(Number(from)+900),durationSeconds:900},
+      {channelId:selected.channelId,title:"Danach",subtitle:"",
+      startTime:String(Number(from)+900),endTime:String(Number(from)+1800),
+      durationSeconds:900}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  const key=k=>sim.listeners.keydown({keyCode:k,preventDefault(){}});
+  key(40);key(39);key(40);
+  assert.equal(sim.liveEpgList.children[1].isFocused,true);
+  key(40);
+  assert.equal(sim.nodes["live-epg-scroll-down"].isFocused,true);
+  key(13);
+  assert.equal(sim.epgDetailNodes["live-epg-detail"].scrollTop,230);
+  key(38);
+  assert.equal(sim.liveEpgList.children[1].isFocused,true);
+  assert.equal(h.calls.length,4,"scroll navigation never fetches metadata");
+});
+
+test("S6.13 MPEG audio is not silently classified as MP3 or decoded sound",()=>{
+  const events=[],api={
+    state:"IDLE",listener:null,selected:0,
+    open(){this.state="IDLE";},
+    setListener(listener){this.listener=listener;},
+    prepareAsync(ok){this.state="READY";ok();},
+    play(){this.state="PLAYING";},
+    getState(){return this.state;},
+    getTotalTrackInfo(){return [{type:"AUDIO",index:1,
+      extra_info:JSON.stringify({fourCC:"mpeg",channels:"2",sample_rate:"48000"})}];},
+    getCurrentStreamInfo(){return [{type:"AUDIO",index:1,
+      extra_info:JSON.stringify({fourCC:"mpeg",channels:"2",sample_rate:"48000"})}];},
+    setSelectTrack(){this.selected++;},
+    stop(){this.state="IDLE";},close(){this.state="NONE";}
+  };
+  const player=createSamsungRecordingPlayer({webapis:{avplay:api}});
+  assert.equal(player.start("https://example.test/media.ts",(state,detail)=>{
+    events.push({state,detail});
+  }),true);
+  const info=events.find(item=>item.state==="audio").detail;
+  assert.equal(info.status,"no_safe_switch");
+  assert.equal(info.currentIndex,1);
+  assert.equal(info.tracks[0].fourCC,"MPEG");
+  assert.equal(info.tracks[0].sampleRate,48000);
+  assert.match(describeSamsungAudio(info),/MPEG \[MPEG\].*48000Hz.*MP2\/MP3 nicht bestimmt/);
+  assert.equal(api.selected,0,"no speculative auto audio-track switching");
+  player.stop();
+});
+
+test("S6.13 TV sound routing diagnostics are read-only and fail closed",()=>{
+  let writes=0;
+  const good={tizen:{tvaudiocontrol:{
+    isMute(){return false;},getVolume(){return 30;},getOutputMode(){return "PCM";},
+    setMute(){writes++;},setVolume(){writes++;},playSound(){writes++;}
+  }}};
+  assert.match(samsungTvSoundStatus(good),/Stumm: nein · Lautstärke: 30 · Ausgabe: PCM/);
+  assert.equal(writes,0);
+  assert.equal(samsungTvSoundStatus({}),"TV-Tonstatus nicht verfügbar");
+  const bad={tizen:{tvaudiocontrol:{
+    isMute(){throw Error("credential secret");},
+    getVolume(){return -100;},getOutputMode(){return "untrusted-server-path";}
+  }}};
+  assert.equal(samsungTvSoundStatus(bad),"TV-Tonstatus nicht lesbar");
+  assert.doesNotMatch(samsungTvSoundStatus(bad),/secret|untrusted/);
+});
+
+test("S6.14 native control latency and delayed AVPlay clock probe are read-only and fenced",()=>{
+  const source=readFileSync("app/src/main.js","utf8");
+  assert.match(source,/var beforeCall=Date\.now\(\)/);
+  assert.match(source,/var afterCall=Date\.now\(\)/);
+  assert.match(source,/Native-API .*?callMs.*?Snapshot .*?snapshotMs/s);
+  assert.match(source,/recordingPlayer\.inspectPlayback\(\)/);
+  assert.match(source,/window\.setTimeout\(function \(\) \{/);
+  assert.match(source,/recordingControlSequence!==controlTicket/);
+  assert.match(source,/recordingPlaybackSession!==controllingSession/);
+  assert.match(source,/recordingControlSequence\+\+/);
+  assert.match(source,/Uhr unverändert/);
+  assert.doesNotMatch(source,/setBufferingParam\(/,
+    "observability-only slice must not silently tune the native media buffer");
+  assert.doesNotMatch(source,/resume_requested.*setSelectTrack/s,
+    "do not switch audio based on remote resume requests");
+});
+
+
+test("S6.15 remote digits, channel keys and Menu operate on the loaded TV UI without requests",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first=channelPage().items[0];
+  const second={...first,channelId:"second-channel",channelNumber:17,name:"ZDF"};
+  const third={...first,channelId:"third-channel",channelNumber:230,name:"WDR"};
+  h.reply(2,200,{...channelPage(),items:[first,second,third]});
+  assert.equal(sim.liveList.children.length,3);
+  const key=keyCode=>sim.listeners.keydown({keyCode,preventDefault(){}});
+  key(428); // CH- enters loaded channel list.
+  assert.equal(sim.liveList.children[0].isFocused,true);
+  key(428); // Next loaded channel.
+  assert.equal(sim.liveList.children[1].isFocused,true);
+  key(427); // CH+ back.
+  assert.equal(sim.liveList.children[0].isFocused,true);
+  key(49);key(55); // Channel 17 (only current loaded page).
+  assert.equal(sim.liveList.children[1].isFocused,true);
+  assert.equal(h.calls.length,3,"remote browsing must not fetch, tune or mutate");
+  key(18); // Samsung Menu -> VDR-Suite settings, not TV installation.
+  assert.equal(sim.panels.find(p=>p.route==="settings").hidden,false);
+  key(10009);
+  assert.equal(sim.panels.find(p=>p.route==="live").hidden,false);
+});
+
+
+test("S6.15 INFO on a real loaded channel requests existing authenticated now-next EPG",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();
+  sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  assert.equal(h.calls.length,3);
+  // Re-focus stays on the channel row after selecting it.
+  sim.listeners.keydown({keyCode:457,preventDefault(){}});
+  assert.equal(h.calls.length,4,"INFO must initiate the existing explicit EPG query");
+  assert.match(h.calls[3].url,/\/api\/v1\/epg\/now-next\?/);
+  assert.equal(h.calls[3].method,"GET");
+  assert.match(sim.liveEpgStatus.textContent,/wird geladen/);
+  assert.equal(h.calls.filter(req=>req.method!=="GET").length,0);
+});
+
+
+test("S6.17 HLS-TS AAC test requests only HLS TS and rejects wrong server profile",()=>{
+  const h=liveTransport(), avplay={
+    opened:0,open(){this.opened++;},play(){},
+    prepareAsync(){},setStreamingProperty(){},stop(){},close(){}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    mediaCanPlayType:"probably",avplay});
+  sim.video.finish();
+  sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-all"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={backendId:"home",recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Ton-Test",description:"Audio-Kompatibilität testen",recordedAt:"2026-10-26T10:00:00Z",
+    durationSeconds:1200,durationKnown:true,sizeMb:100};
+  h.reply(2,200,{items:[rec],page:{limit:100,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  const n=h.calls.length;
+  assert.equal(sim.nodes["detail-recordings-aac-hls"].getAttribute("data-recordings-action"),"aac-hls");
+  sim.nodes["detail-recordings-aac-hls"].click();
+  assert.equal(h.calls.length,n+1);
+  const payload=JSON.parse(h.calls[n].body);
+  assert.equal(payload.nativeMediaAccess,true);
+  assert.deepEqual(Array.from(payload.capabilities.protocols),["hls"]);
+  assert.deepEqual(Array.from(payload.capabilities.containers),["mpeg-ts"]);
+  assert.deepEqual(Array.from(payload.capabilities.audioCodecs),["aac"]);
+  assert.equal(payload.capabilities.maxAudioChannels,2);
+  const sessionId="ms_0123456789abcdef0123456789abcdef";
+  h.reply(n,201,{mediaSession:{id:sessionId,backendId:"home",
+    recordingId:rec.recordingId,presentationProfileId:"progressive-direct",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/recording/stream.ts"},
+    nativeMediaAccess:{transport:"http-cookie",
+      cookie:"vdr_suite_media=mg_0123456789abcdef0123456789abcdef.abcdefghijklmnop"}});
+  assert.equal(avplay.opened,0,"no player starts on server profile mismatch");
+  assert.equal(h.calls[n+1].method,"POST","mismatched session must be stopped");
+  assert.match(h.calls[n+1].url,/\/stop$/);
+  assert.match(sim.stateNodes["detail-state-description-recordings"].textContent,
+    /Serverantwort passt nicht/);
+});
+
+test("S6.17 HLS-TS AAC profile passes same-session native cookie to AVPlay",()=>{
+  const h=liveTransport(), avplay={
+    opened:[],cookie:null,
+    open(url){this.opened.push(url);},
+    setStreamingProperty(k,v){if(k==="COOKIE")this.cookie=v;},
+    setListener(){},setDisplayRect(){},
+    prepareAsync(success){this.ready=success;},play(){},stop(){},close(){},
+    getState(){return "PLAYING";},getTotalTrackInfo(){return [];},getCurrentStreamInfo(){return []}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    mediaCanPlayType:"probably",avplay});
+  sim.video.finish();sim.nodes["nav-recordings"].click();
+  sim.nodes["detail-recordings-all"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rec={backendId:"home",recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Ton-Test",description:"Audio-Kompatibilität testen",recordedAt:"2026-10-26T10:00:00Z",
+    durationSeconds:1200,durationKnown:true,sizeMb:100};
+  h.reply(2,200,{items:[rec],page:{limit:100,hasMore:false,nextCursor:null},
+    meta:{partial:false}});
+  sim.recordingList.children[0].click();
+  const n=h.calls.length;sim.nodes["detail-recordings-aac-hls"].click();
+  const sessionId="ms_0123456789abcdef0123456789abcdef";
+  const cookie="vdr_suite_media=mg_0123456789abcdef0123456789abcdef.abcdefghijklmnop";
+  h.reply(n,201,{mediaSession:{id:sessionId,backendId:"home",
+    recordingId:rec.recordingId,presentationProfileId:"hls-ts",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sessionId+"/hls/master.m3u8"},
+    nativeMediaAccess:{transport:"http-cookie",cookie}});
+  assert.equal(avplay.opened.length,1,"valid profile starts native player exactly once");
+  assert.match(avplay.opened[0],/\/hls\/master\.m3u8$/);
+  assert.equal(avplay.cookie,cookie);
+  assert.match(sim.audioHint.textContent,/HLS-TS mit AAC Stereo angefordert/);
+  assert.equal(sim.playerSurface.hidden,false);
+});
+
+
+test("S6.18 Live-TV only sends Device CREATE after explicit selected-channel play",()=>{
+  const h=liveTransport();
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    mediaCanPlayType:"probably"});
+  sim.video.finish();sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const first=channelPage().items[0];
+  h.reply(2,200,channelPage());
+  assert.equal(h.calls.length,3,"opening and loading list never creates MediaSession");
+  sim.liveList.children[0].click();
+  assert.equal(h.calls.length,3,"OK on sender only selects metadata");
+  sim.nodes["detail-live-play"].click();
+  assert.equal(h.calls.length,4,"explicit Live-TV button creates one session");
+  const create=h.calls[3];
+  assert.match(create.url,/\/api\/v1\/live-playback-sessions$/);
+  assert.equal(create.method,"POST");
+  assert.equal(create.withCredentials,true);
+  assert.match(create.headers.Authorization,/^VDR-Suite-Device /);
+  const request=JSON.parse(create.body);
+  assert.deepEqual(request.resourceKind,"live-channel");
+  assert.equal(request.backendId,"home");
+  assert.equal(request.channelId,first.channelId);
+  assert.deepEqual(Array.from(request.capabilities.protocols),["progressive"]);
+  assert.deepEqual(Array.from(request.capabilities.containers),["fmp4","mp4"]);
+  assert.deepEqual(Array.from(request.capabilities.audioCodecs),["aac"]);
+  assert.equal(request.capabilities.maxAudioChannels,2);
+  assert.equal(request.nativeMediaAccess,undefined);
+  const sid="ms_0123456789abcdef0123456789abcdef";
+  h.reply(3,201,{mediaSession:{id:sid,resourceKind:"live-channel",
+    backendId:"home",channelId:first.channelId,state:"ready",
+    presentationProfileId:"live-progressive-fmp4",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sid+"/live/stream.mp4"}});
+  assert.equal(sim.livePlayerSurface.hidden,false);
+  assert.match(sim.liveHtml5Video.src,/\/live\/stream\.mp4$/);
+  sim.liveHtml5Video.oncanplay();
+  sim.liveHtml5Video.onplaying();
+  assert.match(sim.livePlayerHint.textContent,/onplaying/);
+  const stop=(key)=>sim.listeners.keydown({keyCode:key,preventDefault(){}});
+  stop(413); // Samsung MediaStop
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  assert.equal(h.calls.length,5,"STOP releases session exactly once");
+  assert.match(h.calls[4].url,/\/api\/v1\/live-playback-sessions\/ms_[a-f0-9]{32}\/stop$/);
+  assert.equal(JSON.parse(h.calls[4].body).resourceKind,"live-channel");
+});
+test("S6.18 Live-TV refuses a missing play grant and never loads arbitrary media",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,mediaCanPlayType:"maybe"});
+  sim.video.finish();sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-play"].click();
+  h.reply(3,403,{error:{code:"forbidden"}});
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/media.live.play/);
+  assert.equal(h.calls.length,4,"forbidden is not retried with Browser routes");
+});
+test("S6.18 BACK during pending Live CREATE stops late session, never starts video",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,mediaCanPlayType:"probably"});
+  sim.video.finish();sim.nodes["nav-live"].click();
+  sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const ch=channelPage().items[0];h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();sim.nodes["detail-live-play"].click();
+  sim.listeners.keydown({keyCode:10009,preventDefault(){}});
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  const sid="ms_0123456789abcdef0123456789abcdef";
+  h.reply(3,201,{mediaSession:{id:sid,resourceKind:"live-channel",
+    backendId:"home",channelId:ch.channelId,state:"ready",
+    presentationProfileId:"live-progressive-fmp4",
+    mediaPath:"/vdr-suite/api/v1/media/sessions/"+sid+"/live/stream.mp4"}});
+  assert.equal(sim.livePlayerSurface.hidden,true,"stale callback cannot attach media");
+  assert.equal(sim.liveHtml5Video.src,"");
+  assert.match(h.calls[4].url,/\/stop$/);
+  assert.equal(h.calls.length,5);
+});
+
+
+test("S6.19 Timer view is read-only, loads real native VDR Timer from Device Public-v1",()=>{
+ const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+ sim.video.finish();sim.nodes["nav-timers"].click();
+ assert.equal(h.calls.length,0,"opening Timer view does not mutate/read automatically");
+ assert.match(sim.stateNodes["detail-state-description-timers"].textContent,/timers.view/);
+ sim.nodes["detail-timers-load"].click();
+ assert.equal(h.calls.length,1,"verify existing Device first");
+ h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ assert.equal(h.calls.length,2);
+ h.reply(1,200,backendPage);
+ assert.equal(h.calls.length,3);
+ assert.equal(h.calls[2].method,"GET");
+ assert.match(h.calls[2].url,/\/api\/v1\/native-timers\?backendId=home&offset=0&limit=30$/);
+ assert.match(h.calls[2].headers.Authorization,/^VDR-Suite-Device /);
+ const timer={timerId:"42",channelId:"S19.2E-1-100",channelName:"Das Erste",
+   title:"Nachrichten",day:"20261017",weekdays:"-------",startTime:"2000",
+   endTime:"2015",enabled:true,recording:false,pending:false};
+ h.reply(2,200,{backendId:"home",items:[timer],
+   page:{limit:30,offset:0,hasMore:false,nextOffset:null},meta:{partial:false}});
+ assert.equal(sim.nativeTimerList.hidden,false);
+ assert.equal(sim.nativeTimerList.children.length,1);
+ assert.equal(sim.nativeTimerList.children[0].children[0].textContent,"Nachrichten");
+ assert.match(sim.nativeTimerList.children[0].children[1].textContent,/20:00–20:15/);
+ sim.nativeTimerList.children[0].click();
+ assert.match(sim.stateNodes["detail-state-title-timers"].textContent,/Nachrichten/);
+ assert.equal(h.calls.length,3,"timer selection only updates local detail");
+});
+test("S6.19 Timer paging preserves backend and 403 never creates or changes timers",()=>{
+ const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+ sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["detail-timers-load"].click();
+ h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ h.reply(1,200,backendPage);
+ const make=id=>({timerId:id,channelId:"S19.2E-1-100",channelName:"Das Erste",
+   title:"TV "+id,day:"20261017",weekdays:"-------",startTime:"2000",
+   endTime:"2015",enabled:true,recording:false,pending:false});
+ h.reply(2,200,{backendId:"home",items:[make("17")],
+   page:{limit:30,offset:0,hasMore:true,nextOffset:1},meta:{partial:false}});
+ sim.nodes["detail-timers-more"].click();
+ assert.match(h.calls[3].url,/backendId=home&offset=1&limit=30$/);
+ h.reply(3,200,{backendId:"home",items:[make("18")],
+   page:{limit:30,offset:1,hasMore:false,nextOffset:null},meta:{partial:false}});
+ assert.equal(sim.nativeTimerList.children.length,2);
+ sim.nodes["detail-timers-load"].click();
+ h.reply(4,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ h.reply(5,200,backendPage);
+ h.reply(6,403,{error:{code:"forbidden"}});
+ assert.equal(sim.nativeTimerList.children.length,0,"revoked grant clears cached timer rows");
+ assert.match(sim.stateNodes["detail-state-description-timers"].textContent,/timers.view/);
+ assert.ok(h.calls.every(x=>x.method==="GET"),
+   "no timer mutation in read-only slice");
+});
+test("S6.19 leaving Timer view invalidates late server result",()=>{
+ const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+ sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["detail-timers-load"].click();
+ h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+ h.reply(1,200,backendPage);
+ sim.nodes["nav-home"].click();
+ assert.equal(h.calls[2].aborted,true);
+ const timer={timerId:"42",channelId:"ch",channelName:"ARD",title:"Verspätet",
+   day:"20261017",weekdays:"-------",startTime:"2000",endTime:"2100",
+   enabled:true,recording:false,pending:false};
+ h.reply(2,200,{backendId:"home",items:[timer],
+   page:{limit:30,offset:0,hasMore:false,nextOffset:null},meta:{partial:false}});
+ assert.equal(sim.nativeTimerList.children.length,0);
+ assert.equal(sim.nativeTimerList.hidden,true);
+});
+
+
+const searchRuleId="st_0123456789abcdef0123456789abcdef";
+function searchRulePage(nextCursor=null) {
+  return {items:[{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active"}],
+    page:{limit:30,hasMore:!!nextCursor,nextCursor},
+    meta:{partial:false}};
+}
+test("S6.20 SearchTimer list uses separate Device grant and does not require native timer loading",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();
+  assert.equal(h.calls.length,0,"no network on navigation");
+  sim.nodes["searchtimer-load"].click();
+  assert.equal(h.calls.length,1,"verified Device credential");
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.match(h.calls[2].url,/\/api\/v1\/search-timers\?backend=home&limit=30$/);
+  assert.equal(h.calls[2].method,"GET");
+  assert.match(h.calls[2].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(2,200,searchRulePage());
+  assert.equal(sim.searchTimerList.children.length,1);
+  assert.equal(sim.searchTimerList.children[0].children[0].textContent,"Krimis");
+  sim.searchTimerList.children[0].click();
+  assert.match(h.calls[3].url,/\/api\/v1\/search-timers\/st_[a-f0-9]{32}\?backend=home$/);
+  h.reply(3,200,{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active",meta:{partial:false}});
+  assert.match(sim.searchTimerNodes["searchtimer-detail-info"].textContent,/Tatort/);
+  assert.equal(h.calls.length,4,"list+detail are read-only, no implicit EPG preview");
+  assert.equal(sim.nativeTimerList.children.length,0,"no need for timers.view");
+});
+test("S6.20 SearchTimer EPG preview requires explicit button and displays server count",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["searchtimer-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,searchRulePage());
+  sim.searchTimerList.children[0].click();
+  h.reply(3,200,{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active",meta:{partial:false}});
+  sim.nodes["searchtimer-preview"].click();
+  assert.match(h.calls[4].url,
+    /\/api\/v1\/search-timers\/st_[a-f0-9]{32}\/preview\?backend=home&limit=30$/);
+  h.reply(4,200,{backendId:"home",searchTimerId:searchRuleId,totalCount:9,
+    items:[{title:"Tatort",subtitle:"Neuer Fall",channelId:"ch-1",
+      startTime:"1793131200",endTime:"1793134800"}],
+    meta:{partial:false,epgInput:"ready"}});
+  assert.match(sim.searchTimerNodes["searchtimer-preview-status"].textContent,
+    /9 EPG-Texttreffer/);
+  assert.equal(sim.searchTimerPreviewList.children.length,1);
+  assert.equal(sim.searchTimerPreviewList.children[0].children[0].textContent,"Tatort");
+  assert.ok(h.calls.every(x=>x.method==="GET"));
+});
+test("S6.20 preview 403 clears preview without faking no EPG matches",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["searchtimer-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,searchRulePage());
+  sim.searchTimerList.children[0].click();
+  h.reply(3,200,{searchTimerId:searchRuleId,backendId:"home",
+    name:"Krimis",query:"Tatort",state:"active",meta:{partial:false}});
+  sim.nodes["searchtimer-preview"].click();
+  h.reply(4,403,{code:"forbidden"});
+  assert.match(sim.searchTimerNodes["searchtimer-preview-status"].textContent,
+    /epg.view/);
+  assert.equal(sim.searchTimerPreviewList.children.length,0);
+});
+test("S6.20 exit discards pending epgsearch, no reappear or mutation",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-timers"].click();sim.nodes["searchtimer-load"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,3);
+  sim.nodes["nav-home"].click();
+  assert.equal(h.calls[2].aborted,true);
+  h.reply(2,200,searchRulePage());
+  assert.equal(sim.searchTimerList.children.length,0);
+  assert.equal(sim.searchTimerList.hidden,true);
+});
+
+
+test("S6.23 general search is idle on navigation, queries two separate v1 scopes",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  assert.equal(h.calls.length,0);
+  assert.match(sim.globalSearchNodes["global-search-status"].textContent,/Suchbegriff/);
+  sim.nodes["global-search-input"].value="Hobbit";
+  sim.nodes["global-search-go"].click();
+  assert.equal(h.calls.length,1,"verify current paired device");
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,4);
+  assert.match(h.calls[2].url,/\/api\/v1\/search\/recordings\?backendId=home&query=Hobbit&limit=30&offset=0$/);
+  assert.match(h.calls[3].url,/\/api\/v1\/search\/epg\?backendId=home&query=Hobbit&limit=30&offset=0$/);
+  const recording={kind:"recording",backendId:"home",
+    recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Der Hobbit",edited:false};
+  const event={kind:"epg",backendId:"home",
+    channelId:"S19.2E-1-100",eventId:"123",
+    title:"Young Sheldon",subtitle:"Hobbit",startTime:"1793131200",endTime:"1793134800"};
+  const page=items=>({items,page:{offset:0,limit:30,totalCount:items.length,hasMore:false}});
+  h.reply(2,200,page([recording]));
+  h.reply(3,200,page([event]));
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,1);
+  assert.equal(sim.globalSearchNodes["global-search-epg"].children.length,1);
+  assert.equal(sim.globalSearchNodes["global-search-recording-count"].textContent,"1 Treffer");
+  assert.equal(sim.globalSearchNodes["global-search-epg-count"].textContent,"1 Treffer");
+  assert.equal(h.calls.length,4,"no hidden player or write API called");
+});
+test("S6.23 EPG 403 is separate from successful recordings and old results clear",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  sim.nodes["global-search-input"].value="Hobbit";
+  sim.nodes["global-search-go"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,{items:[{kind:"recording",backendId:"home",
+    recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Hobbit",edited:false}],page:{offset:0,limit:30,totalCount:1,hasMore:false}});
+  h.reply(3,403,{code:"forbidden"});
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,1);
+  assert.match(sim.globalSearchNodes["global-search-epg-status"].textContent,/epg.view/);
+  sim.nodes["global-search-clear"].click();
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,0);
+  assert.equal(sim.globalSearchNodes["global-search-epg"].children.length,0);
+});
+test("S6.23 searching via Samsung IME yields keys to native keyboard",()=>{
+  const sim=simulate();sim.video.finish();sim.nodes["nav-search"].click();
+  const press=keyCode=>{
+    let blocked=false;sim.listeners.keydown({keyCode,preventDefault(){blocked=true;}});
+    return blocked;
+  };
+  press(40);
+  assert.equal(sim.nodes["global-search-go"].isFocused,true);
+  press(37);
+  assert.equal(sim.nodes["global-search-input"].isFocused,true);
+  for(const key of [8,37,38,39,40,13,49])
+    assert.equal(press(key),false,"IME captures "+key);
+  assert.equal(press(65376),false);
+  assert.equal(sim.nodes["global-search-go"].isFocused,true);
+  assert.equal(press(10009),true,"Back again navigates after IME Done");
+});
+
+
+
+test("S8.2 recording search focuses first actual hit instead of only showing count",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  sim.nodes["global-search-input"].value="Hobbit";
+  sim.nodes["global-search-go"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  h.reply(2,200,{items:[{kind:"recording",backendId:"home",
+    recordingId:"rec_0123456789abcdef0123456789abcdef",
+    title:"Der Hobbit",edited:false}],
+    page:{offset:0,limit:30,totalCount:1,hasMore:false}});
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children.length,1);
+  assert.equal(sim.globalSearchNodes["global-search-recordings"].children[0].isFocused,true);
+  assert.match(sim.globalSearchNodes["global-search-recording-status"].textContent,/1 von 1 angezeigt/);
+});
+test("S8.2 TV EPG search requires double confirmation, then explicit Operation GET",()=>{
+  const h=liveTransport(),sim=simulate({keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,crypto:{getRandomValues(buf){buf.fill(8);return buf;}}});
+  sim.video.finish();sim.nodes["nav-search"].click();
+  sim.nodes["global-search-input"].value="Krimi";
+  sim.nodes["global-search-go"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const start=String(Math.floor(Date.now()/1000)+3600),
+    end=String(Number(start)+1200);
+  const event={kind:"epg",backendId:"home",channelId:"S19.2E-1-100",
+    eventId:"123",title:"Krimi",subtitle:"",
+    startTime:start,endTime:end};
+  h.reply(2,200,{items:[],page:{offset:0,limit:30,totalCount:0,hasMore:false}});
+  h.reply(3,200,{items:[event],page:{offset:0,limit:30,totalCount:1,hasMore:false}});
+  assert.equal(sim.nodes["search-epg-record"].hidden,true);
+  sim.globalSearchNodes["global-search-epg"].children[0].click();
+  assert.equal(sim.nodes["search-epg-record"].hidden,false);
+  const before=h.calls.length;
+  sim.nodes["search-epg-record"].click();
+  assert.equal(h.calls.length,before+1);
+  assert.equal(h.calls[before].method,"GET");
+  h.reply(before,200,{backendId:"home",channelId:event.channelId,eventId:event.eventId,
+    title:event.title,startTime:start,endTime:end},'"epg-fresh"');
+  assert.match(sim.nodes["search-epg-record"].textContent,/wirklich anlegen/);
+  assert.equal(h.calls.filter(x=>x.method==="POST").length,0);
+  sim.nodes["search-epg-record"].click();
+  const post=h.calls[h.calls.length-1];
+  assert.equal(post.method,"POST");
+  assert.match(post.url,/\/api\/v1\/epg\/timer-intents$/);
+  assert.equal(post.headers["If-Match"],'"epg-fresh"');
+  assert.deepEqual(JSON.parse(post.body),{
+    backendId:"home",channelId:event.channelId,eventId:event.eventId
+  });
+  h.reply(h.calls.length-1,202,{operationId:"op_0123456789abcdef",
+    backendId:"home",state:"queued"});
+  assert.equal(sim.nodes["search-epg-operation"].hidden,false);
+  assert.match(sim.globalSearchNodes["search-epg-timer-status"].textContent,/202/);
+  sim.nodes["search-epg-operation"].click();
+  const last=h.calls[h.calls.length-1];
+  assert.equal(last.method,"GET");
+  assert.match(last.url,/\/api\/v1\/operations\/op_0123456789abcdef$/);
+  h.reply(h.calls.length-1,200,{operationId:"op_0123456789abcdef",
+    backendId:"home",state:"succeeded"});
+  assert.match(sim.globalSearchNodes["search-epg-timer-status"].textContent,/im VDR bestätigt/);
+});
+
+
+test("S8.3 Samsung Live-TV direct Streamdev opens native MPEG-TS; STOP closes AVPlay once",()=>{
+  const h=liveTransport(),opened=[],calls=[];
+  const avplay={
+    open(url){opened.push(url);},prepareAsync(ok){this.ready=ok;},
+    setListener(obj){this.listener=obj;},
+    setDisplayRect(){},setDisplayMethod(){},
+    play(){calls.push("play");},stop(){calls.push("stop");},close(){calls.push("close");}
+  };
+  const local={
+    value:"",getItem(key){return key==="vdr-suite.samsung.streamdevBase"?this.value:null;},
+    setItem(key,value){if(key==="vdr-suite.samsung.streamdevBase")this.value=value;}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,
+    localStorage:local,avplay});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["live-streamdev-base"].value="http://192.168.178.20:3000";
+  sim.nodes["live-streamdev-save"].click();
+  assert.equal(local.value,"http://192.168.178.20:3000");
+  assert.equal(h.calls.length,3,"saving a local server is not a media mutation");
+  sim.nodes["detail-live-streamdev"].click();
+  assert.deepEqual(opened,["http://192.168.178.20:3000/TS/S19.2E-1-1019-10301"]);
+  assert.equal(sim.livePlayerSurface.hidden,false);
+  assert.equal(h.calls.length,3,"direct AVPlay does not request Public-v1 MediaSession");
+  avplay.ready();
+  assert.match(sim.livePlayerHint.textContent,/PLAYING/);
+  sim.listeners.keydown({keyCode:413,preventDefault(){}});
+  assert.equal(sim.livePlayerSurface.hidden,true);
+  assert.deepEqual(calls,["play","stop","close"]);
+  avplay.listener.onstreamcompleted();
+  assert.deepEqual(calls,["play","stop","close"],"late EOF cannot close a new player");
+  assert.match(sim.stateNodes["detail-state-description-live"].textContent,/TCP-Stream geschlossen/);
+});
+test("S8.3 direct Live-TV requires explicitly configured LAN source, not HTML5 fallback",()=>{
+  const h=liveTransport(),opened=[],avplay={
+    open(url){opened.push(url);},prepareAsync(){},play(){},stop(){},close(){}
+  };
+  const sim=simulate({keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR,avplay});
+  sim.video.finish();sim.nodes["nav-live"].click();sim.nodes["detail-live-preview"].click();
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);h.reply(2,200,channelPage());
+  sim.liveList.children[0].click();
+  sim.nodes["detail-live-streamdev"].click();
+  assert.equal(opened.length,0);
+  assert.equal(h.calls.length,3);
+  assert.match(sim.stateNodes["detail-state-title-live"].textContent,/Streamdev-Adresse fehlt/);
+});
+
+test("S8.1 foreground Home composes real backend-scoped Continue, timers and EPG independently",()=>{
+  const h=liveTransport();
+  const sim=simulate({visibleHome:true,keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  assert.equal(h.calls.length,1,"foreground Home verifies saved Device automatically");
+  assert.match(h.calls[0].url,/\/api\/v1$/);
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  assert.match(h.calls[1].url,/\/api\/v1\/backends\?/);
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,6,"four independent Home domains start");
+  const url=i=>h.calls[i].url;
+  assert.match(url(2),/\/api\/v1\/recording-playback-sessions\/continue-watching\?backendId=home$/);
+  assert.match(url(3),/\/api\/v1\/recordings\?backendId=home/);
+  assert.match(url(4),/\/api\/v1\/native-timers\?backendId=home/);
+  assert.match(url(5),/\/api\/v1\/channels\?backendId=home/);
+  for(const i of [2,3,4,5])
+    assert.match(h.calls[i].headers.Authorization,/^VDR-Suite-Device /);
+
+  const rid="rec_0123456789abcdef0123456789abcdef";
+  h.reply(2,200,{backendId:"home",limit:50,
+    items:[{recordingId:rid,positionSeconds:120,durationSeconds:240,
+      resumeSupport:"profile_dependent"}]});
+  const card=sim.homeNodes["home-continue-list"].children[0];
+  assert(card,"server checkpoint creates a Continue card");
+  assert.equal(card.children[3].children[0].style.width,"50%");
+  h.reply(3,403,{code:"forbidden"});
+  assert.match(sim.homeNodes["home-recordings-status"].textContent,/recordings.view/);
+  h.reply(4,200,{backendId:"home",items:[{
+    timerId:"timer1",channelId:"ch",channelName:"Das Erste",title:"Tatort",
+    day:"2026-10-28",weekdays:"",startTime:"20:15",endTime:"21:45",
+    enabled:true,recording:false,pending:false
+  }],page:{limit:30,offset:0,hasMore:false,nextOffset:null},
+    meta:{partial:false}});
+  assert.match(sim.homeNodes["home-timer-summary"].textContent,/Tatort/);
+  h.reply(5,200,channelPage());
+  const epgIndex=h.calls.findIndex(c=>/\/api\/v1\/epg\/now-next/.test(c.url));
+  assert(epgIndex>=0);
+  const now=Number(new URL(url(epgIndex)).searchParams.get("fromTime"));
+  h.reply(epgIndex,200,{backendId:"home",
+    channelId:"S19.2E-1-1019-10301",
+    items:[{channelId:"S19.2E-1-1019-10301",eventId:"real-event",
+      title:"Echte Sendung",subtitle:"",startTime:String(now-120),
+      endTime:String(now+1800),durationSeconds:1920}],
+    page:{limit:2,hasMore:false},meta:{partial:false}});
+  assert.equal(sim.homeNodes["home-epg-list"].children.length,1);
+  assert.equal(sim.homeNodes["home-epg-list"].children[0].children[1].textContent,"Echte Sendung");
+  const recording={backendId:"home",recordingId:rid,title:"Aufnahme A",
+    description:"Beschreibung",recordedAt:"1793100000",
+    durationSeconds:240,durationKnown:true,sizeMb:250,
+    metadata:{state:"available",source:"manual",contentKind:"movie",
+      overview:"Originalbeschreibung",genreText:"[Drama|Krimi]"}};
+  const detailIndex=h.calls.findIndex(c=>c.url.includes("/api/v1/recordings/"+rid+"?"));
+  assert(detailIndex>=0);
+  h.reply(detailIndex,200,recording);
+  assert.equal(card.children[1].textContent,"Aufnahme A");
+  assert.match(card.children[2].textContent,/Position 2 Min./);
+  assert.match(card.children[2].textContent,/Drama · Krimi/);
+  assert.equal(sim.homeNodes["home-feature-title"].textContent,"Aufnahme A");
+  assert.match(sim.homeNodes["home-feature-description"].textContent,/Originalbeschreibung/);
+  // Rendering metadata never starts a playback MediaSession.
+  assert.equal(h.calls.filter(c=>c.method==="POST").length,0);
+});
+
+test("S8.1 navigation invalidates pending Home metadata and preserves one D-Pad owner",()=>{
+  const h=liveTransport();
+  const sim=simulate({visibleHome:true,keymanager:savedDeviceManager(),XMLHttpRequest:h.XHR});
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  assert.equal(h.calls.length,6);
+  sim.nodes["nav-settings"].click();
+  for(const i of [2,3,4,5])
+    assert.equal(h.calls[i].aborted,true,"Home request was aborted on route exit");
+  h.reply(3,200,{});
+  assert.equal(sim.homeNodes["home-recordings-list"].children.length,0,
+    "late catalog result cannot populate hidden Home");
+  assert.equal(typeof sim.listeners.keydown,"function");
+  sim.nodes["nav-home"].click();
+  assert.match(h.calls[h.calls.length-1].url,/\/api\/v1$/,
+    "returning to Home requests a fresh verified snapshot");
+});
+
+
+test("S8.1 artwork cards read authorized bytes, reject unknown MIME and revoke URLs on exit",()=>{
+  const h=liveTransport(),revoked=[],created=[];
+  const artworkApi={
+    createObjectURL(blob){
+      created.push(blob);
+      return "blob:home-authorized-"+created.length;
+    },
+    revokeObjectURL(url){revoked.push(url);}
+  };
+  const sim=simulate({visibleHome:true,keymanager:savedDeviceManager(),
+    XMLHttpRequest:h.XHR,artworkApi});
+  h.reply(0,200,{apiVersion:"v1",authentication:{authenticated:true}});
+  h.reply(1,200,backendPage);
+  const rid="rec_0123456789abcdef0123456789abcdef";
+  const recording={backendId:"home",recordingId:rid,title:"Echte Aufnahme",
+    description:"Aus der Mediathek",recordedAt:"1793100000",
+    durationSeconds:7200,durationKnown:true,sizeMb:500};
+  h.reply(3,200,{items:[recording],page:{
+    limit:100,hasMore:false,nextCursor:null},meta:{partial:false}});
+  const card=sim.homeNodes["home-recordings-list"].children[0];
+  const image=card.children[0];
+  assert.equal(image.hidden,true,"cards work without artwork");
+  const listIndex=h.calls.findIndex(x=>/\/api\/v1\/recordings\/rec_[0-9a-f]+\/artwork\?/.test(x.url));
+  assert(listIndex>=0,"artwork list is a same-origin v1 call");
+  assert.match(h.calls[listIndex].headers.Authorization,/^VDR-Suite-Device /);
+  h.reply(listIndex,200,{backendId:"home",recordingId:rid,
+    items:[{artworkId:"0123456789abcdef0123456789abcdef",kind:"poster"}]});
+  const binaryIndex=h.calls.findIndex(x=>/\/artwork\/0123456789abcdef0123456789abcdef\?/.test(x.url));
+  assert(binaryIndex>=0);
+  assert.match(h.calls[binaryIndex].headers.Authorization,/^VDR-Suite-Device /);
+  h.calls[binaryIndex].status=200;h.calls[binaryIndex].responseURL=h.calls[binaryIndex].url;
+  h.calls[binaryIndex].mime="image/png";
+  h.calls[binaryIndex].response=new Uint8Array([137,80,78,71]).buffer;
+  h.calls[binaryIndex].onload();
+  assert.equal(image.hidden,false);
+  assert.equal(image.src,"blob:home-authorized-1");
+  assert.equal(created.length,1);
+  sim.nodes["nav-settings"].click();
+  assert.deepEqual(revoked,["blob:home-authorized-1"]);
+  assert.equal(h.calls.filter(x=>x.method==="POST").length,0);
 });

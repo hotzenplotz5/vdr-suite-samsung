@@ -54,3 +54,14 @@ test("S5.2: unsupported optional display mode does not block playback",()=>{
   prepared();
   assert.ok(states.includes("playing"));
 });
+
+test("S6.0: one capture-phase keydown owner routes playback keys and shows a bounded diagnostic",()=>{
+  assert.match(main,/document\.addEventListener\("keydown", function \(event\) \{/);
+  assert.match(main,/var action = playbackRemoteAction\(key\)/);
+  assert.match(main,/if \(event\.repeat && action\) return/);
+  assert.match(main,/recordingRemoteHint\.textContent = "Fernbedienung · Taste " \+ key/);
+  assert.match(main,/\}, true\);/);
+  assert.match(html,/id="recording-remote-hint"[^>]*class="recording-player-hint"/);
+  assert.match(html,/id="recording-audio-hint"[^>]*class="recording-audio-hint"/);
+  assert.match(html,/id="recording-lifecycle-hint"[^>]*class="recording-lifecycle-hint"/);
+});

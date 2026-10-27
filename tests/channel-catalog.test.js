@@ -48,12 +48,12 @@ test("S3.3 channel pages use explicit backend, opaque cursor and limit=20",()=>{
   const h=transport(),c=createChannelCatalog(h.env);let result;
   c.listChannels(credential,"home",null,r=>result=r);
   assert.equal(h.calls[0].url,credential.base+
-    "/api/v1/channels?backendId=home&limit=20&sort=backendId,channelId&order=asc");
-  h.reply(0,200,envelope([channel],"ch1_next"));
+    "/api/v1/channels?backendId=home&limit=20&sort=backendId,channelNumber,channelId&order=asc");
+  h.reply(0,200,envelope([channel],"ch2_next"));
   assert.equal(result.ok,true);
-  assert.equal(result.value.page.nextCursor,"ch1_next");
-  c.listChannels(credential,"home","ch1_next",r=>result=r);
-  assert.match(h.calls[1].url,/cursor=ch1_next$/);
+  assert.equal(result.value.page.nextCursor,"ch2_next");
+  c.listChannels(credential,"home","ch2_next",r=>result=r);
+  assert.match(h.calls[1].url,/cursor=ch2_next$/);
   h.reply(1,200,envelope([]));
   assert.equal(result.ok,true);
   assert.equal(result.value.page.hasMore,false);
@@ -82,7 +82,7 @@ test("S3.3 denied grant, revoked credential, cursor expiry and network are expli
   client.listChannels(credential,"home",null,r=>result=r);
   h.reply(1,401,{code:"unauthorized"});
   assert.match(channelCatalogError(result),/widerrufen/);
-  client.listChannels(credential,"home","ch1_old",r=>result=r);
+  client.listChannels(credential,"home","ch2_old",r=>result=r);
   h.reply(2,409,{code:"cursor_expired"});
   assert.match(channelCatalogError(result),/neu beginnen/);
   client.listChannels(credential,"home",null,r=>result=r);
@@ -108,4 +108,32 @@ test("S3.3 partial channel failures are not silently replaced by fake empty data
   h.reply(0,200,envelope([],null,true,[{backendId:"home",state:"unavailable",code:"backend_unavailable"}]));
   assert.equal(result.ok,true);
   assert.equal(result.value.meta.partial,true);
+});
+
+test("S6.3: old server rejects opt-in native sort with explicit HTTP 400 and no fallback",()=>{
+  const h=transport(),client=createChannelCatalog(h.env);let result;
+  client.listChannels(credential,"home",null,r=>result=r);
+  assert.match(h.calls[0].url,/sort=backendId,channelNumber,channelId/);
+  h.reply(0,400,{code:"invalid_request"});
+  assert.equal(result.ok,false);
+  assert.match(channelCatalogError(result),/numerische VDR-Senderreihenfolge/);
+  assert.equal(h.calls.length,1);
+});
+
+test("S6.3: cursor stays opaque, sorting is server-owned, grant and scope errors stay closed",()=>{
+  const h=transport(),client=createChannelCatalog(h.env);let result;
+  client.listChannels(credential,"home",null,r=>result=r);
+  const channels=[
+    {...channel,channelId:"Z",channelNumber:1},
+    {...channel,channelId:"A",channelNumber:2}
+  ];
+  h.reply(0,200,envelope(channels,"ch2_server_generated_opaque"));
+  assert.equal(result.ok,true);
+  assert.equal(result.value.items[0].channelId,"Z","do not client sort IDs");
+  client.listChannels(credential,"home",result.value.page.nextCursor,r=>result=r);
+  assert.match(h.calls[1].url,/cursor=ch2_server_generated_opaque$/);
+  h.reply(1,409,{code:"cursor_expired"});
+  assert.equal(result.ok,false);
+  assert.match(channelCatalogError(result),/neu beginnen/);
+  assert.equal(h.calls.length,2,"never probe another backend after a 409");
 });

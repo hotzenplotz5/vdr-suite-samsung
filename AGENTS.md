@@ -29,6 +29,14 @@
 - README, ROADMAP und Abnahmeprotokoll aktualisieren, ohne ungeprüfte Hardware-Akzeptanz zu behaupten.
 - Kein Secret und kein absoluter privater Benutzerpfad in Doku/Test-Fixtures.
 
+## Pflicht vor Arbeit an der Samsung-TV-App (`app/`)
+
+- **`app/AGENTS.md` vor jedem App-Update, WITs-/Installationsbefehl oder TV-Hardware-PASS lesen.** Sie enthält die verbindliche Reihenfolge für die gekoppelte DEV-App; die vollständige Ein-Watch-Anleitung steht in `docs/wits-isolated-development.md` ganz oben.
+- Immer auch `docs/wits-isolated-development.md` und bei Windows-/Git-Updates `docs/windows-update-workflow.md` lesen, **bevor** ein Kommando vorgeschlagen wird. Bereits bestandene Tests und DEV-Vorbereitung nicht unnötig wiederholen.
+- **`build:tv`, `check`, `tv:dev:prepare`, `Copy-Item` und CI führen kein TV-Update aus.** Entscheidender Übertragungsbefehl ist **`npm.cmd run tv:watch` im Repo-Hauptverzeichnis**, aber **nur bei noch nicht laufendem Watch**. Port 4050 nicht durch zweiten Watch doppelt belegen (`EADDRINUSE`). Bestehenden Watch weiterverwenden; bei gezieltem Neustart nur im zugehörigen Terminal `Strg+C`, danach genau einen Watch starten. WITs-Reload durch neue sichtbare TV-Funktion belegen, `--smoke` nur optional.
+- Wenn am TV **keine Änderung sichtbar wird**, nicht Erfolg behaupten und nicht blind `wits --start`, `Run Project`, einen zweiten Watch, Prozess-Kills oder neue Kopplung vorschlagen. Die Watch-Ausgabe, den tatsächlichen Prozess und Staging/Reload gezielt prüfen. `wits --start` hat am echten Testgerät die DEV-Kopplung zerstört.
+- Das Hardware-Feedback korrekt weiterführen: INFO funktioniert, physische SETTINGS-Taste nicht. **S6.17 realer Hardware-PASS 27.10.2026: Neuer HLS-TS/AAC-Testbutton sichtbar, Nutzer bestätigt hörbaren Ton!** Diesen positiven Befund nicht wieder als `Audio OPEN` beschreiben; andere Aufnahmen/AVPlay-Controls/Standardmodus und S6.16-IME bleiben gesonderte Prüfungen.
+
 ## Verbindlicher Windows-/Tizen-Update-Pfad
 
 - **Vor jedem Windows-Git-Pull oder Tizen-Build zuerst [docs/windows-update-workflow.md](docs/windows-update-workflow.md) lesen.** Der Workflow wurde am realen Windows-/VS-Code-Samsung-Setup mit 77/77 grünen Tests erprobt.

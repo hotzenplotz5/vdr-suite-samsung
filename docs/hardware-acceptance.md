@@ -331,3 +331,376 @@ Der reale GU43TU6979UXZG öffnet jetzt den bildschirmfüllenden Player, aber AVP
 Der Client bindet die Samsung WebAPI explizit ein, zeigt nur erlaubte AVPlay-ErrorCodes/Names und prüft nach einem Wiedergabefehler die geschützte Medienroute ausschließlich über einen Header-only GET/Range-Request, **vor** dem Session-Stop. Zusätzlich existiert eine bewusst vom Nutzer wählbare alternative **HTML5-MP4-Probe** für vom Server gewählte progressive MP4-MediaSessions. Kein Credentials-/Token-in-URL, keine zweite Kopplung oder Installation, keine unbelegte Browser-/AVPlay-Cookieannahme. Vollständige Quelle-/Sicherheits-/TV-Gates: [Samsung-Playback-Kompatibilität](samsung-playback-compatibility.md).
 
 **Hardware-PASS erst nach einem wirklich abspielbaren Bild/Ton, STOP/Cleanup und identischer bestehender Geräte-Kopplung.** Source-only- und CI-Abnahme genügt nicht.
+
+
+## S6.0 – TV-Fernbedienung / AVPlay (26.10.2026; SOURCE, HARDWARE-GATE OFFEN)
+
+**Ausgangslage am echten Samsung GU43TU6979UXZG:** Echte VDR-Aufnahme über native Device-MediaSession zeigt AVPlay-Bild, aber kein Audio bei mindestens zwei abgeschlossenen Aufnahmen; HTML5 MP4 bleibt schwarz. OK, PLAY/PAUSE und STOP reagierten während AVPlay nicht, BACK kehrte mit „Wiedergabe beendet“ zurück. TV-Lautstärke/Lautsprecher funktionieren. Das ist ausdrücklich kein Audio- oder Remote-PASS.
+
+**S6.0-Quelländerung:** Samsung `MediaPlayPause` (10252) zusätzlich registriert und normalisiert; ein zentraler Capture-Keydown-Owner ordnet OK/PLAY/PAUSE/PLAY_PAUSE während Recording-Wiedergabe dem vorhandenen AVPlay-`pauseOrResume` zu, STOP/BACK dem bisherigen MediaSession-Cleanup. Unbekannte numerische Tasten und Player-Returncodes werden ausschließlich im sichtbaren Recording-Overlay angezeigt; keine URLs, Credentials oder Medien-Cookies. Taste-Wiederholung wird nicht als weitere Aktion verarbeitet.
+
+| S6.0-Realgate | Stand | Beobachtung erforderlich |
+| --- | --- | --- |
+| DEV-Identität und `Anmeldung prüfen` erhalten | OFFEN | Kein erneutes Pairing; Produktiv-App unberührt |
+| PLAY/PAUSE kombiniert (10252) | OFFEN | Overlay-Taste und `playing/paused` + sichtbarer Bildstillstand/Fortsetzen |
+| OK toggelt bei Playback, Menü-OK bleibt normal | OFFEN | Player und D-Pad-Menü getrennt testen |
+| Getrennte PLAY-/PAUSE-Tasten (falls vorhanden) | OFFEN | Gemeldeter Tastencode und Playback-Effekt |
+| STOP und BACK | OFFEN | STOP tatsächlich empfangen, AVPlay verlassen, Session-Cleanup und Rückkehr |
+| Unbekannte Taste | OFFEN | Nur begrenzter Zahlencode oder sicherer Fallback im Overlay |
+| AVPlay-Ton | FAIL – S6.1 | Zwei Video-Aufnahmen ohne Audio; kein Backend-Transcode auf Verdacht |
+
+**Hardware-Testgrenze:** Nach CI und bewusst ausgeführtem isoliertem DEV-Watch-Update am bereits installierten separaten Paket; kein `Run Project`, kein `wits --start`, keine Änderung am Originalpaket oder installierten Backend.
+
+
+## S6.1 – Samsung AVPlay Audio-Track-Triage (26.10.2026; SOURCE, HARDWARE OFFEN)
+
+**Ausgangslage auf echter Tizen-5.5-Hardware:** Zwei abgeschlossene VDR-Aufnahmen haben über AVPlay Bild, aber keinen Ton. TV-Lautstärke funktioniert. Mehrere HTML5-MP4-Versuche blieben schwarz. Das bleibt Audio FAIL bis zu einem bestätigten neuen TV-Test.
+
+**Source-Grenze:** getState() muss PLAYING melden. Dann höchstens 32 native AUDIO-Tracks über getTotalTrackInfo() und die Auswahl über getCurrentStreamInfo() auslesen; aus extra_info ausschließlich sanitisierten Audio-Codec (bekannte Allowlist), Sprache aus 2–3 Buchstaben, 1–16 Kanäle und bounded numerische Indexwerte übernehmen. Niemals rohe extra_info, URLs, Tokens oder Medien-Cookies anzeigen. Wenn mehrere Tracks gemeldet werden, ein nachgewiesener AAC-Stereo-Track existiert und die aktuelle Auswahl nicht bereits AAC-Stereo ist, darf setSelectTrack("AUDIO", index) auf dessen tatsächlich gelieferten Index zugreifen. Eine erfolgreiche API-Auswahl ist noch kein hörbarer Ton. Ungültige Zustände oder API-Ausnahmen blockieren die Videowiedergabe nicht.
+
+**Einziger Hardware-Gate:** Die bereits installierte, separat gekoppelte VDR-Suite DEV über den bekannten WITs-Watch-Prozess aktualisieren (ohne wits --start, Run Project, Uninstall oder Re-Pairing). Auf einer vorhandenen abgeschlossenen Aufnahme die neue Zeile `Audio · ...` ablesen, hörbaren Ton beurteilen, PAUSE/OK/STOP/BACK aus S6.0 mit prüfen. Bei fehlendem Ton den angezeigten Spur-/Codec-/Auswahlstatus notieren; erst danach Backend-Medienprofil untersuchen. Auf dem TV nichts als PASS markieren, bevor es tatsächlich beobachtet wurde.
+
+**PASS:** Bild und hörbarer Filmton sowie sauberer Rücksprung. Allein erkannte oder ausgewählte Tonspur genügt nicht.
+
+
+## S6.2 – Player-Lifecycle, HTML5-Schwarzbild und Session-Cleanup (26.10.2026; SOURCE/CI PASS, TV OFFEN)
+
+**Vorheriger TV-Befund:** Native AVPlay-Aufnahme liefert Bild, bei zwei getesteten Aufnahmen keinen Ton. Mehrere HTML5-MP4-Starts blieben schwarz; nach ZURÜCK erschien pauschal „Wiedergabe beendet“, obwohl keine Wiedergabe bestätigt war. Das sind keine S6.2-Hardware-PASS-Ergebnisse.
+
+**Quelländerung:** Genau ein Player-/Keydown-Owner. Native AVPlay-Callbacks unterscheiden Vorbereitung, PLAY-Aufruf, Buffering, Buffering-Ende, reguläres Ende und tatsächlichen Playerfehler. Eine dritte, sichtbare Diagnosezeile zeigt dies bei fullscreen AVPlay/HTML5. HTML5 behandelt erst `onplaying` als Wiedergabe-Ereignis. Ein 12-Sekunden-Watchdog meldet den Schwarzbild-Start ohne `onplaying`, ein 20-Sekunden-Watchdog meldet stockende Wiedergabe; beide werden bei STOP/Ende/Fehler/Neustart deaktiviert. Native HTML5-MediaError-Codes 1–4 und `play()`-Ablehnung werden in festen Texten ohne Credentials/URLs angezeigt. Das opt-in-HTML5 ist keine automatische Ausweichwiedergabe.
+
+**Stop-Grenze:** Lokaler Player-Stop und authentifizierter MediaSession-STOP bleiben getrennt. Nach STOP vor bestätigtem CREATE wird ausschließlich „Wiedergabeversuch abgebrochen“ gemeldet; ein ungewisses POST-Ergebnis wird nicht automatisch wiederholt. Bei Playerfehler wird die bestehende geschützte GET-Range-Headerdiagnose vor Session-STOP verwendet. Späte STOP-Timeouts dürfen den primären Playbackfehler nicht überschreiben. Die S6.2-Quelltests ersetzen keine tatsächliche Session-Stop-Abnahme.
+
+**TV-Gate:** Zusammen mit S6.0-Tasten und S6.1-Audio am bestehenden, separat gekoppelten Samsung DEV testen, sobald Zugriff wieder möglich ist: erkannte Taste, Bild/Ton, Playerstatus bei Pufferung, geordnetes STOP/BACK, MediaSession-Cleanup, HTML5-MP4-Abbruchanzeige (falls bewusst gewählt), Geräteschlüssel unverändert. Bis dahin **REAL-TV OPEN**.
+
+**Unberührt:** Productive Samsung-App, yaVDR-Backend, Device-Grants, bestehendes Pairing und installierte Pakete. Kein WITs-Start, keine neue Installation oder temporäre Credentials.
+
+
+## S6.3 – Sendernavigation und echte numerische Channel-Pagination (26.10.2026; SOURCE, TV OFFEN)
+
+**Übernommen statt neu entwickelt:** Samsung-PR #12 enthielt den hardwaregemeldeten Fehler „Sender geladen, aber nicht mit D-Pad erreichbar“ und bereits getestete Fokus- und Paginationslösungen; Samsung-PR #3 enthielt die Public-v1-Anfrage nach numerischer VDR-`channelNumber`-Sortierung. Beide Änderungen wurden im bestehenden Phase-S6-Branch integriert, ohne den Installationsstand oder ein vorhandenes Gerät zu verändern.
+
+**Clientfunktion:** Der einzige D-Pad-/Fokus-Owner nimmt dynamisch geladene `channel-row-*`-Elemente auf. UP/DOWN navigiert, OK zeigt nur die echten Kanalmetadaten, BACK kehrt wie bisher zurück. „Mehr Sender“ lädt exakt eine begrenzte, vom Server bestimmte Folgeseite und fokussiert deren ersten Eintrag. Backendwechsel/Neuabruf entfernen veraltete Fokus-IDs, verhindern Cross-Backend-Cursor-Verwendung und unterdrücken alte Async-Rückmeldungen. Erreichbare TV-Sender im Frontend sind noch **kein** Beleg für funktionierendes Live-Tuning.
+
+**Public-v1-Vertrag:** `GET /api/v1/channels?backendId=...&limit=20&sort=backendId,channelNumber,channelId&order=asc`; die gesamte VDR-Snapshot-Sortierung erfolgt serverseitig vor dem Paginieren, `ch2_` ist ein opaker Cursor und wird unverändert übergeben. Weder ein Client-Sort der ersten 20 IDs noch ein stiller Rückfall auf `ch1_` ist zulässig. Alter Server ohne Unterstützung liefert sichtbares HTTP 400. Fremder Scope, 401, 403 und 409 bleiben explizit behandelt.
+
+**Noch nicht implementiertes Live-Streaming:** Backend `api/device-live-tv-playback.md` dokumentiert Device `POST /api/v1/live-playback-sessions`, `media.live.play@backend` und einen abgesicherten live-progressive-fMP4-Pfad. Ob der installierte yaVDR-Build diese Funktion und einen auf Samsung Tizen 5.5 tatsächlich nutzbaren AVPlay-Medienzugang besitzt, ist nicht belegt. Deshalb löst die Senderauswahl **keinen** unkontrollierten POST bzw. Tuner-Lease aus. Keine privaten Browser-Routen, kein Streamdev-Ersatz, kein neuer Backend-Build. Das Live-Playback bleibt ein eigener offener Runtime-/Hardware-Gate.
+
+**TV-Gate offen:** Exakten installierten Backend-Build mit neuem Channel-Sort-Vertrag bestätigen, danach auf der bereits gekoppelten DEV-App Sender 1–20 sowie zweite Seite mit `channels.conf` vergleichen, D-Pad/OK/Mehr/BACK und den Geräteerhalt prüfen. Ein API-v1-200 auf älterem Sort-Modus oder allein ein grün getesteter Quellbranch genügt nicht.
+
+
+## S6.4 – Authentifizierte EPG-Zeitfenster, Aufnahme-Metadaten, Artwork (26.10.2026; SOURCE, TV OFFEN)
+
+**Quelländerungen:** Ein zusätzlicher bounded Public-v1-Device-Metadatenadapter mit unabhängigen Live-/Recording-Instanzen. Ein Sender-OK bleibt lokal; nur bewusstes „Jetzt / Nächste“ oder „Programm 24h“ löst erlaubtes `GET /api/v1/epg/*` aus. Die 24h-Anzeige nutzt maximal 24 Ereignisse pro Seite und übergibt den opaken E1-Cursor unverändert. EPG benötigt `epg.view` und eine konkrete Sender-ID, selbst wenn `channels.view` schon erteilt ist. Ohne passende Grants bleiben 403 und ohne aktiven E1-Handler 404 sichtbare, getrennte Ergebnisse.
+
+**Aufnahme-Details:** Nach Auswahl einer tatsächlich geladenen Public-`rec_`-Identität fragt der Client ausschließlich `GET /api/v1/recordings/{id}?backendId=...`, `.../artwork` und optional das einzelne Poster-Binärbild per Device Authorization Header ab. Externe Art-URLs, native Pfade und Provider-Credentials werden weder verwendet noch protokolliert. JSON-Antworten sind streng bounded, Fotoantworten auf erlaubte Bildtypen und max. 2 MiB begrenzt. Object URLs werden nach Wechsel/Verlassen widerrufen. Keine automatische Scraper-Anforderung oder zusätzliche Berechtigung.
+
+**Noch nicht als Real-TV bestätigt:** EPG Now/Next und 24h-Ansicht, Event-Zeitformat auf Tizen 5.5, manuelle Aufnahme-Metadaten, Binary-Poster-Rendering und Rechteabweisung. Beim späteren gemeinsamen Hardwaretest zunächst installierten Daemon-Stand, `epg.view`, `recordings.view`, KeyManager-Identität und bestehende AVPlay-Wiedergabe prüfen. Ein Quell-/CI-PASS ist nicht gleich einem Hardware-PASS. Produktive App, yaVDR-Installation und die vorhandene DEV-Kopplung bleiben unangetastet.
+
+
+## S6.4 visible EPG and Recording metadata (2026-10-26)
+
+Samsung Tizen 5.5 real-TV observation after installing VDR-Suite main
+`c7cb87f7d95f4a7a32733f61c40d320081619e48`: numeric VDR channel order
+1 Das Erste HD, 2 ZDF HD, 3 arte HD, 4 NDR FS HH HD is correct (**S6.3 PASS**).
+The user selected a sender with OK and pressed „Jetzt / Nächste“;
+the EPG status was below the entire sender list and invisible on screen.
+The screenshot does not establish whether the authorized EPG GET succeeded or failed.
+
+This source change places EPG status, HTTP/grant errors and bounded now-next/24h
+entries directly into the visible live card. Recording detail title, genre,
+season/episode, description, date, duration and securely fetched poster now
+occupy the visible recording hero instead of sitting after the list.
+All metadata remains read-only through protected Public-v1 Device GETs.
+
+**S6.4 real-TV verification still OPEN**: device epg.view, actual programme data,
+recording detail/artwork quality, plus distinct AVPlay sound and image gates.
+No production TV reinstall or pairing was performed by this commit.
+
+
+## S6.4 Samsung hardware follow-up: 26 October 2026
+
+Actual Samsung photos show **real EPG GET success**, with genuine ZDF
+24-hour programme entries; the tiny upper-right status-card design made
+them unreadable, so **EPG usability is FAIL even though data arrives**.
+A separate Samsung photo shows a genuine recording, title/overview,
+115-minute duration and server-authenticated poster: **recording metadata
+and poster hardware PASS**, with raw pipe-separated genre and raw Unix
+recording timestamps noted as formatting defects.
+
+Follow-up replaces the ornamental live hero/status layout with full-height
+sender-list (left) / EPG (right) columns, 17–19px programme text, and
+D-pad-focusable scrolling programme rows using the same focus owner.
+Also normalizes recorded dates and pipe-delimited genres without changing
+Device authorization, API request paths, or playback code. **New layout
+hardware recheck OPEN until the TV receives this build.**
+
+
+## S6.5 – TV beobachtet, Quellfix zur späteren Abnahme (2026-10-26)
+
+**HARDWARE FAIL (beobachtet):** Samsung-AVPlay zeigt die Videoaufnahme,
+meldet Tonspuren, spielt aber keinen hörbaren Ton. OK pausiert teilweise,
+beim erneuten OK friert die Wiedergabe ein. Der Besitzer ist derzeit nicht
+am Fernseher; keine neue Hardwareprüfung möglich.
+
+**SOURCE-Korrektur:** Separate PLAY/PAUSE/STOP-Befehle,
+idempotente PLAY- und PAUSE-Zustände; OK/MediaPlayPause toggeln.
+Bei angefordertem Resume wird kein tatsächliches Abspielen behauptet.
+Tonspurdiagnose: nur erkannte sichere Indices, Single-AAC-Fallback und
+explizite BLAU-Taste für die vorhandenen bekannten Audioformate.
+Die Authentifizierung, Device-MediaSession und Fullscreen-Engine werden
+nicht verändert. **Re-Test des Tons und Resume auf Tizen 5.5 bleibt OPEN.**
+
+
+## S6.5 – Real-TV-Re-Test nach CI-grünem Commit 9ebf6b9 (26.10.2026)
+
+**Evidenz:** Direktes Nutzerfeedback am Samsung GU43TU6979UXZG (Tizen 5.5) nach der S6.5-Testaufforderung. Die exakt angezeigte TV-Buildkennung wurde mit dieser Meldung noch nicht übermittelt; deshalb ist die Zuordnung zum erwarteten Paket weiterhin als gesondertes Gate zu bestätigen. Die neue Rückmeldung überschreibt frühere grüne CI- und Quelltests nicht, widerlegt aber einen Hardware-PASS für die betroffenen Funktionen.
+
+| Bereich | Tatsächliche TV-Beobachtung | Gate |
+|---|---|---|
+| AVPlay-Ton | Über mehrere getestete Wiedergaben weiterhin kein hörbarer Ton | FAIL |
+| Formatkompatibilität | Manche Aufnahmen zeigen Video, andere ausschließlich Schwarzbild | FAIL; Datei-/Container-/Codec-/Session-Matrix offen |
+| PLAY / PAUSE / STOP | Benutzer meldet keine wirksame Funktion der Tasten | FAIL; Key-Event-Eingang vs. Playerwirkung getrennt prüfen |
+| OK | Bild wird angehalten und bleibt trotz nachfolgender Tasten eingefroren | FAIL; kein nachgewiesener Resume-/Bildfortschritt |
+| BACK | Verlässt die Wiedergabe | PASS für sichtbares Zurück, Session-STOP-Cleanup separat offen |
+| EPG | Jetzt/Nächste sowie 24h sind mit der Fernbedienung erreichbar; Metadaten werden nicht sichtbar | FAIL; angekündigtes Foto und Status-/Antwortdiagnose auswerten |
+| Poster | Zunächst Platzhalter; Poster erscheint laut Nutzer erst beim Betätigen der Wiedergabetaste; zuvor anders | UX-Regression; genaue Auswahl-/Ladeabfolge prüfen |
+| Aufnahmedatum | Wirkt korrekt formatiert | Vorläufig positiv; noch nicht isoliert bestätigt |
+| Layout | Informationsanordnung wird als unbrauchbar/unattraktiv bewertet; Farben und Schrift sind ausdrücklich **nicht** das Problem | UX-Hardwareabnahme FAIL |
+
+**Quellenprüfung:** Der Client ruft in `app/src/main.js` die Aufnahme-Detail-/Artwork-Kette aktuell erst nach aktiver Aufnahmeauswahl ab; die Poster-Anzeige erfolgt asynchron nach Detail-, Artwork-Listen- und Byte-GET. Im AVPlay-Adapter bedeutet erfolgreiches `play()` und der Status `PLAYING` nicht automatisch weiterlaufende Videoframes oder hörbaren Ton. Das erklärt die Nachweisgrenze, belegt aber ohne weitere Hardwarediagnose **nicht** die konkrete Ursache der Fehler.
+
+**Nächste Gates – keine neue Architektur:**
+
+1. Auf echter DEV-App sichtbare Buildkennung, real empfangene Fernbedienungs-KeyCodes, AVPlay-`getState()`, `oncurrentplaytime`/`getCurrentTime()`, Pause/Resume-Befehl und tatsächlichen Bildfortschritt korrelieren. Keine Medien-Tastenwirkung allein aufgrund eines JS-Calls behaupten. STOP/BACK einschließlich Server-MediaSession-Cleanup getrennt abnehmen.
+2. Stumme und schwarz bleibende Aufnahmen exemplarisch nach geschütztem Session-Profil, Container, Video-/Audio-Codec und Tonspur/Index/Kanälen unterscheiden; Audiowiedergabe nur nach echtem Hörtest PASS. Keine ungeschützten URLs, vermuteten Cookie-Workarounds oder Backend-Transcodes auf Verdacht.
+3. EPG-Foto prüfen und entscheiden, ob ein sichtbares Status-/Berechtigungs-/Antwortproblem oder ein Darstellung-/Fokusproblem vorliegt. Vorher nicht erneut den API-Vertrag oder das Layout blind umstellen.
+4. Poster unmittelbar und stabil zur ausgewählten Aufnahme sichtbar machen, ohne bei schneller D-Pad-Navigation unkontrolliert GETs auszulösen; Race- und Wechseltests ergänzen.
+5. Informationsarchitektur des existierenden VDR-Suite-Webfrontends als Layout-Referenz heranziehen, auf TV-D-Pad/Fokus adaptieren. Schrift/Farbpalette beibehalten. Funktionale Gates priorisieren, bevor das UI als fertig gilt.
+
+**Status/Schutz:** S6.5 **HARDWARE FAIL**. PR #33 bleibt Draft, **kein Merge nach main**. Nur bestehender Branch `work/s6-tv-api-v1`, keine Produktivinstallation, kein neues DEV-Bootstrap, kein Neu-Pairing, kein ungefragtes Backend-Update.
+
+
+## S6.6 – EPG-Foto und OK-Korrektur (26.10.2026)
+
+**Real-Samsung-Foto des Benutzers (Samsung GU43TU6979UXZG, Tizen 5.5):**
+Die DEV-Oberfläche zeigt unten rechts **Samsung v0.1.1 · S6.4** (die vom lokalen Windows-Build abweichende GitHub-`0.1.0` ist bekannt und nicht automatisch eine Regression). Der ausgewählte Sender ist **2 · ZDF HD**. Der Bildschirm bestätigt ausdrücklich **„EPG Jetzt/Nächste · 2 Einträge“** und zeigt die echten Sendungen **16:10–17:00 Die Rosenheim-Cops · Frostiger Tod** sowie **17:00–17:10 heute**. D-Pad-Fokus liegt sichtbar auf der zweiten Zeile. Der Benutzer bestätigt: **„Druck auf OK passiert nichts“**.
+
+**Korrigierte Bewertung:** Die EPG-Nutzdaten sind sichtbar und der Now/Next-Abruf funktioniert auf echter Hardware; das vorherige pauschale „keine Metadaten“ lässt sich für diese zwei EPG-Events nicht aufrechterhalten. Nicht belegt sind ausführliche Beschreibungen, eventuelle native Event-IDs, weitere 24h-Einträge und eine sinnvolle interaktive Detailansicht. Das Layout nutzt den großen rechten Bildschirmbereich schlecht, insbesondere die nur zwei kleinen Event-Zeilen.
+
+**Belegbare Ursache des OK-Fehlers:** `app/src/main.js` erzeugte EPG-Zeilen mit Fokus-IDs und Click-Handlern, aber `activate()` enthielt keinen Zweig für EPG-Einträge. OK wurde daher normalisiert und navigiert, führte auf einem EPG-Eintrag aber keinerlei Detailaktion aus. Dies ist ein konkreter Quellcodefehler, nicht die Vermutung eines kaputten Samsung-D-Pad oder fehlenden EPG-Grants.
+
+**S6.6 Source-Fix auf dem bestehenden Branch:** Dynamische EPG-Zeilen besitzen `data-epg-index`, der zentrale Focus/OK-Owner aktiviert die jeweils zugehörige Sendung. Unter der (weiterhin scrollbaren) Event-Liste gibt es eine große Detailansicht mit Titel, Zeit und Untertitel, die vor dem ersten OK aus dem bereits vorhandenen Now/Next-Ergebnis befüllt wird. Ein ausdrückliches OK lädt ausschließlich bei nachgewiesener gültiger `eventId` den vorhandenen Device-autorisierten `GET /api/v1/epg/event`; der Client validiert Backend/Kanal/ID und das begrenzte Detailobjekt. Ohne vom Server gelieferte native Event-ID wird keine künstliche ID erzeugt, sondern ein erklärender Status gezeigt. Stale Callbacks und Ansichtwechsel entwerten die Detailantwort. Die UI-Palette/Schrift bleibt erhalten, nur die Informationsverteilung wird verbessert. Tests umfassen den echten OK-Keypfad, fehlende Event-ID und Backend-Validierung; die generierte Tizen-5.5-Runtime wurde synchronisiert. CI des Produkt-Commits `1046532a516a2ca74db4683a752791e9cd2bbdad`: erfolgreich (GitHub Actions #40350565600).
+
+**Gates:** EPG-Datenabruf Jetzt/Nächste **HARDWARE PASS (Foto)**, EPG-Reihe per D-Pad **HARDWARE PASS (Foto)**, Detail-OK/ausführliche Beschreibung **SOURCE/CI PASS, HARDWARE OPEN**, 24h-Detailansicht **HARDWARE OPEN**. AVPlay-Ton, Schwarzbild und PLAY/PAUSE/STOP bleiben ausdrücklich **HARDWARE FAIL** und werden durch den EPG-Fix nicht berührt. Kein Merge nach `main`, produktives Samsung-Paket `VDRSuiteTV` und bestehende Geräteanmeldung bleiben unberührt.
+
+
+## S6.7 – Event-ID-Abgleich Webfrontend / Samsung (26.10.2026)
+
+**Gegenprobe des Nutzers:** Foto Samsung DEV `v0.1.1 · S6.4` auf Das Erste HD mit echter Now/Next-Sendung `Tagesschau`, 17:00–17:15, und auf OK ausgelöstem Text „Dieser EPG-Eintrag enthält keine bestätigte Event-ID“. Direkt daneben Foto des VDR-Suite-Webfrontends mit **derselben** Sendung, 17:00–17:15, inklusive dort sichtbarer Event-ID. Die Web-App besitzt zusätzlich private/browserseitige EPG-Darstellung und stellt deshalb keinen Beweis dafür dar, dass diese ID auch über Public-v1 Now/Next transportiert wurde.
+
+**Quellnachweis Backend, Stand `main` 26.10.2026:** `PublicApiRuntime.cpp` serialisiert `/api/v1/epg/now-next` ohne `eventId`, obwohl `PublicEpgNowNextItem` ein optionales Feld dafür besitzt; `DaemonRuntimeInitialization.cpp` kopiert bei der Now/Next-Abbildung ausschließlich Kanal/Titel/Untertitel/Start/Ende/Dauer. Die existierende `/api/v1/epg/window`-Abbildung sendet optional `eventId` **nur nach** `hasSourceEventIdForBackend` im autorisierten EPG-Cache. Eine Browser-seitig sichtbare Event-ID beweist nicht notwendigerweise native Source-ID-Provenienz. Der vom Samsung zuvor gezeigte Text suggerierte daher eine fehlende native ID, obwohl eigentlich zunächst nur der Now/Next-Wire-Contract kein ID-Feld enthält.
+
+**S6.7 DEV-Source-Korrektur ohne Backend-Deployment:** Nur nach explizitem OK auf eine Sendung ohne Event-ID wird mit dem vorhandenen separaten Device-Client `GET /api/v1/epg/window` für deren konkrete Start-/Endzeit und exakt dasselbe Backend/Kanal angefordert. Die Antwort muss vollständig sein (`hasMore=false`) und **genau einen** Eintrag mit gleichem Kanal, Titel, Untertitel, Start/Ende und Dauer enthalten, der eine vom Server nachgewiesene Event-ID trägt. Nur dann folgt das Device-autorisierte `GET /api/v1/epg/event`. Bei Null-/Mehrfachtreffer, Pagination, fehlender Source-ID oder Fehler erscheint ein erklärender Hinweis; keine ID aus Titel/Zeit erfinden, keine private Browser-Route, kein Rückgriff auf andere Backend-Scope, keine Timer-Mutation. Abbruch/Ansichtwechsel entwertet die Antwort; die geladene Detailzeit muss zur ausgewählten Sendung passen. Erlaubte native Event-ID-Zeichen und die 160-Zeichen-Grenze entsprechen dem Public-v1 Event-Parser, einschließlich `:` (unverändert im streng validierten Query-String, nicht als `%3A`).
+
+**Bestätigt:** Samsung-Quelltests/Bundle-Check einschließlich fehlender/mehrdeutiger IDs, abgebrochener Antworten, erlaubter colon-ID und authentifiziertem EPG-Einzeldetail; GitHub Actions **#40353944975** erfolgreich für Produkt-Commit `0002ca174df879d7488ef516ec9c93833d28b698`. **Hardware OPEN** – ausführliche Beschreibung auf dem realen Samsung noch nicht nachgewiesen. Server bleibt unverändert, kein Re-Pairing, kein WITs-Start/Install-Fallback, kein Merge nach `main`. Das bei der lokalen DEV-App angezeigte `0.1.1` ist getrennt vom unveränderten GitHub-Quellmanifest `0.1.0` zu behandeln; lokales Update muss Version und Device-Daten ausdrücklich bewahren.
+
+
+## S6.8 – EPG-Poster über bestehende Public-v1-Device-Bildrouten (26.10.2026)
+
+**Neue Samsung-Hardwarebeobachtung (Foto):** Auf `arte HD` wird am 26.10.2026 nach EPG Jetzt/Nächste → „Parasiten packen aus“ → OK tatsächlich die vollständige Beschreibung mit Sendungszeit, Titel und Untertitel in der rechten Detailspalte angezeigt. Dies bestätigt den S6.7-Detail-GET auf der realen DEV-Hardware als funktionierend (keine Aussage über andere Formate/Sender). **Weiterhin kein Poster in der alten Clientfassung**, obwohl die vorhandene Suite Public-v1-API schon zwei Geräte-geschützte EPG-Image-Routen hat.
+
+**Befund Quellprüfung:** `GET /api/v1/epg/event` liefert lediglich Titel/Untertitel/Beschreibung/Zeit/Dauer und keine Bildbytes bzw. angereicherte TVScraper-Besetzung. `GET /api/v1/epg/preferred-artwork?backendId=...&channelId=...&eventId=...` wird serverseitig auf bestehenden bevorzugten TVScraper- bzw. validierten Serien-Fallback abgebildet; `GET /api/v1/epg/artwork` liefert vorhandenes direktes EPG-Artwork. Beide verlangen `epg.view` für das exakt gewählte Backend. Das Webfrontend nutzt darüber hinaus `/api/epg/cache/metadata` (Browser-only) mit Feldern wie Besetzung, Genres, Staffel/Folge/Bewertung. **Ein gleichwertiges strukturiertes Public-v1-Device-Metadaten-Read-API ist noch nicht belegt; keine Browser-Routen im Device verwenden.**
+
+**Samsung SOURCE-Korrektur:** Nach bestätigter Event-Detailabfrage lädt ein eigener authentifizierter, begrenzter Public-v1-Binärclient das bevorzugte Bild; nur bei 404 wird direktes EPG-Artwork angefordert. Akzeptiert werden ausschließlich `image/jpeg`, `image/png`, `image/webp` bis 2 MiB, ohne Redirect, Session-URL, Providerlink oder lokale Pfad-Übernahme. Rendering erfolgt per `Blob`/Object-URL; altes Bild und laufende Bildanforderungen werden bei neuem Event, Kanal-/Seitenwechsel sowie Fehler aufgeräumt. Fehlendes Bild ist kein EPG-Metadatenfehler. Responsive Bild/Text-Verteilung nimmt nur bei vorhandenem Bild Platz ein. Buildruntime ist synchronisiert; Tests prüfen Device-Header, Bildformat/-größe, Redirect-Abweisung, 404-Fallback und stale/URL-Cleanup.
+
+**CI:** Commit `ddbb6575495517203f2dcfb15f9f03e7b65001fb` PASS – GitHub Actions #40357442619. **HARDWARE OPEN:** Auslieferung via bereits laufendem isoliertem WITs-Watch an `VDRSuitDev`, auf der echten Sendung tatsächlich verfügbares Poster, Image-Decode und Navigation/Back sowie Login-Persistenz erneut prüfen. **Richer TVScraper metadata: nicht in diesem Slice**; zunächst Backend-Wire-Contract/Grant/Bounded-Response auf Public-v1-Seite separat spezifizieren und source-testen. Keine Änderung am vorhandenen yaVDR-Server, keine neue Installation, keine Änderung am Produktiv-Paket `VDRSuiteTV`, kein Merge von Samsung-PR #33.
+
+
+## S6.8 – TV-Foto: ZDF HD Poster und EPG-Text sichtbar (26.10.2026)
+
+**Echte Samsung-DEV-Hardware, Anwenderfoto:** Die laufende lokale Fassung zeigt am unteren Bildrand `Samsung v0.1.1 · S6.4` und rechts oben `Connected`. Unter `Live-TV → ZDF HD → Jetzt/Nächste` wurde die Sendung **SOKO Potsdam – Running Dinner (18:05–19:00)** markiert. Rechts werden ein tatsächlich decodiertes EPG-Sendungsbild, Titel, Untertitel, das Textfragment **„Krimiserie, Deutschland 2026“**, eine ausführliche Inhaltsbeschreibung und Darstellernamen angezeigt. Dies ist ein **Hardware-PASS für den S6.8-Bildabruf und die Darstellung eines vorhandenen Bilds**, sowie ein erneuter **Hardware-PASS für den S6.7-Einzeldetail-/Beschreibungspfad auf diesem konkreten Event**. Vorherige Abnahme `HARDWARE OPEN` für das Einzelfoto nun entsprechend aktualisiert; keine Behauptung, dass alle Sender/Sendungen Bildmaterial haben, Bild-Cleanup nach Navigation oder Anmeldung nach Neustart schon abgenommen sind.
+
+**Unterscheidung der Metadaten:** Auf dem TV sichtbare Darsteller/Genre-/Land-/Jahresangaben können aus dem **nativen Beschreibungstext** stammen. Das Foto beweist **nicht**, dass die Samsung-App bereits die strukturierten Browser-/TVScraper-Zusatzfelder aus `/api/epg/cache/metadata` ausliest. Diese S6.9-API-/UI-Parität bleibt **OFFEN**. Keine privaten Browser-Routen mit Device-Token verwenden.
+
+**Sichtbarer UX-Mangel:** Das Bild bleibt im schmalen Detailbereich klein, die lange Beschreibung und Darstellerliste laufen unter den Bildschirmrand, während die Zweispalten-Bildschirmaufteilung nicht die Hierarchie des vorhandenen VDR-Suite-Webfrontends abbildet. Nächste TV-Layout-Aufgabe: Poster/Text in einem großzügigen Detailbereich anordnen, D-Pad-Fokus und Scrollbarkeit für lange Event-Texte nachweisen, Listen- und Detailanzeige klar trennen. Farben und Schriftfamilie ausdrücklich **nicht** neu erfinden. Keine UI-Verschönerung als Ersatz für blockierenden AVPlay-Ton, Schwarzbild, PLAY/PAUSE/STOP und OK-Freeze deklarieren.
+
+**Status:** PR #33 bleibt Draft, kein Merge nach `main`, keine produktive App-Installation, kein neues Pairing. DEV läuft weiterhin über das isolierte `VDRSuitDev`-WITs-Projekt. `S6.8` Poster **HARDWARE PASS (eine ZDF-Sendung)**, universelle Artwork-Verfügbarkeit/Fehlerfälle/Back-Cleanup **OPEN**, S6.9 strukturierte Metadaten **OPEN**, Player **HARDWARE FAIL**.
+
+
+## S6.10 – Player-Evidenz und TV-EPG-Scroll (Quellabnahme, 26.10.2026)
+
+**Quelle des nächsten Retests:** Bisherige echte Hardwarebilder zeigen für `SOKO Potsdam – Running Dinner` ein geladenes Artwork, Titel, Untertitel und langen Text mit Darstellerliste, welcher am TV unten nicht mehr lesbar ist; Aufnahme-Playback weiter Ton=FAIL, teilweise Schwarzbild=FAIL, Tastensteuerung=FAIL. S6.10 verändert nur den Client/DEV-Code, nicht den installierten Samsung oder Server.
+
+**Source/CI PASS:** Native AVPlay oncurrentplaytime-Millisekunden werden bei tatsächlich laufender AVPlay-Sitzung als begrenzte Fortschrittsdiagnose angezeigt und durch `generation`/Stop entwertet. Nach PLAY/PAUSE/OK wird ein rein lesender `getState`/`getCurrentTime`-Snapshot neben der Key-Aktion angezeigt, wenn verfügbar. Ein AVPlay-Zeitdelta ist ausdrücklich **nicht gleichbedeutend** mit bewegtem Bild oder hörbarem Ton. Die native AVPlay-Quelle, MediaSession und Audio-Berechtigung sind unverändert; ohne Real-TV-Beobachtung kein Player-Fix/Hardware-PASS.
+
+**Source/CI PASS:** Im Live-EPG werden lange Sendungsdetails in der vorhandenen Scrollfläche per `Text ▲/▼`-Buttons im bestehenden Fokusowner lesbar, mit Reset bei Auswahlwechsel und versteckten Controls bei Wechsel zur anderen Seite. Poster/Text haben mehr Raum. Bestehende Farbpalette, Font und Device-Credentials unverändert. **Hardware OPEN:** Auf realem 2020er Tizen 5.5 fokussieren/scrollen, lange Beschreibung und Poster prüfen; auf kleinen TV-Höhen/Overflow und D-Pad-Fokus achten. Weniger Listenhöhe darf die 24h-EPG-Paginierung nicht blockieren.
+
+**S6.11 Metadatenstatus:** native Beschreibung/Poster HARDWARE PASS für einzelne Sendungen; strukturierte Genre/Personen/TVScraper-Daten PARITY OPEN und serverseitiger Public-v1-Wire-Contract notwendig. Keine Browser-privaten Routen und keine erfundenen Meta-Felder.
+
+**Merge-Sperre:** PR #33 bleibt Draft, nicht nach `main` mergen. Kein automatischer DEV-Bootstrap und kein Update der produktiven Samsung-App.
+
+
+## S6.12 – Echte Samsung-Fernbedienung, fehlende tv.inputdevice-Berechtigung (26.10.2026)
+
+**Hardwarefoto:** Klassische Samsung-Fernbedienung mit separat vorhandenen Farbtasten A/B/C/D (D=Blau), eigenständigem PLAY/PAUSE/STOP und RETURN. Auch die zuvor fotografierte AVRPlay-Overlayzeile `Fernbedienung · Taste RIGHT · keine Wiedergabeaktion` belegt, dass mindestens ein Standard-D-Pad-KeyEvent in der aktiven AVPlay-Anzeige an den Client gelangt; sie belegt NICHT, dass die Zusatzkeys geliefert wurden. Audioanzeige meldet eine einzige MPEG-Spur mit Index 1 und `keine sichere automatische Wahl`; Audio bleibt am Hardwaretest stumm, AVPlay-Resume/Freeze bleibt FAIL. Eine einzelne MPEG-Spur kann auch bei erfolgreichem BLAU-Tastenevent nicht zu einer anderen vorhandenen Spur gewechselt werden.
+
+**Gesicherte Quellursache für unerklärte Zusatzkey-Verfügbarkeit:** Die App registrierte bereits `MediaPlay`, `MediaPause`, `MediaPlayPause`, `MediaStop` und `ColorF3Blue` per `tizen.tvinputdevice.registerKey()` und normalisierte die offiziellen Codes (415, 19, 10252, 413, 406). Die bisherige `app/config.xml` deklarierte jedoch nicht das Samsung/Tizen-Public-Privilege `http://tizen.org/privilege/tv.inputdevice`, das diese API benötigt. Die Registrierung schluckte alle Fehler und behauptete nur `tvinputdevice vorhanden`. Quelle: Samsung TVInputDevice-Referenz, https://developer.samsung.com/smarttv/develop/api-references/tizen-web-device-api-references/tvinputdevice-api.html.
+
+**DEV-Source-Fix (S6.12):** Explizites Privilege in `app/config.xml`. Der Client zeigt künftig sicher und ohne Credential/URL den jeweiligen Registrierungsstatus von PLAY/PAUSE/STOP/BLAU sowie den numerischen Keycode empfangener Media-/Farbtasten im bestehenden Playback-HUD. Für den EPG führt DOWN vom letzten rechts fokussierten EPG-Eintrag direkt zum bereits vorhandenen `Text ▼`-Steuerelement, mit UP zurück; so muss der Nutzer nicht erst alle Senderzeilen durchlaufen. Keine weiteren Player-/Audio-/MediaSession-Änderungen. Sicherheits- und Focus-Tests/Runtime synchronisiert; GitHub Actions **#40364791097** für Commit `d43f0e47271b46397f563a9b142e455d5bad1b03` **PASS**.
+
+**Wichtige Auslieferungsgrenze:** `tv:watch` überträgt DEV-Webdateien, installiert aber KEIN Paket und kann eine Manifest-Berechtigung der **bereits installierten** WITs-Host-App nicht rückwirkend gewähren. Bevor die neue Berechtigung auf echtem TV wirksam wird, muss eine zukünftige ausschließlich DEV-bezogene signierte App-/Host-Aktualisierung gesondert geprüft und genehmigt werden; sie kann DEV-KeyManager-Daten verlieren. `wits --start` deinstalliert und installiert den WITs-Host und ist deshalb **nicht** automatisch freigegeben. Produktives Paket `VDRSuiteTV` unverändert; DEV-Paket `VDRSuitDev` getrennt; kein neuer Pairingversuch. Zusatztasten, Audio, OK-Resume und EPG-Scroll auf der installierten Version bleiben **HARDWARE OPEN/FAIL** bis zur tatsächlichen Abnahme.
+
+
+## S6.13 – Kein AVPlay-Ton: MPEG-Audio vs. Decoderprofil (26.10.2026)
+
+**Offene reale Hardware-Blockade:** Auf dem Samsung GU43TU6979UXZG (Tizen 5.5) läuft bei manchen Aufnahmen das Bild/AVPlay-Zeitdelta, aber es gibt unverändert keinen hörbaren Ton. Der Player zeigt genau eine Spur `Index 1 · MPEG`, zuvor `keine sichere automatische Wahl`. Das ist **kein** Nachweis einer tatsächlich dekodierten Tonspur: `getTotalTrackInfo()` meldet Demux-/Metadaten, nicht akustischen Output. Fehlender `onerror`-Callback bedeutet deshalb nicht „Audio funktioniert“. Die installierte `tv.inputdevice`-Berechtigung und Media-Key-Erkennung sind ein **separates** Thema.
+
+**Geprüfte offizielle Samsung-Dokumentation:** Die 2020-TV-Video-Spezifikationen führen für die Audio-Codecs `MPEG(MP3)`, AAC, AC-3 usw. auf, aber keine ausdrückliche MP2-Unterstützung. Das native AVPlay-FOURCC `mpeg` (sofern so gemeldet) identifiziert MP2 und MP3 nicht zuverlässig. Ein VDR-/DVB-Transportstream mit MP2 ist daher eine **plausible, aber unbestätigte** Erklärung; erst `ffprobe` auf dem tatsächlich gestreamten Audio-/Aufnahmesegment bzw. einer repräsentativen Quelle sowie ein AAC-Gegenversuch erlauben die Zuordnung. Referenz: https://developer.samsung.com/smarttv/develop/specifications/media-specifications/2020-tv-video-specifications.html. `AVPlay.enableAudioStream()` ist laut Samsung erst seit Tizen 6.5 verfügbar und somit **kein** Fix für Tizen 5.5. Referenz: https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html.
+
+**S6.13 DEV-Änderungen:** Der Client bewahrt ein bounded, allowlisted AVPlay-FOURCC (nicht nur den normalisierten Codec-Namen) und die Sample-Rate; bei MPEG weist die UI ausdrücklich darauf hin, dass MP2/MP3 nicht unterschieden wurden. Die Tizen-`tvaudiocontrol`-API wird – soweit verfügbar – nur mit `isMute()`, `getVolume()` und `getOutputMode()` abgefragt; weder Lautstärke noch Mute noch Audio-Routing werden verändert. Nicht erlaubte oder fehlgeschlagene Abfragen werden als `nicht lesbar` ausgewiesen, nicht als impliziter PASS. Keine MediaSession-, URL-, Cookie-, EPG-, Paketsignatur- oder Transcodeänderung. Tests decken nicht-erfundene Codec-Aussagen, den Verzicht auf spekulative Track-Auswahl und vollständig read-only TV-Ausgabechecks ab. GitHub Actions #40366232457 für Runtime-Commit `328df8acaf691f35fcdbcad32a972d423b549329`: PASS.
+
+**Nächste reale Prüfungen:** (1) Funktioniert anderer TV-/App-Ton bei internen TV-Lautsprechern mit nicht-stummgeschaltetem TV? Falls ein externer Audioempfänger angeschlossen ist, digitales Ausgabeformat PCM zum Vergleich. (2) Den Audio-Codec einer betroffenen VDR-Aufnahme mit `ffprobe` read-only feststellen (`mp2`, `mp3`, `aac`, `ac3` usw.) und gegen ein nachweislich AAC-Stereo-Video testen. (3) Wenn nur MP2 stumm bleibt, einen **gesonderten** audio-only Transcode zu AAC Stereo bei unverändertem Video auf einer zeitlich/Session-begrenzten Testroute evaluieren; keine unautorisierten Server-, Aufnahme- oder Produktivänderungen. (4) Sind auch AAC-Stereo-Titel stumm, zuerst AVPlay-Audio-Routing / Mute / Tizen-WebAudio-Gegenprobe und aktuelle Track-Auswahl untersuchen.
+
+**Abnahme:** AUDIO bleibt HARDWARE FAIL, die S6.13-Diagnose SOURCE/CI PASS und HARDWARE OPEN. PR #33 bleibt Draft, kein Merge. Die JS-Diagnose kann auf die existierende isolierte DEV-Watch-Stage übertragen werden; die bereits installierte DEV-WITs-Host-Manifest-Berechtigung wird dadurch nicht neu installiert oder rückwirkend geändert. Kein Pairing-/Produktiv-App-Eingriff.
+
+
+## S6.13 – Neuer realer AVPlay-Fotobefund: Vollbild/Untertitel, MPEG-Audio, fehlende Zusatztasten (26.10.2026)
+
+**Anwenderfoto echter Samsung GU43TU6979UXZG:** Der native Player zeigt tatsächlich ein bildschirmfüllendes dunkles Filmszenenbild mit gerenderten **deutschen Untertiteln** („… und ließen sich so von der Stadt zu Hilfs-Bahnpolizisten ernennen.“). Bildfläche und Textdekodierung sind damit für **diese konkrete Aufnahme** beobachtet; das Foto allein belegt weder fortlaufende Frames noch hörbaren Ton, Audio-Funktion, PLAY/PAUSE/STOP oder erfolgreiche Bildausgabe für andere Medienprofile. **Status: einzelnes AVPlay-Videobild mit Untertiteln REAL-HARDWARE-PASS, AVPlay-Audio-/Controller-Gates weiterhin OPEN/FAIL gemäß bisherigen Hörtests.**
+
+**Abgelesene Overlay-Diagnose:** `AVPlay-Zeit 0:01 · Fortschritt 0 s · Bild/Ton separat prüfen`; Audio: `1 Spur(en)`, `Index 1`, `MPEG [MPEG]`, `2ch`, `48000Hz`, `MP2/MP3 nicht bestimmt`, `keine sichere automatische Wahl`. TV-Audio-Control: `Stumm: nein`, `Lautstärke: 12`, `Ausgabe: PCM`. Fernbedienungszeile: `Zusatz-Tasten nicht registriert: MediaPlay, MediaPause, MediaStop, ColorF3Blue`; das bestehende HUD nennt `OK/PLAY-PAUSE` und `STOP/ZURÜCK` als Aktionen, **beweist aber keine erfolgreiche Taste**. Das initiale Zeitdelta von 0 s bei Position 0:01 ist zu früh, um auf Stillstand zu schließen.
+
+**Einordnung:** Eine einzelne als MPEG etikettierte 48-kHz-Stereospur kann nicht durch Wechsel auf einen anderen vorhandenen Track geheilt werden. Der Samsung-2020-Codec-Vertrag erwähnt MPEG(MP3) neben AAC/AC-3, nicht explizit MP2; die AVPlay-Meldung unterscheidet MP2 und MP3 nicht. Ursache Audio deshalb **unbewiesen**, bis die tatsächlich abgespielte Aufnahme oder das vom Server gelieferte Segment read-only mit `ffprobe` geprüft und mit einer bekannten AAC-Stereo-Aufnahme verglichen wurde. `Stumm: nein` und `Ausgabe: PCM` beweisen allein keinen akustischen Output.
+
+**Zusatzkey-Ursache separat halten:** Das Quelle-Manifest enthält inzwischen `http://tizen.org/privilege/tv.inputdevice` (S6.12), aber `tv:watch` aktualisiert nur Webdateien. Die bereits installierte WITs-DEV-Host-App erhält dadurch **keine** neue Manifest-Berechtigung. Die fehlenden Registrierungen sind somit mit der noch alten Host-Berechtigung vereinbar, aber per Foto nicht bis zu einem API-Fehlercode eindeutig bewiesen. Kein automatischer WITs-Start, Reinstall, Uninstall, Neu-Pairing oder irgendein Eingriff in `VDRSuiteTV`; ein gesonderter signierter DEV-Host-Update-Plan braucht vorab Inventar/KeyManager-Risiko-Freigabe.
+
+**Nächstes Hardware-Differential:** (1) Hört der Nutzer bei dieser Szene irgendeinen Ton? (2) Schreitet die AVPlay-Zeit nach einigen Sekunden tatsächlich voran und bewegen sich Bilder? (3) Welchen Codec meldet `ffprobe` für den verwendeten TS-Segment-Audiostream? Erst anhand dessen über eine separate, sessiongebundene **Audio-only**-AAC-Option nachdenken, Video unangetastet; ein hypothetischer MP2-Fix ist kein zulässiger Blind-Patch.
+
+
+## S6.14 – AVPlay-Reaktion auf OK nach etwa einer Minute (26.10.2026)
+
+**Neues Foto und ausdrücklicher Hörtest des Nutzers:** Bei der bildschirmfüllenden VDR-Aufnahme bleibt der Samsung **stumm**. OK löst offenbar Pause/Fortsetzen aus, **aber subjektiv erst nach ungefähr einer Minute**. Das neuere Foto zeigt ein Standbild mit Polizeiauto und rechts oben den Schriftzug `Disconnected` (nicht als belegte Änderung des Device-Grants missverstehen). Native HUD-Zeile: `Fernbedienung · OK (Code 13) · Aktion resume_requested · AVPlay PLAYING · Zeit 1s · Delta 0s`. Darunter weiterhin `Audio · 1 Spur(en) · Index 1 · MPEG [MPEG] 2ch 48000Hz · MP2/MP3 nicht bestimmt · keine sichere automatische Wahl`, `TV Stumm: nein · Lautstärke: 12 · Ausgabe: PCM`. Genau eine sichtbare native Filmframe-Ausgabe ist bestätigt, **nicht** flüssiger fortlaufender Videotakt. Audio bleibt **HARDWARE FAIL**, Pause/Resume-Latenz **HARDWARE FAIL**, Zusatzkeys/Host-Privilege-Gate gesondert **OPEN**.
+
+**Technische Erklärung / Abgrenzung:** `resume_requested` stammt direkt aus der synchronen AVPlay-`play()`-Anforderung und ist keine Aussage über abgeschlossene Pufferung oder neue Frame-Ausgabe. Auch `getState() === 'PLAYING'` beweist keine vorwärtslaufende Wiedergabe. Das bisherige Overlay zeigt keinen Zeitbedarf des eigentlichen nativen `pause()`/`play()`-Aufrufs. Der Samsung-AVPlay-Vertrag kennt Pufferung beim Start und Resume; eine unzureichend gefüllte Session, eine native blockierende Operation und ein nicht kompatibles MPEG-Audioformat sind getrennte mögliche Ursachen, keine als bewiesen deklarieren. Der Ausgabemodus PCM und TV-Lautstärke bestätigen keine dekodierte Audioausgabe.
+
+**S6.14 DEV-Diagnose (Source-only bis TV-Retest):** Im existierenden Key-Owner unmittelbar nach expliziter PLAY/PAUSE/OK-Aktion gemessene, auf 600000ms begrenzte `Native-API ...ms`-Dauer separat von der ebenfalls begrenzten `Snapshot ...ms`-Laufzeit zeigen. Nach 10 Sekunden einmal read-only `inspectPlayback()` aufrufen und im gleichen HUD `nach Ns: PLAYING/PAUSED · Uhr vorwärts/unverändert/rückwärts (Xs)` ausgeben. Die spätere Auswertung ist auf dieselbe MediaSession, Ansicht und Tastengeneration begrenzt und wird bei STOP, neuer Wiedergabe und weiterer Fernbedienungsaktion entwertet. Kein AVPlay-Buffer-Override, keine zusätzliche Session, kein Seek, Transcode, Cookie- oder Grant-Eingriff und keine Annahme, dass eine vorrückende AVPlay-Uhr auch Videoframes oder Ton beweist. Quell-/Regressionstest prüft das Fencing; die generierte Tizen-5.5-Runtime ist synchronisiert.
+
+**Nach Testbild:** Eine tatsächlich große `Native-API`-Dauer spricht für einen blockierenden Tizen-Aufruf; kleine Dauer bei `Uhr unverändert` nach genügend realer Zeit spricht eher für Stream-/Buffer-/Zeitstempelstillstand. Unabhängig davon Audio-`codec_name` der betreffenden .ts-Aufnahme oder des tatsächlich ausgespielten TS-Segments read-only per `ffprobe` bestimmen und gegen eine bekannte AAC-Stereo-Aufnahme vergleichen. Der beim Abspielen angezeigte `Disconnected`-Status ist ein gesondertes Anzeige-/Authentifizierungs-Indiz, nicht allein ein Beweis für Medien-HTTP-Fehler. Alle Hardware-Abnahmen für neuen Slice bleiben OPEN. Kein WITs-Start/Run Project, keine DEV-Host-Manifest-Neuinstallation und keine Aktion am produktiven Samsung-Paket. PR #33 bleibt Draft.
+
+
+## S6.15 – Zusatz-Tasten und DEV-KeyManager (26.10.2026)
+
+**Erstbericht vor S6.15:** Farb-Keys, Play, Pause, Stop, OK, D-Pad und Return PASS, weitere optionale Tasten zunächst OPEN. **Nutzer-Korrektur nach S6.15:** Die zuvor fehlenden Tasten einschließlich INFO funktionieren; **nur die physische SETTINGS-Taste nicht**. INFO darf nicht mehr als Hardware-FAIL geführt werden. Diese Aussage belegt Tastenerkennung, nicht automatisch vollständige Teletext-/Seek-Funktion.
+
+**Wichtiger negativer Hardwaretest:** Nach der erneuten DEV-WITs-Installation per `wits --start` wurde der Testschriftzug bzw. neue DEV-Build sichtbar, die DEV-Gerätekopplung ging laut Nutzer aber verloren. Deshalb `wits --start` ausdrücklich **nicht** als datenbewahrendes Routineupdate bezeichnen! Der Host kann vor der Neuinstallation deinstalliert werden und den Tizen-KeyManager-Eintrag verlieren. Kein erneutes Pairing, keine Deinstallation und kein neuer Installationsvorschlag im laufenden Tasten-Slice. Produktive App `VDRSuiteTV` ist strikt getrennt und bleibt unangetastet.
+
+**S6.15 Source:** Samsung-Keycodes und `getSupportedKeys()` / `registerKey()` in getrennten Plattformadaptern ergänzt. Die Registrierung zeigt nur Potenzial für DOM-Keyevents, nicht automatisch die Funktionen oder ein Hardware-PASS. Senderziffern/CH ändern weder MediaSession noch Backend und erlauben nur Navigation über bereits geladene Sender. Rewind/FF sind bewusst read-only diagnostisch bis AVPlay-Puffer/Seek-Gates geklärt. `Teletext`/PreCH/Tools/Info benötigen noch echte Funktionen; möglicherweise reservierte TV-Tasten bleiben als Geräte-Hardware-Gate offen. Herstellerquelle: https://developer.samsung.com/smarttv/develop/guides/user-interaction/remote-control.html
+
+
+### S6.15 SETTINGS – korrigierter Hardwarebefund (26.10.2026)
+
+**Korrigierter Nutzer-Hardwaretest:** Zuerst wurde irrtümlich `INFO` als Ausnahme gemeldet; anschließend präzisierte der Nutzer ausdrücklich, dass **SETTINGS** die nicht funktionierende Taste ist. `INFO` funktioniert laut Nutzer. Samsung dokumentiert `Info`/457 und `Menu`/18, aber keinen eigenständigen `Settings`-Eintrag. Ob die physische SETTINGS-Taste bei diesem Gerät vom TV-System reserviert wird oder einen an die App weitergegebenen Tastencode besitzt, ist offen; keine fiktiven Keycodes ergänzen.
+
+**Ursache im bisherigen S6.15-Quellstand:** Der Key wurde bereits registriert und normalisiert, aber nur als Statusmeldung ohne funktionale Detailaktion behandelt. **Quelle-Korrektur:** Bei selektiertem Live-Sender löst INFO nun die vorhandene autorisierte Jetzt/Nächste-EPG-Anfrage aus; bei fokussierter EPG-Sendung den vorhandenen Detailhandler. Bei fokussierter Aufnahme zeigt INFO vorhandene Aufnahmedetails. Im aktiven AVPlay-Player zeigt INFO nur die sichere read-only Zustands-/Zeitdiagnose. Keine neue API, kein AVPlay-Seek und keine implizite Wiedergabe.
+
+**Hardware noch offen:** Die physische SETTINGS-Taste ist nicht nachgewiesen; `Menu`/18 ist bereits im Quellcode registriert und auf die VDR-Suite-Einstellungen abgebildet. Ohne nachgewiesenes DOM-Keyevent wäre ein Code-Fix reine Spekulation. Die spätere INFO-Detailaktion und S6.16-IME-Korrektur sind wegen noch nicht nachgewiesenem WITs-Dateitransfer separat TV-OPEN. Niemals `wits --start` oder `Run Project` zur Tastendiagnose aufrufen: Beim letzten DEV-Reinstall ging die Kopplung verloren. PROD unverändert; PR #33 Draft.
+
+
+## S6.16 – Native Samsung-IME darf nicht vom globalen Key-Owner übersteuert werden
+
+**Nutzerbefund 26.10.2026, Samsung Tizen 5.5:** Beim Eingeben der Serveradresse in den Einstellungen springt die Rücklösch-/Pfeiltastenbedienung aus der Tastatur ins App-Menü. S6.16 führt den bestehenden globalen `keydown`-Owner während der Adressfeld-Eingabe nicht mehr aus; das Feld hat ab Fokus die Tastenhoheit unabhängig von `event.target`. Backspace (Code 8) und Pfeile bleiben ohne `preventDefault`; Tizen Done (65376)/Cancel (65385) und Return (10009) beenden zuerst die Eingabe, ohne App-Back-Navigation. Bei regulärem Textfeld-Blur bleibt das bestehende valide HTTPS-Speichern aktiv. Keine automatische API-Abfrage, Credential-Migration oder Re-Pairing.
+
+**Quelle:** Samsung Keyboard/IME Guide https://developer.samsung.com/smarttv/develop/guides/user-interaction/keyboardime.html erklärt den sofortigen IME-Start bei Input-Fokus und verbietet `preventDefault` für die Texteingabe. Source/CI-PASS nach Aktualisierung; echter Editier-/Backspace-/D-Pad-Retest auf TV **OPEN**. Verteilung nur über bestehenden DEV-WITs-Watch; nie `wits --start`, `Run Project` oder Neuinstallation.
+
+
+## S6.17 – Audiostream: expliziter HLS-TS/AAC-Stereo-Hardwarevergleich
+
+**Ausgangsbefund:** Samsung 2020 / Tizen 5.5 – AVPlay meldet `MPEG`, 2ch/48000 Hz; `Stumm nein`, Lautstärke 12, PCM; keine hörbare Audioausgabe. Der AVPlay-Zeitfortschritt stockt und Pause/Fortsetzen reagiert verzögert. Eine AVPlay-Spurmeldung ist weder sicherer Beweis für MP3 statt MP2 noch für tatsächlich decodierten Ton.
+
+**Neuer getrennter Testweg:** Unter Aufnahmen nach der Auswahl einer fertigen Aufnahme `HLS-TS + AAC-Ton testen`. Explizite MediaSession-Fähigkeiten: HLS, MPEG-TS, H.264, AAC, höchstens zwei Audiokanäle. Der Server soll einen passenden `hls-ts`-Präsentationsplan liefern; MPEG-Audio wird – falls Quellcodec sicher ermittelt und Server-Worker zulässig – nach AAC transkodiert. Der Samsung-Client akzeptiert im speziellen Test nur den HLS-Masterpfad plus `hls-ts`-Profil; sonst kontrollierter eigener Session-Stop. Keine automatische zweite Sitzung, Credential-Kopie oder Neu-Kopplung.
+
+**ECHTER SAMSUNG-HARDWARETEST – AUDIO PASS (27.10.2026, ausdrückliche Nutzerbestätigung):** Die neue Schaltfläche **`HLS-TS + AAC-Ton testen` ist auf dem TV sichtbar**, und der Nutzer bestätigt unmittelbar: **„der neue Button ist da, UND ICH HABE TON!“**. Damit sind **S6.17-DEV-Update sichtbar angekommen** und **Ton bei der getesteten Aufnahme tatsächlich hörbar**, nicht bloß aus Codec-Metadaten abgeleitet. Der separate Testweg verlangt HLS-TS/AAC Stereo und überprüft die Server-Profilkennung `hls-ts`; die vom TV tatsächlich angezeigte Codec-Bezeichnung ist **nicht gemeldet**. Kein neuer Installations-/Pairing-Schritt und keine Prüfung von PROD wurden berichtet.
+
+**Abnahme weiterhin OPEN:** Audiocodec-Anzeige AAC/MPEG, tatsächlich dauerhaft flüssiger Bild-/Zeitfortschritt, STOP/PLAY/PAUSE/Resume, MediaSession-Cleanup, Unterschiede zu anderen Aufnahmen sowie Kopplungspersistenz nach Neustart. Nicht pauschal alten Standardpfad oder alle Aufnahmen als behoben bezeichnen. Die positive Tonmeldung bleibt als **reale Hardware-Evidenz**, unabhängig von CI (195/195), erhalten.
+
+Quellen: Samsung 2020 https://developer.samsung.com/smarttv/develop/specifications/media-specifications/2020-tv-video-specifications.html , Samsung AVPlay Track API https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html , MediaPresentationSelector in `hotzenplotz5/vdr-suite` (nur gelesen, nicht verändert). Sicheres DEV-Update ausschließlich über `docs/wits-isolated-development.md`; niemals `wits --start` oder `Run Project`, da DEV-KeyManager-Kopplung nicht riskiert werden darf.
+
+
+## S6.18 – Device-Public-v1-Live-TV-Streaming: Hardware-Testplan (27.10.2026)
+
+**Source/CI PASS, Samsung-TV OPEN.** Der neue manuelle Knopf `Live-TV testen` startet für einen mit OK ausgewählten Sender eine autorisierte `live-channel`-MediaSession. Server prüft `media.live.play@backend` separat von `channels.view` und `epg.view`. Er liefert `live-progressive-fmp4` unter einem **geschützten** Sessionpfad `/api/v1/media/sessions/{id}/live/stream.mp4`. Die Samsung-App verweigert fremde Session-/Backend-/Senderidentitäten und unpassende Medienpfade/Profilkennungen. Die erste Hardwareprobe läuft bewusst nur über HTML5-MP4, **nicht** über AVPlay: Der derzeit dokumentierte Device-Live-Vertrag gibt kein ausdrückliches AVPlay-Cookie-Projektionsfeld aus. Tizen-5.5-Kompatibilität des progressive-fMP4-/HttpOnly-Cookie-Transports ist noch nicht bewiesen.
+
+**Ablauf am realen Gerät:** Bestehende DEV-App nicht neu installieren/neu koppeln. Per laufendem **einzigen** `npm.cmd run tv:watch` nach vorbereitetem Build aktualisieren und `Live-TV testen` am Samsung sichtbar verifizieren. Admin-granted `media.live.play` für das gewählte Backend prüfen. Dann Live-TV → Sender laden → Sender mit OK auswählen → `Live-TV testen`. Prüfen: 201/403/503; Player `onplaying` vs. wirklich laufendes Bild und hörbarer Ton; bei Fehlern die nur begrenzte UI-Nachricht (z. B. 401/403, Cookie-/SameSite-/CORS-/Decoderproblem); STOP/ZURÜCK → MediaSession-STOP und freiwerdender Tuner. Ein zweiter Sender erst **nach bestätigtem** Stop ausprobieren, kein Automatismus. Bei unklarer STOP-Antwort Backend-Lease/Logs kontrollieren. Niemals Secret, volle URL mit Session-ID oder Device-Credential aufzeichnen oder über Chat weitergeben.
+
+**Separat offen:** flüssiges längeres Live-TV, Senderwechsel, Hardwarepause/-resume, Event/EPG während Playback, Wechsel zu Samsung-AVPlay erst nach serverseitig ausdrücklich freigegebenem nativen Zugang. Der erfolgreiche **S6.17-Recording-Audiotest** bleibt erhalten und wird dadurch nicht zum Live-TV-PASS umetikettiert.
+
+
+### S6.18 Samsung-Realtest: Live-HTML5 mit Medien-HTTP-401 gescheitert (27.10.2026)
+
+Nutzer meldet beim neuen Live-TV-Test **`HTTP 401 · Cookie/SameSite/Proxy-Pfad prüfen`**. Diese Meldung stammt aus dem in S6.18 eingebauten geschützten Media-Header-Probe nach HTML5-Playerfehler. Damit ist das Live-Medium **nicht autorisiert abrufbar**; die bereits bestehenden 202 Quelltests sind **kein** Hardware-PASS. Ob der HttpOnly-Cookie in Tizen `file://` fehlt, Cookie-Path/SameSite/Reverse-Proxy falsch ist oder ein anderes Medien-Gateway-Problem vorliegt, lässt sich aus 401 allein **nicht** auseinanderhalten. Nicht als fehlendes `epg.view` oder als AAC-Decoderfehler interpretieren.
+
+**Architekturkorrektur erforderlich:** Erfolgreiches S6.17-Aufnahme-Audio lief über AVPlay mit ausdrücklich vom Public-v1-Device-CREATE bereitgestelltem Session-Cookie (`nativeMediaAccess:true`). `api/device-live-tv-playback.md` / `LiveMediaSessionController` des Backends liefern für Live bisher nur HttpOnly `Set-Cookie` und geschützte progressive MP4-Medienpfade. Erst eine passende vertragliche Live-Device-native-Access-Erweiterung, anschließend AVPlay mit dem tatsächlich freigegebenen Session-Cookie und passendem Video-/AAC-Profil, ist die aussichtsreiche nächste integrierte Hardwareprobe. Backend hier nicht modifiziert, Audio/Video Live OPEN. Die bestehende Kopplung nicht verändern.
+
+
+## S6.19 – Samsung NativeTimer API-v1: lesender Hardwaretest (27.10.2026)
+
+**Noch kein Hardware-PASS.** Geplanter Test: Die bereits gekoppelte DEV-App zeigt im Timer-Tab den neuen Knopf `Timer laden`. Unter verifizierter Device-Identität mit `timers.view@default` ruft sie nur `GET /api/v1/native-timers?backendId=default&offset=0&limit=30` und für weitere Seiten `offset=...` ab. Der tatsächliche Backendstand ist von Build-/Quellcodeprüfungen getrennt zu bewerten; ein installiertes älteres Backend kann 404/503 liefern. Die ausgegebenen `HHMM`-Werte sind lokale native VDR-Uhrzeiten, nicht aus UTC-Zeitstempeln konvertiert.
+
+**Abnahme am Samsung:** Nach echtem WITs-Datei-Push sichtbare Timer-Aktion, `Timer laden`, vorhandene Timer und deren Titel/Channel/Datum/Uhrzeit/aktiv/recording/pending mit dem realen VDR vergleichen, OK-Detailanzeige und D-Pad-Fokus prüfen, 30er-Seiten nachladen, nach Navigation zurück weder alte Zeilen noch fremde Backenddaten anzeigen. Berechtigung `timers.view` getrennt von `epg.view` und `media.live.play`. Bei 403 aktive Device-/Backend-Zuordnung prüfen, ohne Geräte-Neukopplung. Timer bleiben unberührt – **kein CREATE/UPDATE/TOGGLE/DELETE**, auch nicht zum Test. Bestehende Aufnahmen und die erfolgreiche S6.17-Tonausgabe nicht verändern.
+
+**Offen für weitere Timer-Slices:** Suite-TimerAssignments als ausdrücklich gekennzeichnete zweite Ebene, einzelne native Timerdetail/ETag, Operationen/Revisionen und anschließend separate, explizit freigegebene Mutationsabnahme. Nicht alle nativen Timer als Suite-TimerAssignments bezeichnen.
+
+
+## S6.20 – Gespeicherte epgsearch-Suchtimer (27.10.2026)
+
+**Source/CI PASS, Samsung REAL-HARDWARE OPEN.** Im Timer-Tab befindet sich jetzt der eigenständige Bereich `Suchtimer (epgsearch)` mit `Suchtimer laden`, `Weitere Suchtimer`, `Backend wechseln` und `EPG-Treffer anzeigen`. Es handelt sich um VDR-SearchTimer-Regeln, nicht um native Aufnahme-Timer und nicht um Suite-TimerAssignments. Die bisherigen S6.19-NativeTimer-Funktionen bleiben erhalten.
+
+**Hardware-Prüfablauf:** Nach dokumentiertem, nichtdestruktivem Git-Update, Build und tatsächlichem **WITs-Push** (nicht bloß `tv:dev:prepare`) den Abschnitt auf der gekoppelten Samsung-DEV-App sichtbar verifizieren. Für das richtige Device/Backend `searchtimers.view` vergeben; `epg.view` ist für Liste und Detail nicht erforderlich. `Suchtimer laden` zeigt echte Namen, Suchbegriffe und `AKTIV/INAKTIV/STATUS UNBEKANNT`. Mit OK auf eine Regel deren aktuellen Detailstand anfordern; ggf. einen abgelaufenen Regel-Identifier als 404 und erneutes Laden behandeln. `Weitere Suchtimer` und Backendwechsel prüfen. `EPG-Treffer anzeigen` benötigt zusätzlich `epg.view`, einen fertigen EPG-Cache und zeigt `totalCount` und bis zu 30 Ereignisse; **keine zugesicherte Aufnahmeliste**. Bei HTTP 403 Grants getrennt prüfen, bei 503 epgsearch-Provider bzw. EPG-Cache; niemals Fake-Leerliste aus einem Fehler bilden. D-Pad/OK, Zurück und abgebrochene Anfragen am echten Tizen 5.5 prüfen.
+
+**Kein Schreibtest:** Dieser Slice sendet weder `POST` noch `PUT`/`PATCH`/`DELETE`. Alle bestehenden epgsearch-Suchtimer und VDR-Aufnahmetimer bleiben unverändert. `searchtimers.create`/native-CAS gehören in neue Slices und nicht in diese Abnahme; PROD-App und gekoppelte DEV-Identität bleiben unberührt. Am echten TV wurde S6.20 noch nicht bestätigt.
+
+
+## S6.23 – Samsung globale Suche / Webfrontend-Parität (27.10.2026)
+
+**Hardware OPEN.** Suchmenü: eine echte Eingabe per Samsung-IME, expliziter Button `Suchen`, getrennte Spalten **Aufnahmen** und **EPG**, eigene Gesamt-Trefferzahl/Fehler/Pagination pro Kategorie, Backendwechsel und OK auf eine Karte für Metadaten. Implementiert gegen bestehende öffentliche `/api/v1/search/recordings` und `/api/v1/search/epg` – nicht Web-private `/api/search` oder `/api/epg/search`. Der gemeinsame Suchindex des Webfrontends bleibt serverseitige Quelle. Die gekoppelte DEV-Identität benötigt `recordings.view` für Aufnahmen, `epg.view` für EPG, jeweils auf demselben Backend. Geräteauthentifizierung und verifizierte Serveradresse nutzen bereits vorhandene Mechanismen.
+
+**TV-Ablauf:** Nach wirklich sichtbarem isoliertem WITs-Datei-Push (neu angezeigte Suchfelder/-listen) auf Samsung-Tizen-5.5 `Suche` öffnen, mit der Samsung-Tastatur z. B. `Hobbit` eingeben, Done, `Suchen`. Ergebnisse/Anzahl im Webfrontend desselben Backends unter gleichen Suchkriterien vergleichen, danach `hobbit` und `HOBBIT`. OK auf EPG-Sendung/Aufnahme: vorhandene Public-v1-Detail-GETs und korrekte Textdarstellung prüfen. Mit `Mehr Aufnahmen` und `Mehr EPG-Treffer` getrennt blättern. Berechtigung für nur eine Kategorie gezielt prüfen: 403 der anderen darf bereits geladene Treffer nicht fälschlich auf 0 setzen. Bei 503 Nichtverfügbarkeit des Index melden, keine erdachte leere Treffermenge; bei 404 prüfen, ob das installierte Backend die Public-v1-Suchendpunkte bereits enthält. Tastatur-Backspace/Pfeile/Done und Navigation/alte Antworten beobachten.
+
+**Noch nicht als Parität behaupten:** Personen-/Bild-Suche und Webinterne Match-Reasons/Poster sind nicht Bestandteil der öffentlichen Device-Projektion. Kein Full-EPG-Crawl, kein automatischer Aufnahme-/Timer-POST, keine ungeschützte Medien-URL, kein Pairing-Reset. CI-Erfolg allein ist kein installierter Samsung-Hardware-PASS.
+
+
+## S8.1 – Media Home: echte Samsung-Abnahme OFFEN (27.10.2026)
+
+Gerät GU43TU6979UXZG, Tizen 5.5. Quelle/Runtime/CI sind keine Hardware-Abnahme. Der frühere S6.17-Audio-PASS bleibt gültig, beweist aber S8.1 nicht. Bestehende DEV-Kopplung erhalten, Produktiv-App VDRSuiteTV.VDRSuite nie anfassen.
+
+Prüfmatrix:
+- WITs: Vor Update app/AGENTS.md, docs/wits-isolated-development.md und docs/windows-update-workflow.md befolgen; Port 4050 und laufenden Watch prüfen, keinen zweiten starten. Erst echter Datei-Push, DEV-Reload und sichtbar neue S8.1-Buildkennung belegen Übertragung. Build/Check/Staging allein sind nicht ausreichend.
+- Optik: dezenter Status beim Logo, Hero mit realem Titel, kompakte Timerkarte und drei reale Inhaltsschienen ohne doppelte Navigation oder abgeschnittene Fokusrahmen.
+- Continue: serverseitige Position/Dauer überprüfen; unbekannte Dauer ohne erfundenen Prozentwert. Kein automatischer Session-Start.
+- Mediathek: tatsächliche Titel/Genres/Staffel/Episode/Laufzeit/Poster vergleichen. Aufnahme-Katalog nicht als chronologisch darstellen. Artwork-Mangel/Fehler fällt auf hochwertigen textbasierten Hintergrund zurück.
+- EPG: reale gerade laufende Senderereignisse mit Sender und Zeit; autorisierte bevorzugte EPG-Bilder nur bei echter Event-ID; native Timer korrekt. Bei 403 für eine Domäne bleiben andere Bereiche benutzbar.
+- Bedienung: D-Pad, OK, BACK, dynamischer Rail-Fokus, Verlassen/Wiederbetreten und Vordergrund/Hintergrund. Keine verspäteten Antworten oder alten Poster. Nach echter Übertragung gleiche KeyManager-Device-ID prüfen, kein Neu-Pairing.
+- Fehlertests: getrennte Grants media.recording.play, recordings.view, channels.view, epg.view, timers.view; 401/403/503 ohne erfundene Inhalte oder Credential-Reset.
+
+Status: ALLE S8.1 REAL-TV-PUNKTE OFFEN bis zur konkreten Nutzerbestätigung. PR #33 bleibt Draft. Rückweg: nur DEV-Watch kontrolliert beenden; weder PROD-App noch gekoppelte Identität überschreiben oder deinstallieren.
+
+
+## S8.1 Feldfoto / S8.2 Real-TV-Test (27.10.2026)
+
+**S8.1 TV-Sicht PASS:** Nutzerfoto Samsung GU43TU6979UXZG belegt die neue Home-Ansicht, echte Titel, Fanart/Artwork, EPG-Einträge und S8.1-Buildkennung. Die WITs-Übertragung gelang ohne Produktionsinstallation. Das Foto beweist keine Fernbedienungsnavigation oder Timer-/Player-Funktion.
+
+**Gemeldete Defizite:** Home-Karten zu klein und gegenüber Mockup mager; Aufnahme-Suchseite meldet Funde, zeigt aber auf dem TV keine nutzbare Trefferliste; EPG ohne Timer-Anlegen-Aktion. Ein früherer echter HTML5-Live-HTTP-401 bleibt ein FAIL für Wiedergabe.
+
+**S8.2 nach erneuter WITs-Übertragung prüfen:** große Home-Artwork-Karten; Suchergebnisliste der Aufnahmen sichtbar und via D-Pad/OK fokussierbar; bei widersprüchlicher Public-v1-Antwort Trefferzahl ohne Items eine eindeutige Fehlermeldung; aus Live-EPG sowie EPG-Suche zukünftige Sendung wählen, erste Aktion liest ETag und zeigt Bestätigung, zweite Aktion erzeugt erst nach bewusstem OK einen echten einmaligen TimerIntent. Kein Test-POST ohne beabsichtigte Aufnahme. 202 nur Admission; anschließend manueller GET auf actor-owned Operation, succeeded/queued/outcome_unknown sauber unterscheiden. Grants epg.view und timers.create müssen explizit vorliegen. Verlorene/verzögerte Antwort nie durch neuen Timer-POST umgehen.
+
+**Live-TV OPEN/BLOCKIERT:** Public-v1-Live-Media bietet noch keine nachgewiesene AVPlay-Native-Cookie-Projektion. Keine Hardware-Abnahme ohne sichere serverseitige Erweiterung und realen AVPlay-Bild-/Ton-/STOP-Test. DEV-Pairing bewahren; PROD-App unverändert.
+
+
+## S8.3 – direktes Live-TV via Streamdev und AVPlay: Hardware OPEN (27.10.2026)
+
+Das bisherige Gerät GU43TU6979UXZG / Tizen 5.5 hat mit Browser-HTML5-MediaSession keinen verlässlich funktionierenden Live-TV-Ton/Bild-PASS; HTTP 401 wurde gemeldet. Statt der MediaSession-Cookie-Route wird ein separat markierter, ausdrücklich vom Besitzer gewünschter DEV-Test mit Streamdev MPEG-TS und Samsung AVPlay umgesetzt.
+
+**Abnahmekette:** Streamdev läuft auf demselben VDR, dessen echte Kanal-ID aus Public-v1-/channels stammt; Streamdev HTTP-Endpunkt im Heimnetz erreichbar; App bietet „Streamdev speichern“ und „Live-TV direkt starten“; TV-Buildkennung S8.3 nach echtem isoliertem WITs-Push sichtbar; echtes Bild **und** hörbarer Ton bei unverschlüsseltem Testsender; min. mehrere Minuten stabil; STOP/BACK und erneuter anderer Sender funktioniert, keine hängende AVPlay-Session. Alte HTML5-Aktion nicht als Beweis heranziehen.
+
+**Fallback:** Bei nicht erreichbarem Port oder unbrauchbarer HTTP-TS-Decodierung Fehlerzustand/AVPlay-Stufe aufnehmen; kein stiller Rückfall auf ungeschützte externe URLs, keine automatische Neu-Kopplung oder Install-Fallback. CI gilt für Programmlogik, nicht für den Decoder auf Hardware. AVPlay Native-Singleton bleibt mit Recording-Player geteilt; STOP muss ihn vor einer Aufnahme freigeben.

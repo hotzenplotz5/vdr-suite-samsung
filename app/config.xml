@@ -14,6 +14,7 @@
   <!-- S3.1 user-configured HTTPS server: broad manifest access, strict runtime URL validation. -->
   <access origin="*" subdomains="true"/>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
   <tizen:profile name="tv-samsung"/>
   <tizen:metadata key="http://samsung.com/tv/metadata/devel.api.version" value="5.5"/>
   <tizen:setting screen-orientation="landscape"
