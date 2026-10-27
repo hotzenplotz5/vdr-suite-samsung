@@ -300,7 +300,7 @@ test("Installed Samsung runtime shows actual deterministic build identity immedi
   const manifest = readFileSync("app/config.xml","utf8");
   assert.equal(info.version, pkg.version);
   assert.match(manifest, new RegExp('version="' + info.version.replace(/\./g,"\\.") + '"'));
-  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S8\.2 · b[0-9a-f]{12}$/);
+  assert.match(info.label, /^Samsung v\d+\.\d+\.\d+ · S8\.3 · b[0-9a-f]{12}$/);
   assert(!runtime.includes("VDR-Suite Samsung · S3.3"));
   const sim = simulate();
   assert.equal(sim.versionFooter.textContent, info.label);
