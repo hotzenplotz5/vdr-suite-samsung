@@ -2675,6 +2675,7 @@ function boot() {
       if (!rowMemory.timers) rowMemory.timers = {};
       rowMemory.timers[1]="detail-timers-load";
     } else if (view === "search") {
+      renderPreview("search","offline");
       ++globalSearchRun;++globalSearchDetailRun;
       globalSearchBusy=false;globalSearchEditing=false;
       globalSearchClient.cancel();globalSearchMetadata.cancel();
