@@ -104,10 +104,20 @@
           <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-preview" data-live-action="load">Sender laden</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-more" data-live-action="more">Mehr Sender</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-backend" data-live-action="backend">Backend wechseln</button>
-          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-play" data-live-play="start">Live-TV testen</button>
+          <button type="button" class="action-button primary tv-focusable" data-focus-id="detail-live-streamdev" data-streamdev-action="start">Live-TV direkt starten</button>
+          <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-play" data-live-play="start">HTML5-MP4 (alter Test)</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-now" data-live-epg-action="now">Jetzt / Nächste</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-window" data-live-epg-action="window">Programm 24h</button>
           <button type="button" class="action-button tv-focusable" data-focus-id="detail-live-epg-more" data-live-epg-action="more">Weitere Sendungen</button>
+        </div>
+        <div class="live-streamdev-config">
+          <label for="live-streamdev-base">Streamdev auf deinem VDR (einmalig eingeben)</label>
+          <input id="live-streamdev-base" type="url" class="tv-focusable"
+                 data-focus-id="live-streamdev-base" inputmode="url" autocomplete="off"
+                 placeholder="http://192.168.178.20:3000">
+          <button type="button" class="action-button tv-focusable"
+                  data-focus-id="live-streamdev-save" data-streamdev-action="save">Streamdev speichern</button>
+          <span id="live-streamdev-status" aria-live="polite">Nur im Heimnetz · direkter MPEG-TS-Stream ohne VDR-OSD</span>
         </div>
         <div class="live-workspace">
           <section class="live-catalog" aria-label="Echte Senderliste in VDR-Reihenfolge">
