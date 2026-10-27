@@ -695,6 +695,16 @@ html.recording-avplay-active .app { visibility: hidden; background: transparent 
   border-radius:3px; margin-top:auto; display:block; width:100%; }
 .home-media-card .home-card-progress > span { display:block; height:100%;
   background:#58b8ff; border-radius:3px; }
+/* Per-card binary artwork is optional. The gradient remains the full fallback. */
+.home-media-card .home-card-art:not([hidden]) {
+  display:block; position:absolute; right:0; top:0; height:100%;
+  width:54%; object-fit:cover; opacity:.5; pointer-events:none;
+  -webkit-mask-image:linear-gradient(to right,transparent,#000 45%);
+}
+.home-media-card .home-card-art[hidden] {display:none!important;}
+.home-media-card strong,.home-media-card small,.home-media-card .home-card-progress {
+  position:relative; z-index:1;
+}
 .home-media-card:focus,.home-media-card.is-focused { border-color:#90ccff; }
 @media(max-width:1380px) {
   .home-heading h1 { font-size:31px; }
