@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.1","build":"e11ea4617168","label":"Samsung v0.1.0 · S8.1 · be11ea4617168"});
+  const VDR_SUITE_BUILD_IDENTITY = Object.freeze({"version":"0.1.0","slice":"S8.1","build":"f96da94ca60c","label":"Samsung v0.1.0 · S8.1 · bf96da94ca60c"});
 
   // BEGIN app/src/navigation/remote.js
   // Normalize Samsung Tizen remote events exactly once for the client.
@@ -5739,9 +5739,10 @@
         liveStatus("offline", "Bereit für echte Sender",
           "„Sender laden“ nutzt deine gespeicherte Geräteanmeldung.");
       } else if (view === "recordings") {
+        clearRecordingRows();
+        // clearRecordingRows resets row memory; restore the first action after it.
         if (!rowMemory.recordings) rowMemory.recordings = {};
         rowMemory.recordings[1] = "detail-recordings-home";
-        clearRecordingRows();
         recordingCredential = null;
         recordingBackends = [];
         recordingBackendIndex = 0;
